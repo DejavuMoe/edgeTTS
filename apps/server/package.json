@@ -9,10 +9,14 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/server.js",
     "typecheck": "tsc -p tsconfig.test.json --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "smoke": "tsx scripts/smoke.ts"
   },
   "dependencies": {
+    "@edgetts/edge-provider": "workspace:*",
     "@edgetts/shared": "workspace:*",
+    "@edgetts/tts-core": "workspace:*",
+    "@edgetts/tts-service": "workspace:*",
     "fastify": "^5.2.1",
     "zod": "^3.24.2"
   },

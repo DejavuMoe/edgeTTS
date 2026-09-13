@@ -29,9 +29,18 @@ importers:
 
   apps/server:
     dependencies:
+      '@edgetts/edge-provider':
+        specifier: workspace:*
+        version: link:../../packages/edge-provider
       '@edgetts/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@edgetts/tts-core':
+        specifier: workspace:*
+        version: link:../../packages/tts-core
+      '@edgetts/tts-service':
+        specifier: workspace:*
+        version: link:../../packages/tts-service
       fastify:
         specifier: ^5.2.1
         version: 5.12.4

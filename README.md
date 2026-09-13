@@ -6,7 +6,7 @@ Self-hosted Edge TTS Web application and API skeleton.
 
 ## Architecture
 
-- `apps/server`: Fastify HTTP API service (`@edgetts/server`).
+- `apps/server`: Fastify HTTP API service (`@edgetts/server`), providing `GET /api/health` and `GET /api/voices` backed by `TtsService` and `EdgeTtsProvider`.
 - `apps/web`: React + Vite frontend application (`@edgetts/web`).
 - `packages/shared`: Shared TypeScript types and Zod schemas (`@edgetts/shared`).
 - `packages/tts-core`: Provider-neutral TTS domain contracts (`@edgetts/tts-core`), defining synthesis controls: `speed` (0.5–2.0), `pitchSemitones` (-12–12), and `volume` (0–1).
@@ -55,4 +55,10 @@ To run the live TTS service smoke test:
 
 ```bash
 pnpm --filter @edgetts/tts-service smoke
+```
+
+To run the live Fastify server smoke test:
+
+```bash
+pnpm --filter @edgetts/server smoke
 ```
