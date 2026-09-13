@@ -196,4 +196,358 @@ describe("StreamPlaybackController Session Isolation & URL Lifecycle", () => {
     controller.cleanup();
     expect(revokedUrls).toContain("blob:mock-url-1");
   });
+
+  it("Blob fallback genuine error: calls onError exactly once and does not call onFinish or ready callbacks", async () => {
+    // MediaSource unavailable
+    // @ts-expect-error Mocking MediaSource
+    delete window.MediaSource;
+
+    const controller = new StreamPlaybackController();
+    const blobError = new Error("blob failed");
+    const mockResponse = {
+      blob: vi.fn().mockRejectedValue(blobError),
+    } as unknown as Response;
+
+    const callbacks = {
+      onStreamReady: vi.fn(),
+      onDownloadReady: vi.fn(),
+      onError: vi.fn(),
+      onFinish: vi.fn(),
+    };
+
+    const ac = new AbortController();
+    await controller.startStream(mockResponse, ac.signal, callbacks);
+
+    expect(callbacks.onError).toHaveBeenCalledTimes(1);
+    expect(callbacks.onError).toHaveBeenCalledWith(blobError);
+    expect(callbacks.onFinish).not.toHaveBeenCalled();
+    expect(callbacks.onStreamReady).not.toHaveBeenCalled();
+    expect(callbacks.onDownloadReady).not.toHaveBeenCalled();
+  });
+
+  it("MediaSource stream failure (reader error): calls onError exactly once and cleans up resources", async () => {
+    class MockSourceBuffer extends EventTarget {
+      updating = false;
+      appendBuffer = vi.fn();
+      abort = vi.fn();
+    }
+
+    const mockBuffer = new MockSourceBuffer();
+    class MockMediaSource extends EventTarget {
+      readyState = "open";
+      addSourceBuffer = vi.fn(() => mockBuffer as unknown as SourceBuffer);
+      endOfStream = vi.fn();
+      static isTypeSupported = vi.fn(() => true);
+    }
+
+    // @ts-expect-error Mocking MediaSource
+    window.MediaSource = MockMediaSource;
+
+    const controller = new StreamPlaybackController();
+
+    const readError = new Error("reader stream failed");
+    const failingStream = new ReadableStream<Uint8Array>({
+      start(ctrl) {
+        ctrl.error(readError);
+      },
+    });
+
+    const mockResponse = {
+      body: failingStream,
+    } as unknown as Response;
+
+    const callbacks = {
+      onStreamReady: vi.fn(),
+      onDownloadReady: vi.fn(),
+      onError: vi.fn(),
+      onFinish: vi.fn(),
+    };
+
+    const ac = new AbortController();
+    await controller.startStream(mockResponse, ac.signal, callbacks);
+
+    expect(callbacks.onError).toHaveBeenCalledTimes(1);
+    expect(callbacks.onError).toHaveBeenCalledWith(readError);
+    expect(callbacks.onFinish).not.toHaveBeenCalled();
+    expect(revokedUrls).toContain("blob:mock-url-1");
+  });
+
+  it("MediaSource addSourceBuffer failure falls back cleanly to Blob playback", async () => {
+    class MockMediaSource extends EventTarget {
+      readyState = "open";
+      addSourceBuffer = vi.fn(() => {
+        throw new Error("Format not supported");
+      });
+      endOfStream = vi.fn();
+      static isTypeSupported = vi.fn(() => true);
+    }
+
+    // @ts-expect-error Mocking MediaSource
+    window.MediaSource = MockMediaSource;
+
+    const controller = new StreamPlaybackController();
+    const fallbackBlob = new Blob(["fallback-audio"], { type: "audio/mpeg" });
+    const mockResponse = {
+      blob: vi.fn().mockResolvedValue(fallbackBlob),
+    } as unknown as Response;
+
+    const callbacks = {
+      onStreamReady: vi.fn(),
+      onDownloadReady: vi.fn(),
+      onError: vi.fn(),
+      onFinish: vi.fn(),
+    };
+
+    const ac = new AbortController();
+    await controller.startStream(mockResponse, ac.signal, callbacks);
+
+    // Initial MediaSource URL (blob:mock-url-1) should have been revoked before/during fallback
+    expect(revokedUrls).toContain("blob:mock-url-1");
+
+    // Blob URL created is blob:mock-url-2
+    expect(callbacks.onStreamReady).toHaveBeenCalledWith("blob:mock-url-2");
+    expect(callbacks.onDownloadReady).toHaveBeenCalledWith("blob:mock-url-2");
+    expect(callbacks.onFinish).toHaveBeenCalledTimes(1);
+    expect(callbacks.onError).not.toHaveBeenCalled();
+
+    // Cleanup revokes the fallback blob URL exactly once
+    controller.cleanup();
+    expect(revokedUrls).toEqual(["blob:mock-url-1", "blob:mock-url-2"]);
+  });
+
+  it("MediaSource addSourceBuffer failure followed by Blob fallback failure calls onError exactly once", async () => {
+    class MockMediaSource extends EventTarget {
+      readyState = "open";
+      addSourceBuffer = vi.fn(() => {
+        throw new Error("Format not supported");
+      });
+      endOfStream = vi.fn();
+      static isTypeSupported = vi.fn(() => true);
+    }
+
+    // @ts-expect-error Mocking MediaSource
+    window.MediaSource = MockMediaSource;
+
+    const controller = new StreamPlaybackController();
+    const fallbackError = new Error("blob fallback network failure");
+    const mockResponse = {
+      blob: vi.fn().mockRejectedValue(fallbackError),
+    } as unknown as Response;
+
+    const callbacks = {
+      onStreamReady: vi.fn(),
+      onDownloadReady: vi.fn(),
+      onError: vi.fn(),
+      onFinish: vi.fn(),
+    };
+
+    const ac = new AbortController();
+    await controller.startStream(mockResponse, ac.signal, callbacks);
+
+    expect(callbacks.onError).toHaveBeenCalledTimes(1);
+    expect(callbacks.onError).toHaveBeenCalledWith(fallbackError);
+    expect(callbacks.onFinish).not.toHaveBeenCalled();
+    expect(revokedUrls).toContain("blob:mock-url-1");
+  });
+
+  it("MediaSource sourceopen error calls onError exactly once and revokes media URL", async () => {
+    class MockMediaSource extends EventTarget {
+      readyState = "closed";
+      static isTypeSupported = vi.fn(() => true);
+      addEventListener = vi.fn((type: string, listener: EventListenerOrEventListenerObject) => {
+        super.addEventListener(type, listener);
+        if (type === "error") {
+          queueMicrotask(() => {
+            this.dispatchEvent(new Event("error"));
+          });
+        }
+      });
+    }
+
+    // @ts-expect-error Mocking MediaSource
+    window.MediaSource = MockMediaSource;
+
+    const controller = new StreamPlaybackController();
+    const mockResponse = {} as unknown as Response;
+
+    const callbacks = {
+      onStreamReady: vi.fn(),
+      onDownloadReady: vi.fn(),
+      onError: vi.fn(),
+      onFinish: vi.fn(),
+    };
+
+    const ac = new AbortController();
+    await controller.startStream(mockResponse, ac.signal, callbacks);
+
+    expect(callbacks.onError).toHaveBeenCalledTimes(1);
+    expect(callbacks.onError).toHaveBeenCalledWith(
+      expect.objectContaining({ message: "MediaSource error during open" }),
+    );
+    expect(callbacks.onFinish).not.toHaveBeenCalled();
+    expect(revokedUrls).toContain("blob:mock-url-1");
+  });
+
+  it("MediaSource abort during sourceopen wait cancels cleanly without calling onError or onFinish", async () => {
+    class MockMediaSource extends EventTarget {
+      readyState = "closed";
+      static isTypeSupported = vi.fn(() => true);
+    }
+
+    // @ts-expect-error Mocking MediaSource
+    window.MediaSource = MockMediaSource;
+
+    const controller = new StreamPlaybackController();
+    const mockResponse = {} as unknown as Response;
+
+    const callbacks = {
+      onStreamReady: vi.fn(),
+      onDownloadReady: vi.fn(),
+      onError: vi.fn(),
+      onFinish: vi.fn(),
+    };
+
+    const ac = new AbortController();
+    const streamPromise = controller.startStream(mockResponse, ac.signal, callbacks);
+
+    // Abort while waiting for sourceopen
+    ac.abort();
+    await streamPromise;
+
+    expect(callbacks.onError).not.toHaveBeenCalled();
+    expect(callbacks.onFinish).not.toHaveBeenCalled();
+    expect(revokedUrls).toContain("blob:mock-url-1");
+  });
+
+  it("SourceBuffer append error calls onError exactly once and cleans up session", async () => {
+    class MockSourceBuffer extends EventTarget {
+      updating = false;
+      appendBuffer = vi.fn(() => {
+        queueMicrotask(() => {
+          this.dispatchEvent(new Event("error"));
+        });
+      });
+      abort = vi.fn();
+    }
+
+    const mockBuffer = new MockSourceBuffer();
+    class MockMediaSource extends EventTarget {
+      readyState = "open";
+      addSourceBuffer = vi.fn(() => mockBuffer as unknown as SourceBuffer);
+      endOfStream = vi.fn();
+      static isTypeSupported = vi.fn(() => true);
+    }
+
+    // @ts-expect-error Mocking MediaSource
+    window.MediaSource = MockMediaSource;
+
+    const controller = new StreamPlaybackController();
+    const stream = new ReadableStream<Uint8Array>({
+      start(ctrl) {
+        ctrl.enqueue(new Uint8Array([1, 2, 3]));
+      },
+    });
+
+    const mockResponse = {
+      body: stream,
+    } as unknown as Response;
+
+    const callbacks = {
+      onStreamReady: vi.fn(),
+      onDownloadReady: vi.fn(),
+      onError: vi.fn(),
+      onFinish: vi.fn(),
+    };
+
+    const ac = new AbortController();
+    await controller.startStream(mockResponse, ac.signal, callbacks);
+
+    expect(callbacks.onError).toHaveBeenCalledTimes(1);
+    expect(callbacks.onError).toHaveBeenCalledWith(
+      expect.objectContaining({ message: "SourceBuffer error during appendBuffer" }),
+    );
+    expect(callbacks.onFinish).not.toHaveBeenCalled();
+    expect(revokedUrls).toContain("blob:mock-url-1");
+  });
+
+  it("stale session A error after session B starts does not call A callbacks or affect session B", async () => {
+    class MockSourceBuffer extends EventTarget {
+      updating = false;
+      appendBuffer = vi.fn(() => {
+        queueMicrotask(() => {
+          this.dispatchEvent(new Event("updateend"));
+        });
+      });
+      abort = vi.fn();
+    }
+
+    class MockMediaSource extends EventTarget {
+      readyState = "open";
+      addSourceBuffer = vi.fn(() => new MockSourceBuffer() as unknown as SourceBuffer);
+      endOfStream = vi.fn();
+      static isTypeSupported = vi.fn(() => true);
+    }
+
+    // @ts-expect-error Mocking MediaSource
+    window.MediaSource = MockMediaSource;
+
+    const controller = new StreamPlaybackController();
+
+    let rejectStreamA!: (err: Error) => void;
+    const streamA = new ReadableStream<Uint8Array>({
+      start(ctrl) {
+        rejectStreamA = (err: Error) => {
+          ctrl.error(err);
+        };
+      },
+    });
+
+    const mockResponseA = { body: streamA } as unknown as Response;
+    const callbacksA = {
+      onStreamReady: vi.fn(),
+      onDownloadReady: vi.fn(),
+      onError: vi.fn(),
+      onFinish: vi.fn(),
+    };
+
+    const acA = new AbortController();
+    const runAPromise = controller.startStream(mockResponseA, acA.signal, callbacksA);
+
+    // Session B starts immediately
+    const streamB = new ReadableStream<Uint8Array>({
+      start(ctrl) {
+        ctrl.enqueue(new Uint8Array([10, 20]));
+        ctrl.close();
+      },
+    });
+
+    const mockResponseB = { body: streamB } as unknown as Response;
+    const callbacksB = {
+      onStreamReady: vi.fn(),
+      onDownloadReady: vi.fn(),
+      onError: vi.fn(),
+      onFinish: vi.fn(),
+    };
+
+    const acB = new AbortController();
+    const runBPromise = controller.startStream(mockResponseB, acB.signal, callbacksB);
+
+    await runBPromise;
+
+    expect(callbacksB.onStreamReady).toHaveBeenCalledWith("blob:mock-url-2");
+    expect(callbacksB.onDownloadReady).toHaveBeenCalledWith("blob:mock-url-3");
+    expect(callbacksB.onFinish).toHaveBeenCalledTimes(1);
+
+    // Now session A's stream rejects late
+    rejectStreamA(new Error("Stream A late error"));
+    await runAPromise;
+
+    // Callbacks A must never receive onError
+    expect(callbacksA.onError).not.toHaveBeenCalled();
+    expect(callbacksA.onFinish).not.toHaveBeenCalled();
+
+    // Session B's URLs must not be revoked
+    expect(revokedUrls).not.toContain("blob:mock-url-2");
+    expect(revokedUrls).not.toContain("blob:mock-url-3");
+  });
 });
