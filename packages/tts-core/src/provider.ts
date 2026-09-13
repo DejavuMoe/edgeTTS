@@ -1,5 +1,11 @@
 export type TtsAudioFormat = "mp3-48k" | "mp3-96k" | "webm-opus";
 
+export interface TtsProsody {
+  readonly speed?: number;
+  readonly pitchSemitones?: number;
+  readonly volume?: number;
+}
+
 export interface TtsVoice {
   readonly id: string;
   readonly displayName: string;
@@ -13,6 +19,7 @@ export interface SynthesisRequest {
   readonly text: string;
   readonly voice: string;
   readonly format?: TtsAudioFormat;
+  readonly prosody?: TtsProsody;
 }
 
 export interface SynthesisResult {

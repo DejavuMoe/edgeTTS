@@ -9,8 +9,8 @@ Self-hosted Edge TTS Web application and API skeleton.
 - `apps/server`: Fastify HTTP API service (`@edgetts/server`).
 - `apps/web`: React + Vite frontend application (`@edgetts/web`).
 - `packages/shared`: Shared TypeScript types and Zod schemas (`@edgetts/shared`).
-- `packages/tts-core`: Provider-neutral TTS domain contracts (`@edgetts/tts-core`).
-- `packages/edge-provider`: Microsoft Edge Read Aloud adapter (`@edgetts/edge-provider`).
+- `packages/tts-core`: Provider-neutral TTS domain contracts (`@edgetts/tts-core`), defining synthesis controls: `speed` (0.5–2.0), `pitchSemitones` (-12–12), and `volume` (0–1).
+- `packages/edge-provider`: Microsoft Edge Read Aloud adapter (`@edgetts/edge-provider`), mapping domain prosody controls to `msedge-tts`.
 
 ## Requirements
 
