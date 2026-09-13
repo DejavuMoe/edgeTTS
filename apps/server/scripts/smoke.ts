@@ -2,6 +2,26 @@ import { VoicesResponseSchema, HealthResponseSchema } from "@edgetts/shared";
 import { createApp } from "../src/app.js";
 import { createProductionDependencies } from "../src/composition.js";
 
+async function consumeAudioStream(res: Response): Promise<{ chunks: number; bytes: number }> {
+  if (!res.body) {
+    throw new Error("Response body is null");
+  }
+  const reader = res.body.getReader();
+  let chunks = 0;
+  let bytes = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) {
+      break;
+    }
+    if (value) {
+      chunks++;
+      bytes += value.byteLength;
+    }
+  }
+  return { chunks, bytes };
+}
+
 async function runSmoke(): Promise<void> {
   const dependencies = createProductionDependencies();
   const app = createApp(dependencies);
@@ -44,27 +64,87 @@ async function runSmoke(): Promise<void> {
       throw new Error("No zh-CN voice found in voices list");
     }
 
-    // 3. Check second GET /api/voices request
-    const secondVoicesRes = await fetch(`${baseUrl}/api/voices`);
-    if (secondVoicesRes.status !== 200) {
-      throw new Error(`Second voices request returned status ${secondVoicesRes.status}`);
+    // 3. Check POST /v1/audio/speech (tts-1)
+    const tts1Res = await fetch(`${baseUrl}/v1/audio/speech`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "tts-1",
+        voice: selected.id,
+        input: "你好，这是语音接口测试。",
+        response_format: "mp3",
+        speed: 1,
+      }),
+    });
+
+    if (tts1Res.status !== 200) {
+      throw new Error(`tts-1 speech request returned status ${tts1Res.status}`);
     }
-    const secondVoicesJson: unknown = await secondVoicesRes.json();
-    const secondVoicesParsed = VoicesResponseSchema.parse(secondVoicesJson);
-    if (secondVoicesParsed.voices.length !== voicesParsed.voices.length) {
-      throw new Error("Second voices request returned mismatched voice count");
+    const tts1ContentType = tts1Res.headers.get("content-type") ?? "";
+    if (!tts1ContentType.startsWith("audio/mpeg")) {
+      throw new Error(`tts-1 unexpected content-type: ${tts1ContentType}`);
+    }
+    if (tts1Res.headers.get("content-length") !== null) {
+      throw new Error("tts-1 response unexpectedly had content-length header");
+    }
+
+    const tts1Result = await consumeAudioStream(tts1Res);
+    if (tts1Result.chunks <= 0 || tts1Result.bytes <= 1000) {
+      throw new Error(
+        `tts-1 audio stream insufficient: ${tts1Result.chunks} chunks, ${tts1Result.bytes} bytes`,
+      );
+    }
+
+    // 4. Check POST /v1/audio/speech (tts-1-hd)
+    const tts1HdRes = await fetch(`${baseUrl}/v1/audio/speech`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "tts-1-hd",
+        voice: selected.id,
+        input: "高清语音测试。",
+        response_format: "mp3",
+        speed: 1,
+      }),
+    });
+
+    if (tts1HdRes.status !== 200) {
+      throw new Error(`tts-1-hd speech request returned status ${tts1HdRes.status}`);
+    }
+    const tts1HdContentType = tts1HdRes.headers.get("content-type") ?? "";
+    if (!tts1HdContentType.startsWith("audio/mpeg")) {
+      throw new Error(`tts-1-hd unexpected content-type: ${tts1HdContentType}`);
+    }
+    if (tts1HdRes.headers.get("content-length") !== null) {
+      throw new Error("tts-1-hd response unexpectedly had content-length header");
+    }
+
+    const tts1HdResult = await consumeAudioStream(tts1HdRes);
+    if (tts1HdResult.chunks <= 0 || tts1HdResult.bytes <= 1000) {
+      throw new Error(
+        `tts-1-hd audio stream insufficient: ${tts1HdResult.chunks} chunks, ${tts1HdResult.bytes} bytes`,
+      );
     }
 
     console.log("Server HTTP smoke test\n");
     console.log("Health:");
-    console.log(`Status: ${healthRes.status}`);
-    console.log("PASS\n");
+    console.log("200 PASS\n");
     console.log("Voices:");
-    console.log(`Status: ${voicesRes.status}`);
     console.log(`Count: ${voicesParsed.voices.length}`);
-    console.log("zh-CN available: yes");
     console.log(`Selected: ${selected.id}`);
-    console.log("Second request: PASS\n");
+    console.log("PASS\n");
+    console.log("Speech tts-1:");
+    console.log(`Status: ${tts1Res.status}`);
+    console.log(`Content-Type: audio/mpeg`);
+    console.log(`HTTP chunks: ${tts1Result.chunks}`);
+    console.log(`Bytes: ${tts1Result.bytes}`);
+    console.log("PASS\n");
+    console.log("Speech tts-1-hd:");
+    console.log(`Status: ${tts1HdRes.status}`);
+    console.log(`Content-Type: audio/mpeg`);
+    console.log(`HTTP chunks: ${tts1HdResult.chunks}`);
+    console.log(`Bytes: ${tts1HdResult.bytes}`);
+    console.log("PASS\n");
     console.log("PASS");
   } finally {
     await app.close();

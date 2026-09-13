@@ -2,6 +2,7 @@ import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";
 import type { AppDependencies } from "./dependencies.js";
 import { healthRoutes } from "./routes/health.js";
+import { createSpeechRoutes } from "./routes/speech.js";
 import { createVoicesRoutes } from "./routes/voices.js";
 
 export function createApp(dependencies: AppDependencies): FastifyInstance {
@@ -11,6 +12,7 @@ export function createApp(dependencies: AppDependencies): FastifyInstance {
 
   void app.register(healthRoutes, { prefix: "/api" });
   void app.register(createVoicesRoutes(dependencies.ttsService), { prefix: "/api" });
+  void app.register(createSpeechRoutes(dependencies.ttsService));
 
   return app;
 }
