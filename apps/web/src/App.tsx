@@ -6,6 +6,7 @@ import {
   type VoiceDto,
 } from "@edgetts/shared";
 import { fetchHealth, fetchVoices, synthesizeSpeech } from "./api/client.js";
+import { StreamPlaybackController } from "./audio/stream-controller.js";
 import "./App.css";
 
 type ApiStatus = "loading" | "healthy" | "unavailable";
@@ -24,12 +25,19 @@ export function App() {
   const [pitchSemitones, setPitchSemitones] = useState<number>(0);
   const [volume, setVolume] = useState<number>(1.0);
 
-  // Generation state
+  // Generation & Playback state
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const [generationError, setGenerationError] = useState<string | null>(null);
-  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [audioSrc, setAudioSrc] = useState<string | null>(null);
+  const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
 
   const abortControllerRef = useRef<AbortController | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const streamControllerRef = useRef<StreamPlaybackController | null>(null);
+
+  if (!streamControllerRef.current) {
+    streamControllerRef.current = new StreamPlaybackController();
+  }
 
   // Form element IDs for accessible labels
   const textInputId = useId();
@@ -107,17 +115,15 @@ export function App() {
     };
   }, []);
 
-  // Cleanup audio object URL on unmount
+  // Cleanup stream controller and abort controller on unmount
   useEffect(() => {
     return () => {
-      if (audioUrl) {
-        URL.revokeObjectURL(audioUrl);
-      }
+      streamControllerRef.current?.cleanup();
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
       }
     };
-  }, [audioUrl]);
+  }, []);
 
   const handleGenerate = async (): Promise<void> => {
     if (isGenerating || isInputEmpty || isOverLimit || !selectedVoiceId) {
@@ -129,12 +135,10 @@ export function App() {
       abortControllerRef.current.abort();
     }
 
-    // Revoke previous audio URL
-    if (audioUrl) {
-      URL.revokeObjectURL(audioUrl);
-      setAudioUrl(null);
-    }
-
+    // Clean up previous playback stream and download URL
+    streamControllerRef.current?.cleanup();
+    setAudioSrc(null);
+    setDownloadUrl(null);
     setGenerationError(null);
     setIsGenerating(true);
 
@@ -167,19 +171,38 @@ export function App() {
         return;
       }
 
-      // Phase 10: Consume complete Blob and generate object URL
-      const blob = await response.blob();
-      const newAudioUrl = URL.createObjectURL(blob);
-      setAudioUrl(newAudioUrl);
-      setGenerationError(null);
+      // Stream playback via MediaSource or Blob fallback
+      await streamControllerRef.current?.startStream(response, controller.signal, {
+        onStreamReady: (mediaUrl: string) => {
+          setAudioSrc(mediaUrl);
+          // Try playing; safely catch autoplay restrictions
+          if (audioRef.current) {
+            audioRef.current.play().catch(() => {
+              // Autoplay policy prevented playback; user will click controls manually
+            });
+          }
+        },
+        onDownloadReady: (url: string) => {
+          setDownloadUrl(url);
+        },
+        onError: () => {
+          setAudioSrc(null);
+          setDownloadUrl(null);
+          setGenerationError("语音服务暂时不可用");
+          setIsGenerating(false);
+        },
+        onFinish: () => {
+          setIsGenerating(false);
+        },
+      });
     } catch (err: unknown) {
       if (err instanceof Error && err.name === "AbortError") {
         setGenerationError("已取消生成");
       } else {
         setGenerationError("网络请求失败");
       }
-    } finally {
       setIsGenerating(false);
+    } finally {
       abortControllerRef.current = null;
     }
   };
@@ -189,7 +212,11 @@ export function App() {
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
     }
+    streamControllerRef.current?.cancel();
+    setAudioSrc(null);
+    setDownloadUrl(null);
     setIsGenerating(false);
+    setGenerationError("已取消生成");
   };
 
   return (
@@ -429,23 +456,31 @@ export function App() {
             </div>
           )}
 
-          {audioUrl && (
+          {audioSrc && (
             <div className="player-wrapper">
-              <audio controls src={audioUrl} className="audio-player" aria-label="语音合成播放器">
+              <audio
+                ref={audioRef}
+                controls
+                src={audioSrc}
+                className="audio-player"
+                aria-label="语音合成播放器"
+              >
                 您的浏览器不支持音频播放。
               </audio>
-              <a
-                href={audioUrl}
-                download="speech.mp3"
-                className="btn btn-download"
-                aria-label="下载合成音频"
-              >
-                下载 MP3
-              </a>
+              {downloadUrl && (
+                <a
+                  href={downloadUrl}
+                  download="speech.mp3"
+                  className="btn btn-download"
+                  aria-label="下载合成音频"
+                >
+                  下载 MP3
+                </a>
+              )}
             </div>
           )}
 
-          {!audioUrl && !generationError && !isGenerating && (
+          {!audioSrc && !generationError && !isGenerating && (
             <p className="empty-result-text">输入文本并点击“合成语音”后在此试听与下载。</p>
           )}
         </section>
