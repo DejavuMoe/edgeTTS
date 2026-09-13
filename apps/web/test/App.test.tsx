@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, waitFor, fireEvent, cleanup } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { VoiceDto } from "@edgetts/shared";
-import { App } from "../src/App.js";
+import { App, isValidApiKeyFormat, MIN_API_KEY_LENGTH } from "../src/App.js";
 
 const mockVoices: readonly VoiceDto[] = [
   {
@@ -995,6 +995,311 @@ describe("EdgeTTS Web Workbench", () => {
       // 3. Second mount: credential was in-memory only, so fresh app must require auth again
       render(<App />);
       expect(await screen.findByRole("region", { name: /API 认证/i })).toBeDefined();
+    });
+
+    it("rejects trailing whitespace locally without sending request and displays 'API Key 格式无效'", async () => {
+      const user = userEvent.setup();
+      let fetchVoicesCalls = 0;
+
+      fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+        const url = typeof input === "string" ? input : input.toString();
+        if (url === "/api/health") return new Response(JSON.stringify({ status: "ok" }));
+        if (url === "/api/voices") {
+          fetchVoicesCalls++;
+          return new Response(JSON.stringify({ error: { code: "UNAUTHORIZED" } }), { status: 401 });
+        }
+        return new Response(null, { status: 404 });
+      });
+
+      render(<App />);
+      await screen.findByRole("region", { name: /API 认证/i });
+      expect(fetchVoicesCalls).toBe(1);
+
+      const keyInput = screen.getByLabelText(/API Key/i);
+      await user.type(keyInput, "test-api-key-1234567890 ");
+
+      const unlockBtn = screen.getByRole("button", { name: /解锁/i });
+      expect((unlockBtn as HTMLButtonElement).disabled).toBe(false);
+      await user.click(unlockBtn);
+
+      // No new network request was sent
+      expect(fetchVoicesCalls).toBe(1);
+
+      // Stable format error message
+      const errorAlert = await screen.findByRole("alert");
+      expect(errorAlert.textContent).toBe("API Key 格式无效");
+
+      // Card remains locked
+      expect(screen.getByRole("region", { name: /API 认证/i })).toBeDefined();
+    });
+
+    it("rejects leading whitespace locally without sending request and displays 'API Key 格式无效'", async () => {
+      const user = userEvent.setup();
+      let fetchVoicesCalls = 0;
+
+      fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+        const url = typeof input === "string" ? input : input.toString();
+        if (url === "/api/health") return new Response(JSON.stringify({ status: "ok" }));
+        if (url === "/api/voices") {
+          fetchVoicesCalls++;
+          return new Response(JSON.stringify({ error: { code: "UNAUTHORIZED" } }), { status: 401 });
+        }
+        return new Response(null, { status: 404 });
+      });
+
+      render(<App />);
+      await screen.findByRole("region", { name: /API 认证/i });
+      expect(fetchVoicesCalls).toBe(1);
+
+      const keyInput = screen.getByLabelText(/API Key/i);
+      await user.type(keyInput, " test-api-key-1234567890");
+
+      const unlockBtn = screen.getByRole("button", { name: /解锁/i });
+      await user.click(unlockBtn);
+
+      expect(fetchVoicesCalls).toBe(1);
+      const errorAlert = await screen.findByRole("alert");
+      expect(errorAlert.textContent).toBe("API Key 格式无效");
+    });
+
+    it("rejects internal whitespace locally without sending request and displays 'API Key 格式无效'", async () => {
+      const user = userEvent.setup();
+      let fetchVoicesCalls = 0;
+
+      fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+        const url = typeof input === "string" ? input : input.toString();
+        if (url === "/api/health") return new Response(JSON.stringify({ status: "ok" }));
+        if (url === "/api/voices") {
+          fetchVoicesCalls++;
+          return new Response(JSON.stringify({ error: { code: "UNAUTHORIZED" } }), { status: 401 });
+        }
+        return new Response(null, { status: 404 });
+      });
+
+      render(<App />);
+      await screen.findByRole("region", { name: /API 认证/i });
+      expect(fetchVoicesCalls).toBe(1);
+
+      const keyInput = screen.getByLabelText(/API Key/i);
+      await user.type(keyInput, "test-api-key-1234 567890");
+
+      const unlockBtn = screen.getByRole("button", { name: /解锁/i });
+      await user.click(unlockBtn);
+
+      expect(fetchVoicesCalls).toBe(1);
+      const errorAlert = await screen.findByRole("alert");
+      expect(errorAlert.textContent).toBe("API Key 格式无效");
+    });
+
+    it("rejects tab characters locally without sending request and displays 'API Key 格式无效'", async () => {
+      const user = userEvent.setup();
+      let fetchVoicesCalls = 0;
+
+      fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+        const url = typeof input === "string" ? input : input.toString();
+        if (url === "/api/health") return new Response(JSON.stringify({ status: "ok" }));
+        if (url === "/api/voices") {
+          fetchVoicesCalls++;
+          return new Response(JSON.stringify({ error: { code: "UNAUTHORIZED" } }), { status: 401 });
+        }
+        return new Response(null, { status: 404 });
+      });
+
+      render(<App />);
+      await screen.findByRole("region", { name: /API 认证/i });
+      expect(fetchVoicesCalls).toBe(1);
+
+      const keyInput = screen.getByLabelText(/API Key/i);
+      fireEvent.change(keyInput, { target: { value: "test-api-key-1234\t567890" } });
+
+      const unlockBtn = screen.getByRole("button", { name: /解锁/i });
+      await user.click(unlockBtn);
+
+      expect(fetchVoicesCalls).toBe(1);
+      const errorAlert = await screen.findByRole("alert");
+      expect(errorAlert.textContent).toBe("API Key 格式无效");
+    });
+
+    it("rejects keys shorter than 16 characters locally without sending request and displays 'API Key 格式无效'", async () => {
+      const user = userEvent.setup();
+      let fetchVoicesCalls = 0;
+
+      fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+        const url = typeof input === "string" ? input : input.toString();
+        if (url === "/api/health") return new Response(JSON.stringify({ status: "ok" }));
+        if (url === "/api/voices") {
+          fetchVoicesCalls++;
+          return new Response(JSON.stringify({ error: { code: "UNAUTHORIZED" } }), { status: 401 });
+        }
+        return new Response(null, { status: 404 });
+      });
+
+      render(<App />);
+      await screen.findByRole("region", { name: /API 认证/i });
+      expect(fetchVoicesCalls).toBe(1);
+
+      const keyInput = screen.getByLabelText(/API Key/i);
+      await user.type(keyInput, "short-key");
+
+      const unlockBtn = screen.getByRole("button", { name: /解锁/i });
+      await user.click(unlockBtn);
+
+      expect(fetchVoicesCalls).toBe(1);
+      const errorAlert = await screen.findByRole("alert");
+      expect(errorAlert.textContent).toBe("API Key 格式无效");
+    });
+
+    it("permits keys of exactly 16 characters and passes exact argument to fetchVoices", async () => {
+      const user = userEvent.setup();
+      const exact16Key = "1234567890abcdef";
+      let receivedAuthHeader: string | undefined;
+
+      fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === "string" ? input : input.toString();
+        if (url === "/api/health") return new Response(JSON.stringify({ status: "ok" }));
+        if (url === "/api/voices") {
+          const auth = (init?.headers as Record<string, string> | undefined)?.["Authorization"];
+          receivedAuthHeader = auth;
+          if (auth === `Bearer ${exact16Key}`) {
+            return new Response(JSON.stringify({ voices: mockVoices }));
+          }
+          return new Response(JSON.stringify({ error: { code: "UNAUTHORIZED" } }), { status: 401 });
+        }
+        return new Response(null, { status: 404 });
+      });
+
+      render(<App />);
+      await screen.findByRole("region", { name: /API 认证/i });
+
+      const keyInput = screen.getByLabelText(/API Key/i);
+      await user.type(keyInput, exact16Key);
+
+      const unlockBtn = screen.getByRole("button", { name: /解锁/i });
+      await user.click(unlockBtn);
+
+      // Exact key transmitted to fetchVoices without modification
+      expect(receivedAuthHeader).toBe(`Bearer ${exact16Key}`);
+
+      // Unlocks successfully
+      await waitFor(() => {
+        expect(screen.queryByRole("region", { name: /API 认证/i })).toBeNull();
+      });
+      expect(await screen.findByLabelText(/选择声音/i)).toBeDefined();
+    });
+
+    it("preserves exact case and characters without normalization or trimming across voices and speech", async () => {
+      const user = userEvent.setup();
+      const caseSensitiveKey = "Test-API-Key-AbCdEf123456";
+      let voicesAuthHeader: string | undefined;
+      let speechAuthHeader: string | undefined;
+
+      fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === "string" ? input : input.toString();
+        if (url === "/api/health") return new Response(JSON.stringify({ status: "ok" }));
+        if (url === "/api/voices") {
+          const auth = (init?.headers as Record<string, string> | undefined)?.["Authorization"];
+          voicesAuthHeader = auth;
+          if (auth === `Bearer ${caseSensitiveKey}`) {
+            return new Response(JSON.stringify({ voices: mockVoices }));
+          }
+          return new Response(JSON.stringify({ error: { code: "UNAUTHORIZED" } }), { status: 401 });
+        }
+        if (url === "/api/speech") {
+          speechAuthHeader = (init?.headers as Record<string, string> | undefined)?.[
+            "Authorization"
+          ];
+          const stream = new ReadableStream({
+            start(controller) {
+              controller.enqueue(new Uint8Array([1, 2, 3]));
+              controller.close();
+            },
+          });
+          return new Response(stream, {
+            status: 200,
+            headers: { "Content-Type": "audio/mpeg" },
+          });
+        }
+        return new Response(null, { status: 404 });
+      });
+
+      render(<App />);
+      await screen.findByRole("region", { name: /API 认证/i });
+
+      const keyInput = screen.getByLabelText(/API Key/i);
+      await user.type(keyInput, caseSensitiveKey);
+
+      await user.click(screen.getByRole("button", { name: /解锁/i }));
+
+      // Exact equality check on voices authorization
+      expect(voicesAuthHeader).toBe(`Bearer ${caseSensitiveKey}`);
+
+      await waitFor(() => {
+        expect(screen.queryByRole("region", { name: /API 认证/i })).toBeNull();
+      });
+
+      // Synthesize and check exact speech authorization
+      const textarea = screen.getByLabelText(/文本内容/i);
+      await user.type(textarea, "Case sensitive test");
+      await user.click(screen.getByRole("button", { name: /合成语音/i }));
+      await screen.findByLabelText(/语音合成播放器/i);
+
+      expect(speechAuthHeader).toBe(`Bearer ${caseSensitiveKey}`);
+    });
+
+    it("disables unlock button when key input is empty and enables it when non-empty", async () => {
+      const user = userEvent.setup();
+
+      fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+        const url = typeof input === "string" ? input : input.toString();
+        if (url === "/api/health") return new Response(JSON.stringify({ status: "ok" }));
+        if (url === "/api/voices") {
+          return new Response(JSON.stringify({ error: { code: "UNAUTHORIZED" } }), { status: 401 });
+        }
+        return new Response(null, { status: 404 });
+      });
+
+      render(<App />);
+      await screen.findByRole("region", { name: /API 认证/i });
+
+      const keyInput = screen.getByLabelText(/API Key/i);
+      const unlockBtn = screen.getByRole("button", { name: /解锁/i }) as HTMLButtonElement;
+
+      // Initially empty -> button disabled
+      expect(unlockBtn.disabled).toBe(true);
+
+      // Type characters -> button enabled
+      await user.type(keyInput, "a");
+      expect(unlockBtn.disabled).toBe(false);
+
+      // Clear -> button disabled
+      await user.clear(keyInput);
+      expect(unlockBtn.disabled).toBe(true);
+    });
+  });
+
+  describe("API Key format validation helper", () => {
+    it("rejects empty strings and strings shorter than 16 characters", () => {
+      expect(isValidApiKeyFormat("")).toBe(false);
+      expect(isValidApiKeyFormat("short")).toBe(false);
+      expect(isValidApiKeyFormat("123456789012345")).toBe(false);
+      expect(MIN_API_KEY_LENGTH).toBe(16);
+    });
+
+    it("rejects strings containing any whitespace (leading, trailing, internal, tab, newline)", () => {
+      expect(isValidApiKeyFormat(" test-api-key-1234567890")).toBe(false);
+      expect(isValidApiKeyFormat("test-api-key-1234567890 ")).toBe(false);
+      expect(isValidApiKeyFormat("test-api-key-1234 567890")).toBe(false);
+      expect(isValidApiKeyFormat("test-api-key-1234\t567890")).toBe(false);
+      expect(isValidApiKeyFormat("test-api-key-1234\n567890")).toBe(false);
+      expect(isValidApiKeyFormat("test-api-key-1234\r567890")).toBe(false);
+      expect(isValidApiKeyFormat("               16")).toBe(false);
+    });
+
+    it("accepts valid keys of 16 characters or more without whitespace", () => {
+      expect(isValidApiKeyFormat("1234567890123456")).toBe(true);
+      expect(isValidApiKeyFormat("test-api-key-1234567890")).toBe(true);
+      expect(isValidApiKeyFormat("Test-API-Key-AbCdEf123456")).toBe(true);
+      expect(isValidApiKeyFormat("0123456789abcdef0123456789abcdef0123456789abcdef")).toBe(true);
     });
   });
 

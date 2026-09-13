@@ -11,6 +11,12 @@ import "./App.css";
 
 type ApiStatus = "loading" | "healthy" | "unavailable";
 
+export const MIN_API_KEY_LENGTH = 16;
+
+export function isValidApiKeyFormat(key: string): boolean {
+  return key.length >= MIN_API_KEY_LENGTH && !/\s/.test(key);
+}
+
 function selectDefaultVoice(voiceList: readonly VoiceDto[]): string {
   const xiaoxiao = voiceList.find((v) => v.id === "zh-CN-XiaoxiaoNeural");
   const anyZh = voiceList.find((v) => v.locale.toLowerCase().startsWith("zh-cn"));
@@ -143,8 +149,12 @@ export function App() {
     if (e) {
       e.preventDefault();
     }
-    const trimmed = authKeyInput.trim();
-    if (!trimmed || isUnlocking) {
+    if (!authKeyInput || isUnlocking) {
+      return;
+    }
+
+    if (!isValidApiKeyFormat(authKeyInput)) {
+      setAuthError("API Key 格式无效");
       return;
     }
 
@@ -152,8 +162,8 @@ export function App() {
     setAuthError(null);
 
     try {
-      const voiceList = await fetchVoices(trimmed);
-      apiKeyRef.current = trimmed;
+      const voiceList = await fetchVoices(authKeyInput);
+      apiKeyRef.current = authKeyInput;
       setAuthKeyInput("");
       setAuthRequired(false);
       setAuthError(null);
@@ -376,7 +386,7 @@ export function App() {
                 <button
                   type="submit"
                   className="btn-unlock"
-                  disabled={isUnlocking || !authKeyInput.trim()}
+                  disabled={isUnlocking || authKeyInput.length === 0}
                 >
                   {isUnlocking ? "验证中..." : "解锁"}
                 </button>
