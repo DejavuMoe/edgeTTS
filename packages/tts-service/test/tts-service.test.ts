@@ -1180,4 +1180,516 @@ describe("TtsService", () => {
       await itA.next();
     });
   });
+
+  describe("synthesizeSegmented", () => {
+    it("rejects invalid maxSegmentCodePoints with RangeError", async () => {
+      const provider = new FakeTtsProvider();
+      const service = new TtsService(provider);
+      const ac = new AbortController();
+      const request: SynthesisRequest = { text: "Hello", voice: "v" };
+
+      await expect(
+        service.synthesizeSegmented(
+          request,
+          ac.signal,
+          null as unknown as { maxSegmentCodePoints: number },
+        ),
+      ).rejects.toThrowError(RangeError);
+
+      await expect(
+        service.synthesizeSegmented(request, ac.signal, { maxSegmentCodePoints: 0 }),
+      ).rejects.toThrowError(RangeError);
+
+      await expect(
+        service.synthesizeSegmented(request, ac.signal, { maxSegmentCodePoints: -10 }),
+      ).rejects.toThrowError(RangeError);
+
+      await expect(
+        service.synthesizeSegmented(request, ac.signal, { maxSegmentCodePoints: 1.5 }),
+      ).rejects.toThrowError(RangeError);
+
+      await expect(
+        service.synthesizeSegmented(request, ac.signal, { maxSegmentCodePoints: NaN }),
+      ).rejects.toThrowError(RangeError);
+
+      await expect(
+        service.synthesizeSegmented(request, ac.signal, { maxSegmentCodePoints: Infinity }),
+      ).rejects.toThrowError(RangeError);
+    });
+
+    it("synthesizes short text in a single call", async () => {
+      const provider = new FakeTtsProvider();
+      const service = new TtsService(provider);
+      const ac = new AbortController();
+
+      const result = await service.synthesizeSegmented(
+        { text: "Short text", voice: "v" },
+        ac.signal,
+        { maxSegmentCodePoints: 50 },
+      );
+
+      expect(result.format).toBe("mp3-48k");
+      expect(result.contentType).toBe("audio/mpeg");
+      expect(provider.synthesizeCallCount).toBe(1);
+      expect(provider.lastRequest?.text).toBe("Short text");
+
+      const bytes = await consumeStream(result.audio);
+      expect(bytes).toBe(3);
+      expect(provider.synthesizeCallCount).toBe(1);
+    });
+
+    it("synthesizes long text into exact expected segments in order", async () => {
+      const provider = new FakeTtsProvider();
+      const recordedTexts: string[] = [];
+
+      provider.customSynthesize = async (req) => {
+        recordedTexts.push(req.text);
+        return {
+          format: "mp3-48k",
+          contentType: "audio/mpeg",
+          audio: (async function* () {
+            yield new Uint8Array([req.text.length]);
+          })(),
+        };
+      };
+
+      const service = new TtsService(provider);
+      const text = "First sentence.\n\nSecond paragraph.\n\nThird paragraph.";
+      const ac = new AbortController();
+
+      const result = await service.synthesizeSegmented({ text, voice: "test-voice" }, ac.signal, {
+        maxSegmentCodePoints: 20,
+      });
+
+      const chunks: number[] = [];
+      for await (const chunk of result.audio) {
+        chunks.push(...chunk);
+      }
+
+      expect(recordedTexts.length).toBeGreaterThanOrEqual(3);
+      expect(recordedTexts.join("")).toBe(text);
+      expect(chunks.length).toBe(recordedTexts.length);
+    });
+
+    it("preserves request metadata (voice, format, prosody) for every segment", async () => {
+      const provider = new FakeTtsProvider();
+      const recordedRequests: SynthesisRequest[] = [];
+
+      provider.customSynthesize = async (req) => {
+        recordedRequests.push(req);
+        return {
+          format: "mp3-96k",
+          contentType: "audio/mpeg",
+          audio: (async function* () {
+            yield new Uint8Array([1]);
+          })(),
+        };
+      };
+
+      const service = new TtsService(provider);
+      const ac = new AbortController();
+      const originalRequest: SynthesisRequest = {
+        text: "Part 1. Part 2. Part 3.",
+        voice: "custom-voice",
+        format: "mp3-96k",
+        prosody: {
+          speed: 1.5,
+          pitchSemitones: -2,
+          volume: 0.8,
+        },
+      };
+
+      const result = await service.synthesizeSegmented(originalRequest, ac.signal, {
+        maxSegmentCodePoints: 10,
+      });
+
+      await consumeStream(result.audio);
+
+      expect(recordedRequests.length).toBeGreaterThanOrEqual(2);
+      for (const req of recordedRequests) {
+        expect(req.voice).toBe("custom-voice");
+        expect(req.format).toBe("mp3-96k");
+        expect(req.prosody).toEqual({
+          speed: 1.5,
+          pitchSemitones: -2,
+          volume: 0.8,
+        });
+      }
+    });
+
+    it("emits first audio chunk before second segment synthesis begins", async () => {
+      const provider = new FakeTtsProvider();
+      const secondCallStarted = createDeferred<void>();
+      let segment2Called = false;
+
+      provider.customSynthesize = async (req) => {
+        if (req.text.includes("First")) {
+          return {
+            format: "mp3-48k",
+            contentType: "audio/mpeg",
+            audio: (async function* () {
+              yield new Uint8Array([42]);
+            })(),
+          };
+        }
+        segment2Called = true;
+        secondCallStarted.resolve();
+        return {
+          format: "mp3-48k",
+          contentType: "audio/mpeg",
+          audio: (async function* () {
+            yield new Uint8Array([99]);
+          })(),
+        };
+      };
+
+      const service = new TtsService(provider);
+      const ac = new AbortController();
+      const result = await service.synthesizeSegmented(
+        { text: "First segment.\n\nSecond segment.", voice: "v" },
+        ac.signal,
+        { maxSegmentCodePoints: 16 },
+      );
+
+      const iterator = result.audio[Symbol.asyncIterator]();
+      const firstChunkResult = await iterator.next();
+
+      // Chunk 1 was received!
+      expect(firstChunkResult.value).toEqual(new Uint8Array([42]));
+      // Segment 2 must NOT have been called yet because chunk 1 is emitted before segment 1 completes!
+      expect(segment2Called).toBe(false);
+
+      // Now reading next chunk triggers segment 2
+      const secondChunkResult = await iterator.next();
+      expect(segment2Called).toBe(true);
+      expect(secondChunkResult.value).toEqual(new Uint8Array([99]));
+    });
+
+    it("executes provider synthesis calls strictly sequentially", async () => {
+      const provider = new FakeTtsProvider();
+      let activeCalls = 0;
+      let maxActiveCalls = 0;
+
+      provider.customSynthesize = async (req) => {
+        activeCalls++;
+        if (activeCalls > maxActiveCalls) {
+          maxActiveCalls = activeCalls;
+        }
+        await new Promise((r) => setTimeout(r, 10));
+        activeCalls--;
+        return {
+          format: "mp3-48k",
+          contentType: "audio/mpeg",
+          audio: (async function* () {
+            yield new Uint8Array([req.text.length]);
+          })(),
+        };
+      };
+
+      const service = new TtsService(provider);
+      const ac = new AbortController();
+      const result = await service.synthesizeSegmented(
+        { text: "One.\n\nTwo.\n\nThree.", voice: "v" },
+        ac.signal,
+        { maxSegmentCodePoints: 6 },
+      );
+
+      await consumeStream(result.audio);
+      expect(maxActiveCalls).toBe(1);
+    });
+
+    it("yields all audio chunks from all segments in order without buffering entire stream", async () => {
+      const provider = new FakeTtsProvider();
+      provider.customSynthesize = async (req) => {
+        const id = req.text.includes("First") ? 1 : req.text.includes("Second") ? 2 : 3;
+        return {
+          format: "mp3-48k",
+          contentType: "audio/mpeg",
+          audio: (async function* () {
+            yield new Uint8Array([id, 1]);
+            yield new Uint8Array([id, 2]);
+          })(),
+        };
+      };
+
+      const service = new TtsService(provider);
+      const ac = new AbortController();
+      const result = await service.synthesizeSegmented(
+        { text: "First part.\n\nSecond part.\n\nThird part.", voice: "v" },
+        ac.signal,
+        { maxSegmentCodePoints: 14 },
+      );
+
+      const allChunks: number[] = [];
+      for await (const chunk of result.audio) {
+        allChunks.push(...chunk);
+      }
+
+      expect(allChunks).toEqual([1, 1, 1, 2, 2, 1, 2, 2, 3, 1, 3, 2]);
+    });
+
+    it("propagates pre-stream failure in later segment and stops subsequent segments", async () => {
+      const provider = new FakeTtsProvider();
+      let segmentCount = 0;
+
+      provider.customSynthesize = async (req) => {
+        segmentCount++;
+        if (req.text.includes("Second")) {
+          throw new Error("Provider explosion on segment 2");
+        }
+        return {
+          format: "mp3-48k",
+          contentType: "audio/mpeg",
+          audio: (async function* () {
+            yield new Uint8Array([1]);
+          })(),
+        };
+      };
+
+      const service = new TtsService(provider);
+      const ac = new AbortController();
+      const result = await service.synthesizeSegmented(
+        { text: "First part.\n\nSecond part.\n\nThird part.", voice: "v" },
+        ac.signal,
+        { maxSegmentCodePoints: 14 },
+      );
+
+      const iterator = result.audio[Symbol.asyncIterator]();
+      const firstChunk = await iterator.next();
+      expect(firstChunk.value).toEqual(new Uint8Array([1]));
+
+      await expect(iterator.next()).rejects.toThrowError("Provider explosion on segment 2");
+      expect(segmentCount).toBe(2);
+    });
+
+    it("propagates stream failure in later segment and stops subsequent segments", async () => {
+      const provider = new FakeTtsProvider();
+      let segmentCount = 0;
+
+      provider.customSynthesize = async (req) => {
+        segmentCount++;
+        if (req.text.includes("Second")) {
+          return {
+            format: "mp3-48k",
+            contentType: "audio/mpeg",
+            audio: (async function* () {
+              yield new Uint8Array([2]);
+              throw new Error("Mid-stream explosion");
+            })(),
+          };
+        }
+        return {
+          format: "mp3-48k",
+          contentType: "audio/mpeg",
+          audio: (async function* () {
+            yield new Uint8Array([1]);
+          })(),
+        };
+      };
+
+      const service = new TtsService(provider);
+      const ac = new AbortController();
+      const result = await service.synthesizeSegmented(
+        { text: "First part.\n\nSecond part.\n\nThird part.", voice: "v" },
+        ac.signal,
+        { maxSegmentCodePoints: 14 },
+      );
+
+      const received: number[] = [];
+      const iterator = result.audio[Symbol.asyncIterator]();
+      const c1 = await iterator.next();
+      received.push(...c1.value!);
+      const c2 = await iterator.next();
+      received.push(...c2.value!);
+
+      await expect(iterator.next()).rejects.toThrowError("Mid-stream explosion");
+      expect(received).toEqual([1, 2]);
+      expect(segmentCount).toBe(2);
+    });
+
+    it("aborts between segments and prevents later segment synthesis", async () => {
+      const provider = new FakeTtsProvider();
+      let segmentCount = 0;
+
+      provider.customSynthesize = async () => {
+        segmentCount++;
+        return {
+          format: "mp3-48k",
+          contentType: "audio/mpeg",
+          audio: (async function* () {
+            yield new Uint8Array([1]);
+          })(),
+        };
+      };
+
+      const service = new TtsService(provider);
+      const ac = new AbortController();
+      const result = await service.synthesizeSegmented(
+        { text: "First part.\n\nSecond part.\n\nThird part.", voice: "v" },
+        ac.signal,
+        { maxSegmentCodePoints: 14 },
+      );
+
+      const iterator = result.audio[Symbol.asyncIterator]();
+      await iterator.next(); // read chunk from segment 1
+
+      // Abort between segments
+      ac.abort();
+
+      await expect(iterator.next()).rejects.toThrowError();
+      expect(segmentCount).toBe(1);
+    });
+
+    it("stops subsequent synthesis when consumer breaks early", async () => {
+      const provider = new FakeTtsProvider();
+      let callCount = 0;
+
+      provider.customSynthesize = async () => {
+        callCount++;
+        return {
+          format: "mp3-48k",
+          contentType: "audio/mpeg",
+          audio: (async function* () {
+            yield new Uint8Array([1]);
+          })(),
+        };
+      };
+
+      const service = new TtsService(provider);
+      const ac = new AbortController();
+      const result = await service.synthesizeSegmented(
+        { text: "Part 1.\n\nPart 2.\n\nPart 3.\n\nPart 4.", voice: "v" },
+        ac.signal,
+        { maxSegmentCodePoints: 8 },
+      );
+
+      for await (const chunk of result.audio) {
+        expect(chunk).toEqual(new Uint8Array([1]));
+        break; // consumer early exit
+      }
+
+      expect(callCount).toBe(1);
+    });
+
+    it("allows queued normal request to run between segmented chunks (fairness)", async () => {
+      const provider = new FakeTtsProvider();
+      const callLog: string[] = [];
+      const service = new TtsService(provider, {
+        maxConcurrentSyntheses: 1,
+        maxQueuedSyntheses: 5,
+      });
+
+      const segment1Yielded = createDeferred<void>();
+      const segment1Done = createDeferred<void>();
+
+      provider.customSynthesize = async (req) => {
+        callLog.push(`start:${req.text}`);
+        return {
+          format: "mp3-48k",
+          contentType: "audio/mpeg",
+          audio: (async function* () {
+            if (req.text.includes("Seg1")) {
+              segment1Yielded.resolve();
+              yield new Uint8Array([1]);
+              await segment1Done.promise;
+            } else if (req.text === "Normal") {
+              yield new Uint8Array([2]);
+            } else {
+              yield new Uint8Array([3]);
+            }
+          })(),
+        };
+      };
+
+      const ac = new AbortController();
+      const segResult = await service.synthesizeSegmented(
+        { text: "Seg1.\n\nSeg2.", voice: "v" },
+        ac.signal,
+        { maxSegmentCodePoints: 7 },
+      );
+
+      const segIterator = segResult.audio[Symbol.asyncIterator]();
+      const firstChunkPromise = segIterator.next();
+
+      // Wait until segment 1 yields chunk
+      await segment1Yielded.promise;
+
+      // While segment 1 is still holding the permit, queue a normal request
+      const normalPromise = service.synthesize({ text: "Normal", voice: "v" }, ac.signal);
+
+      // Now complete segment 1 audio consumption
+      segment1Done.resolve();
+      await firstChunkPromise;
+
+      // Request next chunk from segIterator, which exhausts segment 1 (releasing its permit)
+      // and queues segment 2 for a permit.
+      // Because normalPromise was queued while segment 1 was active,
+      // the limiter schedules normalPromise ahead of segment 2 (FIFO queue fairness).
+      const secondChunkPromise = segIterator.next();
+
+      // Normal request now acquires the permit, synthesizes, and streams to completion.
+      const normalResult = await normalPromise;
+      await consumeStream(normalResult.audio);
+
+      // Once normal request finishes and releases permit, segment 2 acquires permit and yields.
+      const secondChunk = await secondChunkPromise;
+      expect(secondChunk.value).toEqual(new Uint8Array([3]));
+
+      // Verify execution order: Seg1 started, then Normal started, then Seg2 started
+      expect(callLog).toEqual(["start:Seg1.\n\n", "start:Normal", "start:Seg2."]);
+    });
+
+    it("rejects if a subsequent segment returns an inconsistent format or contentType", async () => {
+      const provider = new FakeTtsProvider();
+      let callCount = 0;
+
+      provider.customSynthesize = async () => {
+        callCount++;
+        if (callCount === 1) {
+          return {
+            format: "mp3-48k",
+            contentType: "audio/mpeg",
+            audio: (async function* () {
+              yield new Uint8Array([1]);
+            })(),
+          };
+        }
+        return {
+          format: "mp3-96k", // Inconsistent format!
+          contentType: "audio/mpeg",
+          audio: (async function* () {
+            yield new Uint8Array([2]);
+          })(),
+        };
+      };
+
+      const service = new TtsService(provider);
+      const ac = new AbortController();
+      const result = await service.synthesizeSegmented(
+        { text: "Part 1.\n\nPart 2.", voice: "v" },
+        ac.signal,
+        { maxSegmentCodePoints: 8 },
+      );
+
+      const iterator = result.audio[Symbol.asyncIterator]();
+      await iterator.next(); // first segment succeeds
+
+      await expect(iterator.next()).rejects.toThrowError(/inconsistent audio metadata/);
+    });
+
+    it("immediately rejects already aborted signal before starting synthesis", async () => {
+      const provider = new FakeTtsProvider();
+      const service = new TtsService(provider);
+      const ac = new AbortController();
+      ac.abort();
+
+      await expect(
+        service.synthesizeSegmented({ text: "Hello", voice: "v" }, ac.signal, {
+          maxSegmentCodePoints: 10,
+        }),
+      ).rejects.toThrowError();
+
+      expect(provider.synthesizeCallCount).toBe(0);
+    });
+  });
 });
