@@ -118,6 +118,28 @@ importers:
         specifier: ^5.8.2
         version: 5.9.3
 
+  packages/tts-service:
+    dependencies:
+      '@edgetts/tts-core':
+        specifier: workspace:*
+        version: link:../tts-core
+    devDependencies:
+      '@edgetts/edge-provider':
+        specifier: workspace:*
+        version: link:../edge-provider
+      '@types/node':
+        specifier: ^22.13.9
+        version: 22.20.2
+      tsx:
+        specifier: ^4.19.3
+        version: 4.23.13
+      typescript:
+        specifier: ^5.8.2
+        version: 5.9.3
+      vitest:
+        specifier: ^3.0.7
+        version: 3.2.7(@types/node@22.20.2)(supports-color@8.1.1)(tsx@4.23.13)
+
 packages:
 
   '@babel/code-frame@7.29.7':
