@@ -1,6 +1,6 @@
 import { Readable } from "node:stream";
 import { describe, it, expect } from "vitest";
-import { OUTPUT_FORMAT, type Voice } from "msedge-tts";
+import { OUTPUT_FORMAT, type Voice, type ProsodyOptions } from "msedge-tts";
 import type { TtsAudioFormat } from "@edgetts/tts-core";
 import { EdgeTtsProvider } from "../src/edge-provider.js";
 import type { EdgeClient } from "../src/client.js";
@@ -8,7 +8,7 @@ import type { EdgeClient } from "../src/client.js";
 class FakeEdgeClient implements EdgeClient {
   public closeCallCount = 0;
   public setMetadataCalls: Array<{ voiceName: string; outputFormat: OUTPUT_FORMAT }> = [];
-  public toStreamCalls: string[] = [];
+  public toStreamCalls: Array<{ input: string; options?: ProsodyOptions | undefined }> = [];
   public streamToReturn: Readable;
 
   constructor(streamToReturn?: Readable) {
@@ -33,8 +33,8 @@ class FakeEdgeClient implements EdgeClient {
     this.setMetadataCalls.push({ voiceName, outputFormat });
   }
 
-  toStream(input: string): { audioStream: Readable } {
-    this.toStreamCalls.push(input);
+  toStream(input: string, options?: ProsodyOptions): { audioStream: Readable } {
+    this.toStreamCalls.push({ input, options });
     return { audioStream: this.streamToReturn };
   }
 
@@ -167,7 +167,7 @@ describe("EdgeTtsProvider", () => {
         ac.signal,
       );
 
-      expect(createdClient?.toStreamCalls[0]).toBe(
+      expect(createdClient?.toStreamCalls[0]?.input).toBe(
         `Tom &amp; Jerry &lt;test&gt; &quot;hello&quot; &apos;world&apos; &lt;break time=&quot;10s&quot;/&gt;`,
       );
     });
@@ -372,6 +372,71 @@ describe("EdgeTtsProvider", () => {
       await expect(provider.synthesize({ text: "hello", voice: "   " }, ac.signal)).rejects.toThrow(
         "Voice must not be empty",
       );
+    });
+  });
+
+  describe("prosody integration in synthesis", () => {
+    it("passes default prosody options to toStream when prosody is omitted", async () => {
+      let createdClient: FakeEdgeClient | undefined;
+      const provider = new EdgeTtsProvider(() => {
+        createdClient = new FakeEdgeClient();
+        return createdClient;
+      });
+
+      const ac = new AbortController();
+      await provider.synthesize({ text: "hello", voice: "zh-CN-XiaoxiaoNeural" }, ac.signal);
+
+      expect(createdClient?.toStreamCalls[0]?.options?.rate).toBe(1.0);
+      expect(createdClient?.toStreamCalls[0]?.options?.pitch).toBe("+0st");
+      expect(createdClient?.toStreamCalls[0]?.options?.volume).toBe(100.0);
+    });
+
+    it("passes custom prosody options to toStream", async () => {
+      let createdClient: FakeEdgeClient | undefined;
+      const provider = new EdgeTtsProvider(() => {
+        createdClient = new FakeEdgeClient();
+        return createdClient;
+      });
+
+      const ac = new AbortController();
+      await provider.synthesize(
+        {
+          text: "hello",
+          voice: "zh-CN-XiaoxiaoNeural",
+          prosody: {
+            speed: 1.25,
+            pitchSemitones: 2,
+            volume: 0.8,
+          },
+        },
+        ac.signal,
+      );
+
+      expect(createdClient?.toStreamCalls[0]?.options?.rate).toBe(1.25);
+      expect(createdClient?.toStreamCalls[0]?.options?.pitch).toBe("+2st");
+      expect(createdClient?.toStreamCalls[0]?.options?.volume).toBe(80);
+    });
+
+    it("rejects invalid prosody without calling setMetadata or toStream", async () => {
+      let createdClient: FakeEdgeClient | undefined;
+      const provider = new EdgeTtsProvider(() => {
+        createdClient = new FakeEdgeClient();
+        return createdClient;
+      });
+
+      const ac = new AbortController();
+      await expect(
+        provider.synthesize(
+          {
+            text: "hello",
+            voice: "zh-CN-XiaoxiaoNeural",
+            prosody: { speed: 3.0 },
+          },
+          ac.signal,
+        ),
+      ).rejects.toThrowError(RangeError);
+
+      expect(createdClient).toBeUndefined();
     });
   });
 });

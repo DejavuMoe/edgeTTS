@@ -8,6 +8,7 @@ import type {
   TtsVoice,
 } from "@edgetts/tts-core";
 import { defaultEdgeClientFactory, type EdgeClient, type EdgeClientFactory } from "./client.js";
+import { toEdgeProsody } from "./prosody.js";
 import { escapeXmlText } from "./xml.js";
 
 interface FormatDetails {
@@ -78,6 +79,8 @@ export class EdgeTtsProvider implements TtsProvider {
       throw new Error(`Unsupported audio format: ${String(format)}`);
     }
 
+    const prosodyOptions = toEdgeProsody(request.prosody);
+
     if (signal.aborted) {
       throw createAbortError(signal.reason);
     }
@@ -91,7 +94,7 @@ export class EdgeTtsProvider implements TtsProvider {
       }
 
       const escapedText = escapeXmlText(request.text);
-      const { audioStream } = client.toStream(escapedText);
+      const { audioStream } = client.toStream(escapedText, prosodyOptions);
 
       return {
         format,
