@@ -2,14 +2,15 @@
 
 Self-hosted Edge TTS Web application and API skeleton.
 
-> **Note:** The Edge TTS provider is not implemented yet. Phase 0 establishes the engineering baseline and monorepo architecture skeleton.
+> **Note:** The Edge provider is implemented internally, but no public speech HTTP endpoint exists yet.
 
 ## Architecture
 
 - `apps/server`: Fastify HTTP API service (`@edgetts/server`).
 - `apps/web`: React + Vite frontend application (`@edgetts/web`).
 - `packages/shared`: Shared TypeScript types and Zod schemas (`@edgetts/shared`).
-- `packages/tts-core`: Domain boundaries and provider interface definitions (`@edgetts/tts-core`).
+- `packages/tts-core`: Provider-neutral TTS domain contracts (`@edgetts/tts-core`).
+- `packages/edge-provider`: Microsoft Edge Read Aloud adapter (`@edgetts/edge-provider`).
 
 ## Requirements
 
@@ -41,4 +42,10 @@ pnpm typecheck
 pnpm lint
 pnpm test
 pnpm format:check
+```
+
+To run the live Edge TTS provider smoke test against the Microsoft endpoint:
+
+```bash
+pnpm --filter @edgetts/edge-provider smoke
 ```
