@@ -1,0 +1,75 @@
+:root {
+  color-scheme: light dark;
+  --bg-color: #ffffff;
+  --text-color: #111827;
+  --muted-color: #4b5563;
+  --border-color: #e5e7eb;
+  --status-healthy: #15803d;
+  --status-unavailable: #b91c1c;
+  --status-loading: #4b5563;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg-color: #111827;
+    --text-color: #f9fafb;
+    --muted-color: #9ca3af;
+    --border-color: #374151;
+    --status-healthy: #22c55e;
+    --status-unavailable: #ef4444;
+    --status-loading: #9ca3af;
+  }
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background-color: var(--bg-color);
+  color: var(--text-color);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+}
+
+.container {
+  max-width: 600px;
+  margin: 4rem auto;
+  padding: 0 1.5rem;
+}
+
+.header {
+  margin-bottom: 2rem;
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 1.5rem;
+}
+
+h1 {
+  font-size: 1.75rem;
+  font-weight: 600;
+  margin: 0 0 0.5rem 0;
+}
+
+.description {
+  margin: 0;
+  font-size: 1rem;
+  color: var(--muted-color);
+}
+
+.status-container {
+  font-size: 1rem;
+}
+
+.status {
+  font-weight: 600;
+}
+
+.status-healthy {
+  color: var(--status-healthy);
+}
+
+.status-unavailable {
+  color: var(--status-unavailable);
+}
+
+.status-loading {
+  color: var(--status-loading);
+}
