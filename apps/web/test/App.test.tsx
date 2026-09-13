@@ -702,6 +702,302 @@ describe("EdgeTTS Web Workbench", () => {
     });
   });
 
+  describe("API Key Authentication UI & Lifecycle", () => {
+    const TEST_API_KEY = "test-auth-key-1234567890";
+
+    it("initial voices 401 triggers auth requirement UI without showing generic fetch error", async () => {
+      fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+        const url = typeof input === "string" ? input : input.toString();
+        if (url === "/api/health") return new Response(JSON.stringify({ status: "ok" }));
+        if (url === "/api/voices") {
+          return new Response(
+            JSON.stringify({
+              error: { code: "UNAUTHORIZED", message: "Missing or invalid API key" },
+            }),
+            {
+              status: 401,
+              headers: { "Content-Type": "application/json" },
+            },
+          );
+        }
+        return new Response(null, { status: 404 });
+      });
+
+      render(<App />);
+
+      // Auth UI appears
+      const authCard = await screen.findByRole("region", { name: /API 认证/i });
+      expect(authCard).toBeDefined();
+      expect(screen.getByText(/API 需要认证/i)).toBeDefined();
+
+      const keyInput = screen.getByLabelText(/API Key/i) as HTMLInputElement;
+      expect(keyInput).toBeDefined();
+      expect(keyInput.type).toBe("password");
+
+      const unlockBtn = screen.getByRole("button", { name: /解锁/i }) as HTMLButtonElement;
+      expect(unlockBtn).toBeDefined();
+
+      // Generic error is NOT displayed
+      expect(screen.queryByText(/无法加载语音列表/i)).toBeNull();
+
+      // Generate button is disabled while auth is required
+      const generateBtn = screen.getByRole("button", { name: /合成语音/i }) as HTMLButtonElement;
+      expect(generateBtn.disabled).toBe(true);
+    });
+
+    it("entering invalid key shows 'API Key 无效' and remains in locked state", async () => {
+      const user = userEvent.setup();
+
+      fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === "string" ? input : input.toString();
+        if (url === "/api/health") return new Response(JSON.stringify({ status: "ok" }));
+        if (url === "/api/voices") {
+          const auth = (init?.headers as Record<string, string> | undefined)?.["Authorization"];
+          if (auth === `Bearer ${TEST_API_KEY}`) {
+            return new Response(JSON.stringify({ voices: mockVoices }));
+          }
+          return new Response(
+            JSON.stringify({
+              error: { code: "UNAUTHORIZED", message: "Missing or invalid API key" },
+            }),
+            {
+              status: 401,
+              headers: { "Content-Type": "application/json" },
+            },
+          );
+        }
+        return new Response(null, { status: 404 });
+      });
+
+      render(<App />);
+      await screen.findByRole("region", { name: /API 认证/i });
+
+      const keyInput = screen.getByLabelText(/API Key/i);
+      await user.type(keyInput, "wrong-key-1234567890");
+
+      const unlockBtn = screen.getByRole("button", { name: /解锁/i });
+      await user.click(unlockBtn);
+
+      // Error message is displayed
+      const errorAlert = await screen.findByRole("alert");
+      expect(errorAlert.textContent).toContain("API Key 无效");
+
+      // App remains locked
+      expect(screen.getByText(/API 需要认证/i)).toBeDefined();
+    });
+
+    it("entering valid key unlocks app, loads voices, clears input/error, and attaches Bearer key to speech requests", async () => {
+      const user = userEvent.setup();
+
+      let lastSpeechHeaders: HeadersInit | undefined;
+      let lastSpeechBody: string | undefined;
+
+      fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === "string" ? input : input.toString();
+        if (url === "/api/health") return new Response(JSON.stringify({ status: "ok" }));
+        if (url === "/api/voices") {
+          const auth = (init?.headers as Record<string, string> | undefined)?.["Authorization"];
+          if (auth === `Bearer ${TEST_API_KEY}`) {
+            return new Response(JSON.stringify({ voices: mockVoices }));
+          }
+          return new Response(JSON.stringify({ error: { code: "UNAUTHORIZED" } }), { status: 401 });
+        }
+        if (url === "/api/speech") {
+          lastSpeechHeaders = init?.headers;
+          lastSpeechBody = init?.body as string;
+          const stream = new ReadableStream({
+            start(controller) {
+              controller.enqueue(new Uint8Array([1, 2, 3]));
+              controller.close();
+            },
+          });
+          return new Response(stream, {
+            status: 200,
+            headers: { "Content-Type": "audio/mpeg" },
+          });
+        }
+        return new Response(null, { status: 404 });
+      });
+
+      render(<App />);
+      await screen.findByRole("region", { name: /API 认证/i });
+
+      const keyInput = screen.getByLabelText(/API Key/i);
+      await user.type(keyInput, TEST_API_KEY);
+
+      await user.click(screen.getByRole("button", { name: /解锁/i }));
+
+      // Auth card disappears and voices load
+      await waitFor(() => {
+        expect(screen.queryByRole("region", { name: /API 认证/i })).toBeNull();
+      });
+
+      const voiceSelect = (await screen.findByLabelText(/选择声音/i)) as HTMLSelectElement;
+      expect(voiceSelect.value).toBe("zh-CN-XiaoxiaoNeural");
+
+      // Perform synthesis and check that Authorization header is attached
+      const textarea = screen.getByLabelText(/文本内容/i);
+      await user.type(textarea, "Protected speech test");
+
+      await user.click(screen.getByRole("button", { name: /合成语音/i }));
+      await screen.findByLabelText(/语音合成播放器/i);
+
+      // Verify Authorization header on speech request
+      expect(lastSpeechHeaders).toBeDefined();
+      expect((lastSpeechHeaders as Record<string, string>)["Authorization"]).toBe(
+        `Bearer ${TEST_API_KEY}`,
+      );
+
+      // Verify API key was NOT leaked into JSON request body
+      expect(lastSpeechBody).toBeDefined();
+      const parsedBody = JSON.parse(lastSpeechBody!);
+      expect(parsedBody).not.toHaveProperty("apiKey");
+      expect(parsedBody).not.toHaveProperty("authorization");
+    });
+
+    it("mid-session 401 during synthesis clears in-memory credential, stops generating, and shows auth requirement", async () => {
+      const user = userEvent.setup();
+
+      fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === "string" ? input : input.toString();
+        if (url === "/api/health") return new Response(JSON.stringify({ status: "ok" }));
+        if (url === "/api/voices") {
+          const auth = (init?.headers as Record<string, string> | undefined)?.["Authorization"];
+          if (auth === `Bearer ${TEST_API_KEY}`) {
+            return new Response(JSON.stringify({ voices: mockVoices }));
+          }
+          return new Response(JSON.stringify({ error: { code: "UNAUTHORIZED" } }), { status: 401 });
+        }
+        if (url === "/api/speech") {
+          // Server restarted or rotated key, returns 401
+          return new Response(
+            JSON.stringify({
+              error: { code: "UNAUTHORIZED", message: "Missing or invalid API key" },
+            }),
+            {
+              status: 401,
+              headers: { "Content-Type": "application/json" },
+            },
+          );
+        }
+        return new Response(null, { status: 404 });
+      });
+
+      render(<App />);
+      await screen.findByRole("region", { name: /API 认证/i });
+
+      // Unlock first
+      await user.type(screen.getByLabelText(/API Key/i), TEST_API_KEY);
+      await user.click(screen.getByRole("button", { name: /解锁/i }));
+
+      await waitFor(() => {
+        expect(screen.queryByRole("region", { name: /API 认证/i })).toBeNull();
+      });
+
+      // Generate speech
+      const textarea = screen.getByLabelText(/文本内容/i);
+      await user.type(textarea, "Mid-session 401 test");
+
+      await user.click(screen.getByRole("button", { name: /合成语音/i }));
+
+      // Error alert indicates key expiration
+      const alert = await screen.findByRole("alert");
+      expect(alert.textContent).toContain("API Key 已失效或未提供");
+
+      // Generating stopped
+      expect(screen.queryByRole("button", { name: /取消/i })).toBeNull();
+
+      // Auth UI reappears
+      expect(await screen.findByRole("region", { name: /API 认证/i })).toBeDefined();
+    });
+
+    it("browser storage security: localStorage and sessionStorage are never called for API key", async () => {
+      const user = userEvent.setup();
+
+      const localSetSpy = vi.spyOn(Storage.prototype, "setItem");
+
+      fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === "string" ? input : input.toString();
+        if (url === "/api/health") return new Response(JSON.stringify({ status: "ok" }));
+        if (url === "/api/voices") {
+          const auth = (init?.headers as Record<string, string> | undefined)?.["Authorization"];
+          if (auth === `Bearer ${TEST_API_KEY}`) {
+            return new Response(JSON.stringify({ voices: mockVoices }));
+          }
+          return new Response(JSON.stringify({ error: { code: "UNAUTHORIZED" } }), { status: 401 });
+        }
+        if (url === "/api/speech") {
+          const stream = new ReadableStream({
+            start(controller) {
+              controller.enqueue(new Uint8Array([1, 2]));
+              controller.close();
+            },
+          });
+          return new Response(stream, { status: 200, headers: { "Content-Type": "audio/mpeg" } });
+        }
+        return new Response(null, { status: 404 });
+      });
+
+      render(<App />);
+      await screen.findByRole("region", { name: /API 认证/i });
+
+      await user.type(screen.getByLabelText(/API Key/i), TEST_API_KEY);
+      await user.click(screen.getByRole("button", { name: /解锁/i }));
+
+      await waitFor(() => {
+        expect(screen.queryByRole("region", { name: /API 认证/i })).toBeNull();
+      });
+
+      const textarea = screen.getByLabelText(/文本内容/i);
+      await user.type(textarea, "Storage check text");
+      await user.click(screen.getByRole("button", { name: /合成语音/i }));
+      await screen.findByLabelText(/语音合成播放器/i);
+
+      // Verify that neither storage ever received the API key
+      for (const call of localSetSpy.mock.calls) {
+        expect(call[0]).not.toContain(TEST_API_KEY);
+        expect(call[1]).not.toContain(TEST_API_KEY);
+      }
+
+      localSetSpy.mockRestore();
+    });
+
+    it("remounting App does not retain in-memory key, requiring re-entry", async () => {
+      const user = userEvent.setup();
+
+      fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === "string" ? input : input.toString();
+        if (url === "/api/health") return new Response(JSON.stringify({ status: "ok" }));
+        if (url === "/api/voices") {
+          const auth = (init?.headers as Record<string, string> | undefined)?.["Authorization"];
+          if (auth === `Bearer ${TEST_API_KEY}`) {
+            return new Response(JSON.stringify({ voices: mockVoices }));
+          }
+          return new Response(JSON.stringify({ error: { code: "UNAUTHORIZED" } }), { status: 401 });
+        }
+        return new Response(null, { status: 404 });
+      });
+
+      // 1. First mount & unlock
+      const { unmount } = render(<App />);
+      await screen.findByRole("region", { name: /API 认证/i });
+
+      await user.type(screen.getByLabelText(/API Key/i), TEST_API_KEY);
+      await user.click(screen.getByRole("button", { name: /解锁/i }));
+
+      await waitFor(() => {
+        expect(screen.queryByRole("region", { name: /API 认证/i })).toBeNull();
+      });
+
+      // 2. Unmount (simulating navigation/refresh)
+      unmount();
+
+      // 3. Second mount: credential was in-memory only, so fresh app must require auth again
+      render(<App />);
+      expect(await screen.findByRole("region", { name: /API 认证/i })).toBeDefined();
+    });
+  });
+
   describe("Accessibility basics", () => {
     it("verifies all input elements, buttons, and players have accessible names and roles", async () => {
       render(<App />);

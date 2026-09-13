@@ -5,11 +5,18 @@ import {
   type NativeSpeechRequest,
   type VoiceDto,
 } from "@edgetts/shared";
-import { fetchHealth, fetchVoices, synthesizeSpeech } from "./api/client.js";
+import { ApiHttpError, fetchHealth, fetchVoices, synthesizeSpeech } from "./api/client.js";
 import { StreamPlaybackController } from "./audio/stream-controller.js";
 import "./App.css";
 
 type ApiStatus = "loading" | "healthy" | "unavailable";
+
+function selectDefaultVoice(voiceList: readonly VoiceDto[]): string {
+  const xiaoxiao = voiceList.find((v) => v.id === "zh-CN-XiaoxiaoNeural");
+  const anyZh = voiceList.find((v) => v.locale.toLowerCase().startsWith("zh-cn"));
+  const firstAvailable = voiceList[0];
+  return xiaoxiao?.id ?? anyZh?.id ?? firstAvailable?.id ?? "";
+}
 
 export function App() {
   const [apiStatus, setApiStatus] = useState<ApiStatus>("loading");
@@ -17,6 +24,13 @@ export function App() {
   const [selectedVoiceId, setSelectedVoiceId] = useState<string>("");
   const [voiceSearch, setVoiceSearch] = useState<string>("");
   const [voiceError, setVoiceError] = useState<string | null>(null);
+
+  // In-memory authentication state (never persisted to storage)
+  const apiKeyRef = useRef<string | null>(null);
+  const [authRequired, setAuthRequired] = useState<boolean>(false);
+  const [authKeyInput, setAuthKeyInput] = useState<string>("");
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [isUnlocking, setIsUnlocking] = useState<boolean>(false);
 
   // Form controls
   const [input, setInput] = useState<string>("");
@@ -89,21 +103,18 @@ export function App() {
         if (!active) return;
         setVoices(voiceList);
         setVoiceError(null);
+        setAuthRequired(false);
 
-        // Auto-select default voice:
-        // 1. zh-CN-XiaoxiaoNeural
-        // 2. first zh-CN
-        // 3. first available
-        const xiaoxiao = voiceList.find((v) => v.id === "zh-CN-XiaoxiaoNeural");
-        const anyZh = voiceList.find((v) => v.locale.toLowerCase().startsWith("zh-cn"));
-        const firstAvailable = voiceList[0];
-
-        const defaultVoice = xiaoxiao ?? anyZh ?? firstAvailable;
-        if (defaultVoice) {
-          setSelectedVoiceId(defaultVoice.id);
+        const defaultId = selectDefaultVoice(voiceList);
+        if (defaultId) {
+          setSelectedVoiceId(defaultId);
         }
-      } catch {
-        if (active) {
+      } catch (err: unknown) {
+        if (!active) return;
+        if (err instanceof ApiHttpError && err.status === 401) {
+          setAuthRequired(true);
+          setVoiceError(null);
+        } else {
           setVoiceError("无法加载语音列表");
         }
       }
@@ -128,8 +139,45 @@ export function App() {
     };
   }, []);
 
+  const handleUnlock = async (e?: React.FormEvent): Promise<void> => {
+    if (e) {
+      e.preventDefault();
+    }
+    const trimmed = authKeyInput.trim();
+    if (!trimmed || isUnlocking) {
+      return;
+    }
+
+    setIsUnlocking(true);
+    setAuthError(null);
+
+    try {
+      const voiceList = await fetchVoices(trimmed);
+      apiKeyRef.current = trimmed;
+      setAuthKeyInput("");
+      setAuthRequired(false);
+      setAuthError(null);
+      setVoices(voiceList);
+      setVoiceError(null);
+
+      const defaultId = selectDefaultVoice(voiceList);
+      if (defaultId) {
+        setSelectedVoiceId(defaultId);
+      }
+    } catch (err: unknown) {
+      apiKeyRef.current = null;
+      if (err instanceof ApiHttpError && err.status === 401) {
+        setAuthError("API Key 无效");
+      } else {
+        setAuthError("网络请求失败");
+      }
+    } finally {
+      setIsUnlocking(false);
+    }
+  };
+
   const handleGenerate = async (): Promise<void> => {
-    if (isGenerating || isInputEmpty || isOverLimit || !selectedVoiceId) {
+    if (isGenerating || isInputEmpty || isOverLimit || !selectedVoiceId || authRequired) {
       return;
     }
 
@@ -162,14 +210,24 @@ export function App() {
     };
 
     try {
-      const response = await synthesizeSpeech(requestPayload, controller.signal);
+      const response = await synthesizeSpeech(
+        requestPayload,
+        controller.signal,
+        apiKeyRef.current ?? undefined,
+      );
 
       if (!isCurrent()) {
         return;
       }
 
       if (!response.ok) {
-        if (response.status === 400) {
+        if (response.status === 401) {
+          apiKeyRef.current = null;
+          setAuthRequired(true);
+          setIsGenerating(false);
+          setGenerationError("API Key 已失效或未提供，请重新验证");
+          return;
+        } else if (response.status === 400) {
           setGenerationError("输入参数有误");
         } else if (response.status === 503) {
           setGenerationError("服务当前繁忙");
@@ -291,6 +349,46 @@ export function App() {
 
         {/* Right Column: Controls Panel */}
         <aside className="panel controls-panel" aria-label="语音参数配置">
+          {/* Authentication Unlock Card */}
+          {authRequired && (
+            <div className="auth-card" role="region" aria-label="API 认证">
+              <div className="auth-card-header">
+                <span className="auth-card-title">API 需要认证</span>
+              </div>
+              <form
+                className="auth-card-form"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  void handleUnlock();
+                }}
+              >
+                <input
+                  type="password"
+                  className="auth-key-input"
+                  aria-label="API Key"
+                  placeholder="请输入 API Key"
+                  autoComplete="off"
+                  spellCheck={false}
+                  value={authKeyInput}
+                  onChange={(e) => setAuthKeyInput(e.target.value)}
+                  disabled={isUnlocking}
+                />
+                <button
+                  type="submit"
+                  className="btn-unlock"
+                  disabled={isUnlocking || !authKeyInput.trim()}
+                >
+                  {isUnlocking ? "验证中..." : "解锁"}
+                </button>
+              </form>
+              {authError && (
+                <div className="auth-card-error" role="alert">
+                  {authError}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Voice Search & Selection */}
           <div className="control-group">
             <label htmlFor={voiceSearchId} className="control-label">
@@ -447,7 +545,9 @@ export function App() {
               type="button"
               className="btn btn-primary"
               onClick={() => void handleGenerate()}
-              disabled={isGenerating || isInputEmpty || isOverLimit || !selectedVoiceId}
+              disabled={
+                isGenerating || isInputEmpty || isOverLimit || !selectedVoiceId || authRequired
+              }
             >
               {isGenerating ? "正在合成..." : "合成语音"}
             </button>

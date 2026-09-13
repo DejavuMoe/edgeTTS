@@ -415,6 +415,75 @@ body {
   font-size: 0.9rem;
 }
 
+/* Authentication Card */
+.auth-card {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.auth-card-header {
+  display: flex;
+  align-items: center;
+}
+
+.auth-card-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.auth-card-form {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.auth-key-input {
+  flex: 1;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background-color: var(--bg-input);
+  color: var(--text-primary);
+  font-size: 0.85rem;
+}
+
+.auth-key-input:focus {
+  outline: none;
+  border-color: var(--border-focus);
+}
+
+.btn-unlock {
+  padding: 0.4rem 0.8rem;
+  background-color: var(--accent-primary);
+  color: #ffffff;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.btn-unlock:hover:not(:disabled) {
+  background-color: var(--accent-primary-hover);
+}
+
+.btn-unlock:disabled {
+  background-color: var(--accent-primary-disabled);
+  cursor: not-allowed;
+}
+
+.auth-card-error {
+  font-size: 0.8rem;
+  color: var(--error-text);
+}
+
 /* Mobile Layout (< 768px) */
 @media (max-width: 767px) {
   .workbench-main {
