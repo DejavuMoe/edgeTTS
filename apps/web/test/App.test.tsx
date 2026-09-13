@@ -372,6 +372,143 @@ describe("EdgeTTS Web Workbench", () => {
       const alert = await screen.findByRole("alert");
       expect(alert.textContent).toContain("已取消生成");
     });
+
+    it("handles rapid restart: cancelling A and immediately starting B ensures B ownership and leaves B cancellable", async () => {
+      const user = userEvent.setup();
+      let rejectA!: (err: Error) => void;
+      const promiseA = new Promise<Response>((_, reject) => {
+        rejectA = reject;
+      });
+
+      let abortSignalB: AbortSignal | undefined;
+      const promiseB = new Promise<Response>(() => {});
+
+      let speechCallCount = 0;
+      fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === "string" ? input : input.toString();
+        if (url === "/api/health") return new Response(JSON.stringify({ status: "ok" }));
+        if (url === "/api/voices") return new Response(JSON.stringify({ voices: mockVoices }));
+        if (url === "/api/speech") {
+          speechCallCount++;
+          if (speechCallCount === 1) {
+            return promiseA;
+          }
+          if (speechCallCount === 2) {
+            abortSignalB = init?.signal as AbortSignal;
+            return promiseB;
+          }
+        }
+        return new Response(null, { status: 404 });
+      });
+
+      render(<App />);
+      await screen.findByLabelText(/选择声音/i);
+      const textarea = screen.getByLabelText(/文本内容/i);
+      await user.type(textarea, "Initial prompt");
+
+      // 1. Start generation A
+      await user.click(screen.getByRole("button", { name: /合成语音/i }));
+
+      // 2. Cancel A
+      const cancelBtnA = await screen.findByRole("button", { name: /取消/i });
+      await user.click(cancelBtnA);
+
+      // 3. Immediately start generation B
+      const generateBtn = await screen.findByRole("button", { name: /合成语音/i });
+      await user.click(generateBtn);
+
+      // Verify B is active: cancel button is visible
+      const cancelBtnB = await screen.findByRole("button", { name: /取消/i });
+      expect(cancelBtnB).toBeDefined();
+
+      // 4. Stale request A rejects late with AbortError
+      const abortErr = new Error("The operation was aborted");
+      abortErr.name = "AbortError";
+      rejectA(abortErr);
+
+      await Promise.resolve();
+      await Promise.resolve();
+
+      // B must still be active and not cleared by A's finally!
+      expect(screen.getByRole("button", { name: /取消/i })).toBeDefined();
+      expect(screen.queryByRole("alert")).toBeNull();
+
+      // 5. Cancel B: B's abort signal must be aborted!
+      expect(abortSignalB?.aborted).toBe(false);
+      await user.click(screen.getByRole("button", { name: /取消/i }));
+      expect(abortSignalB?.aborted).toBe(true);
+
+      const alert = await screen.findByRole("alert");
+      expect(alert.textContent).toContain("已取消生成");
+    });
+
+    it("prevents stale success: late settling of cancelled request A does not overwrite B result", async () => {
+      const user = userEvent.setup();
+      let resolveA!: (res: Response) => void;
+      const promiseA = new Promise<Response>((resolve) => {
+        resolveA = resolve;
+      });
+
+      const audioBlobA = new Blob(["audio-A"], { type: "audio/mpeg" });
+      const audioBlobB = new Blob(["audio-B"], { type: "audio/mpeg" });
+
+      let speechCallCount = 0;
+      fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+        const url = typeof input === "string" ? input : input.toString();
+        if (url === "/api/health") return new Response(JSON.stringify({ status: "ok" }));
+        if (url === "/api/voices") return new Response(JSON.stringify({ voices: mockVoices }));
+        if (url === "/api/speech") {
+          speechCallCount++;
+          if (speechCallCount === 1) {
+            return promiseA;
+          }
+          if (speechCallCount === 2) {
+            return new Response(audioBlobB, {
+              status: 200,
+              headers: { "Content-Type": "audio/mpeg" },
+            });
+          }
+        }
+        return new Response(null, { status: 404 });
+      });
+
+      render(<App />);
+      await screen.findByLabelText(/选择声音/i);
+      const textarea = screen.getByLabelText(/文本内容/i);
+      await user.type(textarea, "Prompt text");
+
+      // 1. Start generation A
+      await user.click(screen.getByRole("button", { name: /合成语音/i }));
+
+      // 2. Cancel A
+      const cancelBtn = await screen.findByRole("button", { name: /取消/i });
+      await user.click(cancelBtn);
+
+      // 3. Start generation B and let B succeed
+      await user.click(screen.getByRole("button", { name: /合成语音/i }));
+
+      // B finishes and shows audio player
+      const player = await screen.findByLabelText(/语音合成播放器/i);
+      expect(player).toBeDefined();
+
+      const downloadLinkB = screen.getByRole("link", { name: /下载合成音频/i });
+      const hrefB = downloadLinkB.getAttribute("href");
+
+      // 4. Request A resolves late with its response
+      resolveA(
+        new Response(audioBlobA, {
+          status: 200,
+          headers: { "Content-Type": "audio/mpeg" },
+        }),
+      );
+
+      await Promise.resolve();
+      await Promise.resolve();
+
+      // Final UI must still show B's result, not overwritten by A
+      const downloadLinkAfter = screen.getByRole("link", { name: /下载合成音频/i });
+      expect(downloadLinkAfter.getAttribute("href")).toBe(hrefB);
+    });
   });
 
   describe("HTTP error handling", () => {

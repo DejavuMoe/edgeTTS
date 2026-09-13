@@ -6,6 +6,7 @@ import type { FastifyInstance } from "fastify";
 import type { SynthesisResult, TtsVoice } from "@edgetts/tts-core";
 import { createApp } from "../src/app.js";
 import type { TtsServicePort } from "../src/dependencies.js";
+import { shouldEnableStaticHosting } from "../src/static.js";
 
 class DummyTtsService implements TtsServicePort {
   async listVoices(): Promise<readonly TtsVoice[]> {
@@ -296,5 +297,115 @@ describe("Production Static Web Hosting & SPA Fallback", () => {
     });
 
     expect(response.statusCode).toBe(404);
+  });
+});
+
+describe("Deterministic static hosting enablement contract matrix", () => {
+  const originalEnv = { ...process.env };
+  const dummyService = new DummyTtsService();
+  let tempDir: string;
+  let app: FastifyInstance | undefined;
+
+  beforeEach(() => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "edgetts-matrix-test-"));
+    fs.writeFileSync(path.join(tempDir, "index.html"), "<html><body>Matrix Test</body></html>");
+  });
+
+  afterEach(async () => {
+    if (app) {
+      await app.close();
+      app = undefined;
+    }
+    if (fs.existsSync(tempDir)) {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+    // Restore environment exactly
+    for (const key of Object.keys(process.env)) {
+      if (!(key in originalEnv)) {
+        delete process.env[key];
+      }
+    }
+    for (const [key, value] of Object.entries(originalEnv)) {
+      process.env[key] = value;
+    }
+  });
+
+  it("serveStatic true enables static hosting", () => {
+    delete process.env["SERVE_STATIC"];
+    process.env["NODE_ENV"] = "development";
+    expect(shouldEnableStaticHosting({ serveStatic: true })).toBe(true);
+  });
+
+  it("serveStatic false disables static hosting even if SERVE_STATIC=true or NODE_ENV=production", () => {
+    process.env["SERVE_STATIC"] = "true";
+    process.env["NODE_ENV"] = "production";
+    expect(shouldEnableStaticHosting({ serveStatic: false })).toBe(false);
+  });
+
+  it("SERVE_STATIC true enables static hosting when option is omitted", () => {
+    process.env["SERVE_STATIC"] = "true";
+    process.env["NODE_ENV"] = "development";
+    expect(shouldEnableStaticHosting()).toBe(true);
+  });
+
+  it("SERVE_STATIC false disables static hosting even if NODE_ENV=production", () => {
+    process.env["SERVE_STATIC"] = "false";
+    process.env["NODE_ENV"] = "production";
+    expect(shouldEnableStaticHosting()).toBe(false);
+  });
+
+  it("NODE_ENV production enables static hosting when SERVE_STATIC is unset", () => {
+    delete process.env["SERVE_STATIC"];
+    process.env["NODE_ENV"] = "production";
+    expect(shouldEnableStaticHosting()).toBe(true);
+  });
+
+  it("NODE_ENV development disables static hosting when SERVE_STATIC is unset", () => {
+    delete process.env["SERVE_STATIC"];
+    process.env["NODE_ENV"] = "development";
+    expect(shouldEnableStaticHosting()).toBe(false);
+  });
+
+  it("NODE_ENV test disables static hosting when SERVE_STATIC is unset", () => {
+    delete process.env["SERVE_STATIC"];
+    process.env["NODE_ENV"] = "test";
+    expect(shouldEnableStaticHosting()).toBe(false);
+  });
+
+  it("NODE_ENV undefined disables static hosting even when dist directory exists", () => {
+    delete process.env["SERVE_STATIC"];
+    delete process.env["NODE_ENV"];
+    expect(shouldEnableStaticHosting({ webDistDir: tempDir })).toBe(false);
+  });
+
+  it("NODE_ENV empty string disables static hosting even when dist directory exists", () => {
+    delete process.env["SERVE_STATIC"];
+    process.env["NODE_ENV"] = "";
+    expect(shouldEnableStaticHosting({ webDistDir: tempDir })).toBe(false);
+  });
+
+  it("integration: unset NODE_ENV keeps static hosting disabled by default and returns 404 at root", async () => {
+    delete process.env["SERVE_STATIC"];
+    delete process.env["NODE_ENV"];
+
+    app = createApp(
+      { ttsService: dummyService },
+      { webDistDir: tempDir }, // directory exists, but serveStatic not explicitly specified
+    );
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/",
+    });
+
+    expect(response.statusCode).toBe(404);
+
+    // API remains fully operational
+    const healthRes = await app.inject({
+      method: "GET",
+      url: "/api/health",
+    });
+    expect(healthRes.statusCode).toBe(200);
+    expect(healthRes.json()).toEqual({ status: "ok" });
   });
 });

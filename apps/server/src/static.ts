@@ -35,11 +35,7 @@ export function shouldEnableStaticHosting(options?: StaticHostingOptions): boole
   if (process.env["NODE_ENV"] === "production") {
     return true;
   }
-  if (process.env["NODE_ENV"] === "development" || process.env["NODE_ENV"] === "test") {
-    return false;
-  }
-  const defaultDir = resolveWebDistDir(options?.webDistDir);
-  return fs.existsSync(defaultDir) && fs.statSync(defaultDir).isDirectory();
+  return false;
 }
 
 export function registerStaticHosting(

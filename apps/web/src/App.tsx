@@ -31,6 +31,7 @@ export function App() {
   const [audioSrc, setAudioSrc] = useState<string | null>(null);
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
 
+  const generationIdRef = useRef<number>(0);
   const abortControllerRef = useRef<AbortController | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const streamControllerRef = useRef<StreamPlaybackController | null>(null);
@@ -118,9 +119,11 @@ export function App() {
   // Cleanup stream controller and abort controller on unmount
   useEffect(() => {
     return () => {
+      ++generationIdRef.current;
       streamControllerRef.current?.cleanup();
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
+        abortControllerRef.current = null;
       }
     };
   }, []);
@@ -133,7 +136,11 @@ export function App() {
     // Cancel prior request if any
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
+      abortControllerRef.current = null;
     }
+
+    const currentGen = ++generationIdRef.current;
+    const isCurrent = () => generationIdRef.current === currentGen;
 
     // Clean up previous playback stream and download URL
     streamControllerRef.current?.cleanup();
@@ -157,6 +164,10 @@ export function App() {
     try {
       const response = await synthesizeSpeech(requestPayload, controller.signal);
 
+      if (!isCurrent()) {
+        return;
+      }
+
       if (!response.ok) {
         if (response.status === 400) {
           setGenerationError("输入参数有误");
@@ -174,6 +185,7 @@ export function App() {
       // Stream playback via MediaSource or Blob fallback
       await streamControllerRef.current?.startStream(response, controller.signal, {
         onStreamReady: (mediaUrl: string) => {
+          if (!isCurrent()) return;
           setAudioSrc(mediaUrl);
           // Try playing; safely catch autoplay restrictions
           if (audioRef.current) {
@@ -183,19 +195,25 @@ export function App() {
           }
         },
         onDownloadReady: (url: string) => {
+          if (!isCurrent()) return;
           setDownloadUrl(url);
         },
         onError: () => {
+          if (!isCurrent()) return;
           setAudioSrc(null);
           setDownloadUrl(null);
           setGenerationError("语音服务暂时不可用");
           setIsGenerating(false);
         },
         onFinish: () => {
+          if (!isCurrent()) return;
           setIsGenerating(false);
         },
       });
     } catch (err: unknown) {
+      if (!isCurrent()) {
+        return;
+      }
       if (err instanceof Error && err.name === "AbortError") {
         setGenerationError("已取消生成");
       } else {
@@ -203,11 +221,14 @@ export function App() {
       }
       setIsGenerating(false);
     } finally {
-      abortControllerRef.current = null;
+      if (abortControllerRef.current === controller) {
+        abortControllerRef.current = null;
+      }
     }
   };
 
   const handleCancel = (): void => {
+    ++generationIdRef.current;
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
       abortControllerRef.current = null;

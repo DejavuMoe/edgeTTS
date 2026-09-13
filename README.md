@@ -151,13 +151,13 @@ NODE_ENV=production pnpm --filter @edgetts/server start
 
 ### Environment Configuration
 
-| Variable       | Description                                               | Default                             |
-| -------------- | --------------------------------------------------------- | ----------------------------------- |
-| `HOST`         | Bind address for Fastify server                           | `127.0.0.1`                         |
-| `PORT`         | Listening port for Fastify server                         | `8080`                              |
-| `NODE_ENV`     | Environment mode (`production`, `development`, `test`)    | `development`                       |
-| `SERVE_STATIC` | Explicit toggle for static web hosting (`true` / `false`) | Auto (`true` in `production`)       |
-| `WEB_DIST_DIR` | Absolute or relative path to web static assets directory  | `../../web/dist` relative to server |
+| Variable       | Description                                               | Default                                                       |
+| -------------- | --------------------------------------------------------- | ------------------------------------------------------------- |
+| `HOST`         | Bind address for Fastify server                           | `127.0.0.1`                                                   |
+| `PORT`         | Listening port for Fastify server                         | `8080`                                                        |
+| `NODE_ENV`     | Environment mode (`production`, `development`, `test`)    | Unset by default; static hosting auto-enabled in `production` |
+| `SERVE_STATIC` | Explicit toggle for static web hosting (`true` / `false`) | Unset (explicit override; auto-enabled in `production`)       |
+| `WEB_DIST_DIR` | Absolute or relative path to web static assets directory  | `../../web/dist` relative to server                           |
 
 ## Validation
 

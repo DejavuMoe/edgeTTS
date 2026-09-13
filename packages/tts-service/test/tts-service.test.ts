@@ -1692,4 +1692,194 @@ describe("TtsService", () => {
       expect(provider.synthesizeCallCount).toBe(0);
     });
   });
+
+  describe("Phase 13.1 Streaming Lifecycle Hardening", () => {
+    it("releases permit when iterator.return() is called before first next()", async () => {
+      const provider = new FakeTtsProvider();
+      const service = new TtsService(provider, {
+        maxConcurrentSyntheses: 1,
+        maxQueuedSyntheses: 1,
+      });
+
+      const acA = new AbortController();
+      const resA = await service.synthesize({ text: "A", voice: "v" }, acA.signal);
+      const iterA = resA.audio[Symbol.asyncIterator]();
+      await iterA.return?.();
+
+      // Request B must be able to acquire permit and complete immediately
+      const acB = new AbortController();
+      const resB = await service.synthesize({ text: "B", voice: "v" }, acB.signal);
+      expect(resB).toBeDefined();
+      await consumeStream(resB.audio);
+    });
+
+    it("releases permit when iterator.throw() is called", async () => {
+      const provider = new FakeTtsProvider();
+      const service = new TtsService(provider, {
+        maxConcurrentSyntheses: 1,
+        maxQueuedSyntheses: 1,
+      });
+
+      const acA = new AbortController();
+      const resA = await service.synthesize({ text: "A", voice: "v" }, acA.signal);
+      const iterA = resA.audio[Symbol.asyncIterator]();
+      await expect(iterA.throw?.(new Error("custom stream failure"))).rejects.toThrow(
+        "custom stream failure",
+      );
+
+      // Request B must acquire permit and complete immediately
+      const acB = new AbortController();
+      const resB = await service.synthesize({ text: "B", voice: "v" }, acB.signal);
+      expect(resB).toBeDefined();
+      await consumeStream(resB.audio);
+    });
+
+    it("enforces single-consumer stream contract (audio[Symbol.asyncIterator]() === audio)", async () => {
+      const provider = new FakeTtsProvider();
+      const service = new TtsService(provider);
+      const res = await service.synthesize(
+        { text: "test", voice: "v" },
+        new AbortController().signal,
+      );
+      expect(res.audio[Symbol.asyncIterator]()).toBe(res.audio);
+    });
+
+    it("releases permit exactly once and does not over-allocate when return and abort coincide", async () => {
+      const provider = new FakeTtsProvider();
+      const service = new TtsService(provider, {
+        maxConcurrentSyntheses: 1,
+        maxQueuedSyntheses: 5,
+      });
+
+      const acA = new AbortController();
+      const resA = await service.synthesize({ text: "A", voice: "v" }, acA.signal);
+      const iterA = resA.audio[Symbol.asyncIterator]();
+
+      // Trigger both return and abort
+      await iterA.return?.();
+      acA.abort();
+
+      let bStarted = false;
+      let cStarted = false;
+      const pB = service
+        .synthesize({ text: "B", voice: "v" }, new AbortController().signal)
+        .then(() => {
+          bStarted = true;
+        });
+      void service.synthesize({ text: "C", voice: "v" }, new AbortController().signal).then(() => {
+        cStarted = true;
+      });
+
+      await pB;
+      expect(bStarted).toBe(true);
+      // C must NOT have started because capacity is 1 and B holds the active slot
+      expect(cStarted).toBe(false);
+    });
+
+    it("segmented metadata mismatch releases segment permit and allows subsequent requests", async () => {
+      let callCount = 0;
+      const provider = new FakeTtsProvider();
+      provider.customSynthesize = async () => {
+        callCount++;
+        return {
+          format: callCount === 1 ? "mp3-48k" : "mp3-96k",
+          contentType: "audio/mpeg",
+          audio: (async function* () {
+            yield new Uint8Array([1, 2]);
+          })(),
+        };
+      };
+
+      const service = new TtsService(provider, {
+        maxConcurrentSyntheses: 1,
+        maxQueuedSyntheses: 2,
+      });
+
+      const acSeg = new AbortController();
+      const resSeg = await service.synthesizeSegmented(
+        { text: "P1\n\nP2", voice: "v" },
+        acSeg.signal,
+        { maxSegmentCodePoints: 4 },
+      );
+
+      const iterSeg = resSeg.audio[Symbol.asyncIterator]();
+      await iterSeg.next(); // segment 1 succeeds
+      await expect(iterSeg.next()).rejects.toThrowError(/inconsistent audio metadata/);
+
+      // Request C must immediately obtain the released permit!
+      const acC = new AbortController();
+      const resC = await service.synthesize({ text: "C", voice: "v" }, acC.signal);
+      expect(resC).toBeDefined();
+      await consumeStream(resC.audio);
+    });
+
+    it("segmented outer return-before-first-next releases first segment permit and allows subsequent requests", async () => {
+      const provider = new FakeTtsProvider();
+      const service = new TtsService(provider, {
+        maxConcurrentSyntheses: 1,
+        maxQueuedSyntheses: 2,
+      });
+
+      const acSeg = new AbortController();
+      const resSeg = await service.synthesizeSegmented(
+        { text: "P1\n\nP2", voice: "v" },
+        acSeg.signal,
+        { maxSegmentCodePoints: 4 },
+      );
+
+      const iterSeg = resSeg.audio[Symbol.asyncIterator]();
+      // Return outer iterator BEFORE calling next()
+      await iterSeg.return?.();
+
+      // Subsequent request B must obtain permit and succeed!
+      const acB = new AbortController();
+      const resB = await service.synthesize({ text: "B", voice: "v" }, acB.signal);
+      expect(resB).toBeDefined();
+      await consumeStream(resB.audio);
+    });
+
+    it("segmented consumer early break releases permit and prevents further segment synthesis", async () => {
+      const synthesizedSegments: string[] = [];
+      const provider = new FakeTtsProvider();
+      provider.customSynthesize = async (req) => {
+        synthesizedSegments.push(req.text);
+        return {
+          format: "mp3-48k",
+          contentType: "audio/mpeg",
+          audio: (async function* () {
+            yield new Uint8Array([1, 2]);
+            yield new Uint8Array([3, 4]);
+          })(),
+        };
+      };
+
+      const service = new TtsService(provider, {
+        maxConcurrentSyntheses: 1,
+        maxQueuedSyntheses: 2,
+      });
+
+      const acSeg = new AbortController();
+      const resSeg = await service.synthesizeSegmented(
+        { text: "Part 1\n\nPart 2\n\nPart 3", voice: "v" },
+        acSeg.signal,
+        { maxSegmentCodePoints: 8 },
+      );
+
+      for await (const chunk of resSeg.audio) {
+        expect(chunk).toBeDefined();
+        break; // break on first chunk
+      }
+
+      // Subsequent segments must NOT have been synthesized
+      expect(synthesizedSegments).toHaveLength(1);
+
+      // Subsequent request B must succeed immediately
+      const resB = await service.synthesize(
+        { text: "B", voice: "v" },
+        new AbortController().signal,
+      );
+      expect(resB).toBeDefined();
+      await consumeStream(resB.audio);
+    });
+  });
 });
