@@ -1,0 +1,23 @@
+{
+  "name": "edgetts-monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently --kill-others-on-fail -n \"server,web\" \"pnpm --filter @edgetts/server dev\" \"pnpm --filter @edgetts/web dev\"",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "eslint .",
+    "test": "pnpm -r test",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.21.0",
+    "concurrently": "^9.1.2",
+    "eslint": "^9.21.0",
+    "prettier": "^3.5.3",
+    "typescript": "^5.8.2",
+    "typescript-eslint": "^8.26.0"
+  }
+}
