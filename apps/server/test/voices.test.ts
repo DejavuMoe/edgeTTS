@@ -40,6 +40,14 @@ class FakeTtsService implements TtsServicePort {
       audio: (async function* () {})(),
     };
   }
+
+  async synthesizeSegmented(): Promise<SynthesisResult> {
+    return {
+      format: "mp3-48k",
+      contentType: "audio/mpeg",
+      audio: (async function* () {})(),
+    };
+  }
 }
 
 describe("GET /api/voices", () => {

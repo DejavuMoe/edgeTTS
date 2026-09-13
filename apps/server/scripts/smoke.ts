@@ -126,6 +126,41 @@ async function runSmoke(): Promise<void> {
       );
     }
 
+    // 5. Check POST /api/speech (segmented native endpoint)
+    // Uses >300 code points but noticeably < 4096 to force at least 2 segments
+    const sentence = "这是一段用于测试原生分段语音合成接口的句子。";
+    const longInput = sentence.repeat(16);
+    const nativeRes = await fetch(`${baseUrl}/api/speech`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        input: longInput,
+        voice: selected.id,
+        quality: "standard",
+        speed: 1,
+        pitchSemitones: 0,
+        volume: 1,
+      }),
+    });
+
+    if (nativeRes.status !== 200) {
+      throw new Error(`Native speech request returned status ${nativeRes.status}`);
+    }
+    const nativeContentType = nativeRes.headers.get("content-type") ?? "";
+    if (!nativeContentType.startsWith("audio/mpeg")) {
+      throw new Error(`Native speech unexpected content-type: ${nativeContentType}`);
+    }
+    if (nativeRes.headers.get("content-length") !== null) {
+      throw new Error("Native speech response unexpectedly had content-length header");
+    }
+
+    const nativeResult = await consumeAudioStream(nativeRes);
+    if (nativeResult.chunks <= 0 || nativeResult.bytes <= 1000) {
+      throw new Error(
+        `Native speech audio stream insufficient: ${nativeResult.chunks} chunks, ${nativeResult.bytes} bytes`,
+      );
+    }
+
     console.log("Server HTTP smoke test\n");
     console.log("Health:");
     console.log("200 PASS\n");
@@ -144,6 +179,12 @@ async function runSmoke(): Promise<void> {
     console.log(`Content-Type: audio/mpeg`);
     console.log(`HTTP chunks: ${tts1HdResult.chunks}`);
     console.log(`Bytes: ${tts1HdResult.bytes}`);
+    console.log("PASS\n");
+    console.log("Speech /api/speech (native segmented):");
+    console.log(`Status: ${nativeRes.status}`);
+    console.log(`Content-Type: audio/mpeg`);
+    console.log(`HTTP chunks: ${nativeResult.chunks}`);
+    console.log(`Bytes: ${nativeResult.bytes}`);
     console.log("PASS\n");
     console.log("PASS");
   } finally {
