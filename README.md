@@ -18,6 +18,8 @@ Self-hosted Edge TTS Web application and API skeleton.
 - Provider-independent lossless text segmentation primitive (`segmentText`) measuring limits in Unicode code points.
 - Natural boundary hierarchy: paragraph (`\n\n`, `\r\n\r\n`) > line (`\n`, `\r\n`) > sentence (`.!?。！？;；` with closing quotes) > whitespace > hard split.
 - Strictly lossless: rejoining chunks (`chunks.join("")`) reproduces the exact original text without mutation or trimming.
+- CRLF atomicity: CRLF pairs are preserved atomically whenever `maxCodePoints >= 2`; with `maxCodePoints = 1`, preserving the hard chunk size limit takes precedence.
+- Algorithm & complexity: linear $O(N)$ code-point indexing and boundary pre-scanning followed by monotonic binary-search cursor segmentation ($O(N \log N)$ worst-case, $O(N)$ for non-trivial chunk sizes).
 - Note: The segmenter is not yet wired into speech synthesis. `POST /v1/audio/speech` remains limited to 4096 characters.
 
 ## Synthesis Concurrency

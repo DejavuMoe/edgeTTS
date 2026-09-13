@@ -1,6 +1,14 @@
 import { describe, it, expect } from "vitest";
 import { countCodePoints, segmentText } from "../src/index.js";
 
+function expectNoSplitCrlf(chunks: readonly string[]): void {
+  for (let i = 0; i < chunks.length - 1; i++) {
+    const endsWithCr = chunks[i]?.endsWith("\r") ?? false;
+    const nextStartsWithLf = chunks[i + 1]?.startsWith("\n") ?? false;
+    expect(endsWithCr && nextStartsWithLf).toBe(false);
+  }
+}
+
 function expectLosslessSegmentation(text: string, maxCodePoints: number): readonly string[] {
   const chunks = segmentText(text, { maxCodePoints });
   expect(chunks.join("")).toBe(text);
@@ -12,6 +20,9 @@ function expectLosslessSegmentation(text: string, maxCodePoints: number): readon
     for (const chunk of chunks) {
       expect(chunk.length).toBeGreaterThan(0);
       expect(countCodePoints(chunk)).toBeLessThanOrEqual(maxCodePoints);
+    }
+    if (maxCodePoints >= 2) {
+      expectNoSplitCrlf(chunks);
     }
   }
 
@@ -138,40 +149,59 @@ describe("TextSegmenter", () => {
     });
   });
 
-  describe("CRLF and whitespace preservation", () => {
-    it("never splits a CRLF pair across chunk boundaries in line breaks", () => {
+  describe("CRLF contract and atomicity", () => {
+    it("splits CRLF when maxCodePoints is 1 because the hard bound takes precedence", () => {
+      const text = "\r\n";
+      const chunks = segmentText(text, { maxCodePoints: 1 });
+      expect(chunks).toEqual(["\r", "\n"]);
+      expect(chunks.join("")).toBe(text);
+      expect(chunks.every((c) => countCodePoints(c) <= 1)).toBe(true);
+    });
+
+    it("splits embedded CRLF into single code points when maxCodePoints is 1", () => {
+      const text = "A\r\nB";
+      const chunks = segmentText(text, { maxCodePoints: 1 });
+      expect(chunks).toEqual(["A", "\r", "\n", "B"]);
+      expect(chunks.join("")).toBe(text);
+      expect(chunks.every((c) => countCodePoints(c) <= 1)).toBe(true);
+    });
+
+    it("preserves CRLF atomically when maxCodePoints >= 2", () => {
+      const text = "A\r\nB";
+      const chunks = expectLosslessSegmentation(text, 2);
+      expect(chunks).toEqual(["A", "\r\n", "B"]);
+      expectNoSplitCrlf(chunks);
+    });
+
+    it("never splits a CRLF pair across chunk boundaries in line breaks for limit >= 2", () => {
       const text = "line1\r\nline2\r\nline3";
       const chunks = expectLosslessSegmentation(text, 10);
-      for (let i = 0; i < chunks.length - 1; i++) {
-        expect(chunks[i]?.endsWith("\r")).toBe(false);
-      }
       expect(chunks[0]).toBe("line1\r\n");
       expect(chunks[1]).toBe("line2\r\n");
       expect(chunks[2]).toBe("line3");
+      expectNoSplitCrlf(chunks);
     });
 
-    it("never splits a CRLF pair in paragraph breaks", () => {
+    it("never splits a CRLF pair in paragraph breaks for limit >= 2", () => {
       const text = "paragraph1\r\n\r\nparagraph2";
       const chunks = expectLosslessSegmentation(text, 16);
       expect(chunks[0]).toBe("paragraph1\r\n\r\n");
       expect(chunks[1]).toBe("paragraph2");
-      for (let i = 0; i < chunks.length - 1; i++) {
-        expect(chunks[i]?.endsWith("\r")).toBe(false);
-      }
+      expectNoSplitCrlf(chunks);
     });
 
-    it("never splits CRLF in hard split when window ends on \\r", () => {
+    it("never splits CRLF in hard split when window ends on \\r for limit >= 2", () => {
       const text = "abcdefg\r\nhijklmn";
       const chunks = expectLosslessSegmentation(text, 8);
       // Window of 8 is "abcdefg\r" followed by \n in text. Must not split \r\n!
       expect(chunks[0]).toBe("abcdefg");
       expect(chunks[1]).toBe("\r\n");
       expect(chunks[2]).toBe("hijklmn");
-      for (let i = 0; i < chunks.length - 1; i++) {
-        expect(chunks[i]?.endsWith("\r")).toBe(false);
-      }
+      expectNoSplitCrlf(chunks);
     });
+  });
 
+  describe("whitespace preservation", () => {
     it("preserves whitespace-only input losslessly", () => {
       const spaces = "     ";
       const shortChunks = expectLosslessSegmentation(spaces, 10);
@@ -213,7 +243,7 @@ describe("TextSegmenter", () => {
     });
   });
 
-  describe("scale and determinism", () => {
+  describe("scale, adversarial patterns, and determinism", () => {
     it("efficiently segments 100k unbroken text", () => {
       const text = "A".repeat(100_000);
       const chunks = expectLosslessSegmentation(text, 1000);
@@ -224,11 +254,54 @@ describe("TextSegmenter", () => {
       expect(chunks.join("")).toBe(text);
     });
 
+    it("handles 100k adversarial frequent early high-priority boundaries without performance degradation", () => {
+      // Pattern: "P\n\n" followed by long tail to test early boundary selection under large scale
+      const unit = "P\n\n" + "x".repeat(97); // 100 code points per unit
+      const text = unit.repeat(1000); // 100,000 code points
+      const chunks = expectLosslessSegmentation(text, 80);
+      // Each chunk should cleanly cut after the paragraph break
+      expect(chunks[0]).toBe("P\n\n");
+      expect(chunks.join("")).toBe(text);
+    });
+
+    it("handles 100k text with mixed paragraphs, sentences, and whitespaces", () => {
+      const paragraph =
+        "Paragraph sentence one. Sentence two! Sentence three?\nLine two with words.\n\n";
+      const text = paragraph.repeat(1250); // ~100k characters
+      const chunks = expectLosslessSegmentation(text, 500);
+      expect(chunks.join("")).toBe(text);
+    });
+
     it("produces strictly deterministic output across repeated runs", () => {
       const text = "Stable text. With multiple lines\nand sentences! For verification.";
       const run1 = segmentText(text, { maxCodePoints: 20 });
       const run2 = segmentText(text, { maxCodePoints: 20 });
       expect(run1).toEqual(run2);
     });
+  });
+
+  describe("property-style invariant matrix", () => {
+    const testCases = [
+      { name: "empty", text: "" },
+      { name: "ASCII", text: "The quick brown fox jumps over the lazy dog." },
+      { name: "Chinese", text: "天地玄黄，宇宙洪荒。日月盈昃，辰宿列张。" },
+      { name: "emoji", text: "😀🚀🎉🌟🔥🐱🐶🍕☕💻" },
+      { name: "CRLF", text: "line1\r\nline2\r\n\r\nparagraph\r\nline3" },
+      { name: "whitespace", text: "   \t\t   spaces  and   tabs   \t" },
+      { name: "mixed punctuation", text: 'He said: "Yes!" She replied: "No?" Then... Nothing.' },
+      { name: "frequent boundaries", text: "a.\n\nb.\n\nc.\n\nd.\n\ne.\n\n" },
+    ];
+
+    const limits = [1, 2, 3, 5, 10, 31, 100];
+
+    for (const tc of testCases) {
+      for (const limit of limits) {
+        it(`satisfies invariants for [${tc.name}] with limit ${limit}`, () => {
+          const run1 = expectLosslessSegmentation(tc.text, limit);
+          const run2 = segmentText(tc.text, { maxCodePoints: limit });
+          expect(run1).toEqual(run2);
+        });
+      }
+    }
   });
 });
