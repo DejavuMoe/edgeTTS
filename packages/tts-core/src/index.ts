@@ -1,1 +1,7 @@
-export type { TtsVoice, SynthesisRequest, AudioChunk, TtsProvider } from "./provider.js";
+export type {
+  TtsAudioFormat,
+  TtsVoice,
+  SynthesisRequest,
+  SynthesisResult,
+  TtsProvider,
+} from "./provider.js";

@@ -1,0 +1,377 @@
+import { Readable } from "node:stream";
+import { describe, it, expect } from "vitest";
+import { OUTPUT_FORMAT, type Voice } from "msedge-tts";
+import type { TtsAudioFormat } from "@edgetts/tts-core";
+import { EdgeTtsProvider } from "../src/edge-provider.js";
+import type { EdgeClient } from "../src/client.js";
+
+class FakeEdgeClient implements EdgeClient {
+  public closeCallCount = 0;
+  public setMetadataCalls: Array<{ voiceName: string; outputFormat: OUTPUT_FORMAT }> = [];
+  public toStreamCalls: string[] = [];
+  public streamToReturn: Readable;
+
+  constructor(streamToReturn?: Readable) {
+    this.streamToReturn = streamToReturn ?? Readable.from([]);
+  }
+
+  async getVoices(): Promise<readonly Voice[]> {
+    return [
+      {
+        ShortName: "zh-CN-XiaoxiaoNeural",
+        FriendlyName: "Microsoft Xiaoxiao Online (Natural) - Chinese (Mainland)",
+        Locale: "zh-CN",
+        Gender: "Female",
+        Status: "GA",
+        SuggestedCodec: "audio-24khz-48kbitrate-mono-mp3",
+        Name: "Microsoft Server Speech Text to Speech Voice (zh-CN, XiaoxiaoNeural)",
+      },
+    ];
+  }
+
+  async setMetadata(voiceName: string, outputFormat: OUTPUT_FORMAT): Promise<void> {
+    this.setMetadataCalls.push({ voiceName, outputFormat });
+  }
+
+  toStream(input: string): { audioStream: Readable } {
+    this.toStreamCalls.push(input);
+    return { audioStream: this.streamToReturn };
+  }
+
+  close(): void {
+    this.closeCallCount++;
+  }
+}
+
+describe("EdgeTtsProvider", () => {
+  describe("listVoices", () => {
+    it("maps upstream voices to domain TtsVoice correctly and closes client", async () => {
+      let createdClient: FakeEdgeClient | undefined;
+      const provider = new EdgeTtsProvider(() => {
+        createdClient = new FakeEdgeClient();
+        return createdClient;
+      });
+
+      const voices = await provider.listVoices();
+
+      expect(voices).toEqual([
+        {
+          id: "zh-CN-XiaoxiaoNeural",
+          displayName: "Microsoft Xiaoxiao Online (Natural) - Chinese (Mainland)",
+          locale: "zh-CN",
+          gender: "Female",
+          status: "GA",
+          suggestedCodec: "audio-24khz-48kbitrate-mono-mp3",
+        },
+      ]);
+      expect(createdClient?.closeCallCount).toBe(1);
+    });
+  });
+
+  describe("format handling", () => {
+    it("defaults to mp3-48k with correct OUTPUT_FORMAT and contentType", async () => {
+      let createdClient: FakeEdgeClient | undefined;
+      const provider = new EdgeTtsProvider(() => {
+        createdClient = new FakeEdgeClient();
+        return createdClient;
+      });
+
+      const ac = new AbortController();
+      const result = await provider.synthesize(
+        { text: "Hello", voice: "zh-CN-XiaoxiaoNeural" },
+        ac.signal,
+      );
+
+      expect(result.format).toBe("mp3-48k");
+      expect(result.contentType).toBe("audio/mpeg");
+      expect(createdClient?.setMetadataCalls[0]).toEqual({
+        voiceName: "zh-CN-XiaoxiaoNeural",
+        outputFormat: OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3,
+      });
+    });
+
+    const formatCases: Array<{
+      format: TtsAudioFormat;
+      expectedOutputFormat: OUTPUT_FORMAT;
+      expectedContentType: "audio/mpeg" | "audio/webm";
+    }> = [
+      {
+        format: "mp3-48k",
+        expectedOutputFormat: OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3,
+        expectedContentType: "audio/mpeg",
+      },
+      {
+        format: "mp3-96k",
+        expectedOutputFormat: OUTPUT_FORMAT.AUDIO_24KHZ_96KBITRATE_MONO_MP3,
+        expectedContentType: "audio/mpeg",
+      },
+      {
+        format: "webm-opus",
+        expectedOutputFormat: OUTPUT_FORMAT.WEBM_24KHZ_16BIT_MONO_OPUS,
+        expectedContentType: "audio/webm",
+      },
+    ];
+
+    for (const testCase of formatCases) {
+      it(`correctly maps format ${testCase.format}`, async () => {
+        let createdClient: FakeEdgeClient | undefined;
+        const provider = new EdgeTtsProvider(() => {
+          createdClient = new FakeEdgeClient();
+          return createdClient;
+        });
+
+        const ac = new AbortController();
+        const result = await provider.synthesize(
+          { text: "test", voice: "zh-CN-XiaoxiaoNeural", format: testCase.format },
+          ac.signal,
+        );
+
+        expect(result.format).toBe(testCase.format);
+        expect(result.contentType).toBe(testCase.expectedContentType);
+        expect(createdClient?.setMetadataCalls[0]?.outputFormat).toBe(
+          testCase.expectedOutputFormat,
+        );
+      });
+    }
+
+    it("rejects unsupported format", async () => {
+      const provider = new EdgeTtsProvider(() => new FakeEdgeClient());
+      const ac = new AbortController();
+      await expect(
+        provider.synthesize(
+          {
+            text: "test",
+            voice: "zh-CN-XiaoxiaoNeural",
+            format: "wav" as unknown as TtsAudioFormat,
+          },
+          ac.signal,
+        ),
+      ).rejects.toThrow("Unsupported audio format");
+    });
+  });
+
+  describe("XML escaping in synthesis", () => {
+    it("escapes plain text before passing to client.toStream", async () => {
+      let createdClient: FakeEdgeClient | undefined;
+      const provider = new EdgeTtsProvider(() => {
+        createdClient = new FakeEdgeClient();
+        return createdClient;
+      });
+
+      const ac = new AbortController();
+      await provider.synthesize(
+        {
+          text: `Tom & Jerry <test> "hello" 'world' <break time="10s"/>`,
+          voice: "zh-CN-XiaoxiaoNeural",
+        },
+        ac.signal,
+      );
+
+      expect(createdClient?.toStreamCalls[0]).toBe(
+        `Tom &amp; Jerry &lt;test&gt; &quot;hello&quot; &apos;world&apos; &lt;break time=&quot;10s&quot;/&gt;`,
+      );
+    });
+  });
+
+  describe("streaming and chunking", () => {
+    it("yields chunks incrementally without whole-buffering", async () => {
+      const chunkA = Buffer.from("chunk-A");
+      const chunkB = Buffer.from("chunk-B");
+      const chunkC = Buffer.from("chunk-C");
+      const stream = Readable.from([chunkA, chunkB, chunkC]);
+
+      const provider = new EdgeTtsProvider(() => new FakeEdgeClient(stream));
+      const ac = new AbortController();
+      const result = await provider.synthesize(
+        { text: "Hello stream", voice: "zh-CN-XiaoxiaoNeural" },
+        ac.signal,
+      );
+
+      const received: string[] = [];
+      for await (const chunk of result.audio) {
+        expect(chunk).toBeInstanceOf(Uint8Array);
+        received.push(Buffer.from(chunk).toString());
+      }
+
+      expect(received).toEqual(["chunk-A", "chunk-B", "chunk-C"]);
+    });
+  });
+
+  describe("cleanup guarantees", () => {
+    it("closes client exactly once on normal stream completion", async () => {
+      const stream = Readable.from([Buffer.from("data")]);
+      let createdClient: FakeEdgeClient | undefined;
+      const provider = new EdgeTtsProvider(() => {
+        createdClient = new FakeEdgeClient(stream);
+        return createdClient;
+      });
+
+      const ac = new AbortController();
+      const result = await provider.synthesize(
+        { text: "test", voice: "zh-CN-XiaoxiaoNeural" },
+        ac.signal,
+      );
+
+      for await (const chunk of result.audio) {
+        void chunk;
+      }
+
+      expect(createdClient?.closeCallCount).toBe(1);
+    });
+
+    it("closes client exactly once on consumer early break", async () => {
+      const stream = Readable.from([Buffer.from("1"), Buffer.from("2"), Buffer.from("3")]);
+      let createdClient: FakeEdgeClient | undefined;
+      const provider = new EdgeTtsProvider(() => {
+        createdClient = new FakeEdgeClient(stream);
+        return createdClient;
+      });
+
+      const ac = new AbortController();
+      const result = await provider.synthesize(
+        { text: "test", voice: "zh-CN-XiaoxiaoNeural" },
+        ac.signal,
+      );
+
+      for await (const chunk of result.audio) {
+        void chunk;
+        break;
+      }
+
+      expect(createdClient?.closeCallCount).toBe(1);
+    });
+
+    it("closes client exactly once on upstream stream error", async () => {
+      const stream = new Readable({
+        read() {
+          this.destroy(new Error("Upstream network failure"));
+        },
+      });
+      let createdClient: FakeEdgeClient | undefined;
+      const provider = new EdgeTtsProvider(() => {
+        createdClient = new FakeEdgeClient(stream);
+        return createdClient;
+      });
+
+      const ac = new AbortController();
+      const result = await provider.synthesize(
+        { text: "test", voice: "zh-CN-XiaoxiaoNeural" },
+        ac.signal,
+      );
+
+      await expect(async () => {
+        for await (const chunk of result.audio) {
+          void chunk;
+        }
+      }).rejects.toThrow("Upstream network failure");
+
+      expect(createdClient?.closeCallCount).toBe(1);
+    });
+  });
+
+  describe("cancellation", () => {
+    it("rejects immediately with AbortError before starting without creating client", async () => {
+      let clientCreated = false;
+      const provider = new EdgeTtsProvider(() => {
+        clientCreated = true;
+        return new FakeEdgeClient();
+      });
+
+      const ac = new AbortController();
+      ac.abort();
+
+      await expect(
+        provider.synthesize({ text: "Hello", voice: "zh-CN-XiaoxiaoNeural" }, ac.signal),
+      ).rejects.toSatisfy((err: unknown) => {
+        return err instanceof Error && err.name === "AbortError";
+      });
+
+      expect(clientCreated).toBe(false);
+    });
+
+    it("destroys stream, closes client, and throws AbortError when aborted during streaming", async () => {
+      let streamDestroyed = false;
+      const stream = new Readable({
+        read() {},
+        destroy(err, callback) {
+          streamDestroyed = true;
+          callback(err);
+        },
+      });
+
+      let createdClient: FakeEdgeClient | undefined;
+      const provider = new EdgeTtsProvider(() => {
+        createdClient = new FakeEdgeClient(stream);
+        return createdClient;
+      });
+
+      const ac = new AbortController();
+      const result = await provider.synthesize(
+        { text: "Hello", voice: "zh-CN-XiaoxiaoNeural" },
+        ac.signal,
+      );
+
+      const consumerPromise = (async () => {
+        for await (const chunk of result.audio) {
+          void chunk;
+        }
+      })();
+
+      // Abort while waiting for stream data
+      ac.abort();
+
+      await expect(consumerPromise).rejects.toSatisfy((err: unknown) => {
+        return err instanceof Error && err.name === "AbortError";
+      });
+
+      expect(streamDestroyed).toBe(true);
+      expect(createdClient?.closeCallCount).toBe(1);
+    });
+  });
+
+  describe("independent clients", () => {
+    it("creates a new client instance for each synthesis call", async () => {
+      const clientsCreated: FakeEdgeClient[] = [];
+      const provider = new EdgeTtsProvider(() => {
+        const client = new FakeEdgeClient();
+        clientsCreated.push(client);
+        return client;
+      });
+
+      const ac = new AbortController();
+      await provider.synthesize({ text: "req1", voice: "zh-CN-XiaoxiaoNeural" }, ac.signal);
+      await provider.synthesize({ text: "req2", voice: "zh-CN-XiaoxiaoNeural" }, ac.signal);
+
+      expect(clientsCreated.length).toBe(2);
+      expect(clientsCreated[0]).not.toBe(clientsCreated[1]);
+    });
+  });
+
+  describe("input validation", () => {
+    it("rejects empty or whitespace text", async () => {
+      const provider = new EdgeTtsProvider(() => new FakeEdgeClient());
+      const ac = new AbortController();
+
+      await expect(
+        provider.synthesize({ text: "", voice: "zh-CN-XiaoxiaoNeural" }, ac.signal),
+      ).rejects.toThrow("Text must not be empty");
+
+      await expect(
+        provider.synthesize({ text: "   ", voice: "zh-CN-XiaoxiaoNeural" }, ac.signal),
+      ).rejects.toThrow("Text must not be empty");
+    });
+
+    it("rejects empty or whitespace voice", async () => {
+      const provider = new EdgeTtsProvider(() => new FakeEdgeClient());
+      const ac = new AbortController();
+
+      await expect(provider.synthesize({ text: "hello", voice: "" }, ac.signal)).rejects.toThrow(
+        "Voice must not be empty",
+      );
+
+      await expect(provider.synthesize({ text: "hello", voice: "   " }, ac.signal)).rejects.toThrow(
+        "Voice must not be empty",
+      );
+    });
+  });
+});
