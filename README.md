@@ -11,7 +11,14 @@ Self-hosted Edge TTS Web application and API skeleton.
 - `packages/shared`: Shared TypeScript types and Zod schemas (`@edgetts/shared`).
 - `packages/tts-core`: Provider-neutral TTS domain contracts (`@edgetts/tts-core`), defining synthesis controls: `speed` (0.5–2.0), `pitchSemitones` (-12–12), and `volume` (0–1).
 - `packages/edge-provider`: Microsoft Edge Read Aloud adapter (`@edgetts/edge-provider`), mapping domain prosody controls to `msedge-tts`.
-- `packages/tts-service`: Provider-independent application service (`@edgetts/tts-service`), providing cached voice discovery, configurable in-memory voice TTL, concurrent voice-fetch de-duplication, bounded FIFO synthesis concurrency limiting (4 active, 16 queued), and provider-neutral synthesis delegation.
+- `packages/tts-service`: Provider-independent application service (`@edgetts/tts-service`), providing cached voice discovery, configurable in-memory voice TTL, concurrent voice-fetch de-duplication, bounded FIFO synthesis concurrency limiting (4 active, 16 queued), a lossless text segmentation primitive, and provider-neutral synthesis delegation.
+
+## Text Segmentation
+
+- Provider-independent lossless text segmentation primitive (`segmentText`) measuring limits in Unicode code points.
+- Natural boundary hierarchy: paragraph (`\n\n`, `\r\n\r\n`) > line (`\n`, `\r\n`) > sentence (`.!?。！？;；` with closing quotes) > whitespace > hard split.
+- Strictly lossless: rejoining chunks (`chunks.join("")`) reproduces the exact original text without mutation or trimming.
+- Note: The segmenter is not yet wired into speech synthesis. `POST /v1/audio/speech` remains limited to 4096 characters.
 
 ## Synthesis Concurrency
 
