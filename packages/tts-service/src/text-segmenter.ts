@@ -5,8 +5,7 @@ export interface TextSegmentationOptions {
 const PARAGRAPH_REGEX = /(?:\r?\n)(?:[\t ]*\r?\n)+/g;
 const LINE_REGEX = /\r?\n/g;
 const SENTENCE_REGEX = /[.!?。！？;；]["'”’»›》」』】）)\]]*/gu;
-const WHITESPACE_REGEX = /[^\S\r\n]+/gu;
-const CLOSING_PUNCTUATION_REGEX = /^["'”’»›》」』】）)\]]/u;
+const WHITESPACE_CHAR_REGEX = /[^\S\r\n]/gu;
 
 /**
  * Counts the number of Unicode code points in a string.
@@ -23,7 +22,10 @@ export function countCodePoints(str: string): number {
 
 /**
  * Losslessly segments text into bounded chunks based on Unicode code points
- * using hierarchical natural boundaries (paragraph, line, sentence, whitespace, hard split).
+ * using hierarchical natural boundaries (paragraph > line > sentence > whitespace > hard split).
+ *
+ * Worst-case complexity: O(N log N) via linear pre-scan followed by monotonic binary-search cursors.
+ * (Where N is the number of code points; O(N) when chunk limits are non-trivial).
  */
 export function segmentText(text: string, options: TextSegmentationOptions): readonly string[] {
   if (
@@ -40,117 +42,141 @@ export function segmentText(text: string, options: TextSegmentationOptions): rea
     return [];
   }
 
-  // Fast path: if the entire text fits within maxCodePoints, return it as a single chunk
-  if (countCodePoints(text) <= options.maxCodePoints) {
+  // Phase A: Build code-point to UTF-16 offset index mapping in a single O(N) pass.
+  // cpToUtf16Offset[i] is the UTF-16 offset of code point i.
+  // utf16ToCp[j] is the code point index corresponding to UTF-16 offset j.
+  const cpToUtf16Offset: number[] = [];
+  const utf16ToCp = new Int32Array(text.length + 1);
+
+  let cpCount = 0;
+  for (let i = 0; i < text.length;) {
+    cpToUtf16Offset.push(i);
+    const cp = text.codePointAt(i)!;
+    const cpLen = cp > 0xffff ? 2 : 1;
+    for (let k = 0; k < cpLen; k++) {
+      utf16ToCp[i + k] = cpCount;
+    }
+    i += cpLen;
+    cpCount++;
+  }
+  cpToUtf16Offset.push(text.length);
+  utf16ToCp[text.length] = cpCount;
+
+  // Fast path: if the entire text fits within maxCodePoints, return it as a single chunk.
+  if (cpCount <= options.maxCodePoints) {
     return [text];
   }
 
+  // Phase B: Precompute all natural boundary split positions in O(N) linear scans.
+  // Each array contains strictly increasing code-point positions where a split can occur.
+  const paragraphEnds = collectBoundaryEnds(text, PARAGRAPH_REGEX, utf16ToCp);
+  const lineEnds = collectBoundaryEnds(text, LINE_REGEX, utf16ToCp);
+  const sentenceEnds = collectBoundaryEnds(text, SENTENCE_REGEX, utf16ToCp);
+  const whitespaceEnds = collectBoundaryEnds(text, WHITESPACE_CHAR_REGEX, utf16ToCp);
+
+  // Phase C: Segmentation loop using monotonic cursors and binary search.
   const chunks: string[] = [];
-  let startIndex = 0;
+  let startCp = 0;
 
-  while (startIndex < text.length) {
-    // Scan up to maxCodePoints code points for the current window
-    let codePointsInWindow = 0;
-    let windowEnd = startIndex;
+  let pCursor = 0;
+  let lCursor = 0;
+  let sCursor = 0;
+  let wCursor = 0;
 
-    while (windowEnd < text.length && codePointsInWindow < options.maxCodePoints) {
-      const cp = text.codePointAt(windowEnd)!;
-      windowEnd += cp > 0xffff ? 2 : 1;
-      codePointsInWindow++;
-    }
+  while (startCp < cpCount) {
+    const windowEndCp = Math.min(startCp + options.maxCodePoints, cpCount);
 
-    // If remaining text fits within the window, take the remainder
-    if (windowEnd === text.length) {
-      chunks.push(text.slice(startIndex));
+    if (windowEndCp === cpCount) {
+      chunks.push(text.slice(cpToUtf16Offset[startCp]!));
       break;
     }
 
-    const window = text.slice(startIndex, windowEnd);
+    // Advance cursors past any boundaries that are <= startCp
+    while (pCursor < paragraphEnds.length && paragraphEnds[pCursor]! <= startCp) pCursor++;
+    while (lCursor < lineEnds.length && lineEnds[lCursor]! <= startCp) lCursor++;
+    while (sCursor < sentenceEnds.length && sentenceEnds[sCursor]! <= startCp) sCursor++;
+    while (wCursor < whitespaceEnds.length && whitespaceEnds[wCursor]! <= startCp) wCursor++;
 
-    // Hierarchical boundary resolution:
     // 1. Paragraph boundary (highest priority)
-    let splitOffset = findLatestMatchEnd(window, PARAGRAPH_REGEX);
+    let splitCp = findLatestBoundary(paragraphEnds, pCursor, windowEndCp);
 
     // 2. Line boundary
-    if (splitOffset === -1) {
-      splitOffset = findLatestMatchEnd(window, LINE_REGEX);
+    if (splitCp === -1) {
+      splitCp = findLatestBoundary(lineEnds, lCursor, windowEndCp);
     }
 
     // 3. Sentence boundary
-    if (splitOffset === -1) {
-      splitOffset = findLatestSentenceEnd(window, text, startIndex, windowEnd);
+    if (splitCp === -1) {
+      splitCp = findLatestBoundary(sentenceEnds, sCursor, windowEndCp);
     }
 
     // 4. Whitespace boundary
-    if (splitOffset === -1) {
-      splitOffset = findLatestMatchEnd(window, WHITESPACE_REGEX);
+    if (splitCp === -1) {
+      splitCp = findLatestBoundary(whitespaceEnds, wCursor, windowEndCp);
     }
 
     // 5. Hard split fallback
-    if (splitOffset === -1) {
-      splitOffset = window.length;
+    if (splitCp === -1) {
+      splitCp = windowEndCp;
     }
 
-    // Ensure we do not split CRLF across chunk boundaries
-    if (
-      splitOffset === window.length &&
-      window.endsWith("\r") &&
-      windowEnd < text.length &&
-      text[windowEnd] === "\n"
-    ) {
-      if (splitOffset > 1) {
-        splitOffset -= 1;
+    // CRLF atomicity: when maxCodePoints >= 2, prevent splitting a CRLF pair.
+    // When maxCodePoints === 1, the hard size bound takes precedence and CRLF may split.
+    if (options.maxCodePoints >= 2 && splitCp < cpCount) {
+      const prevCode = text.charCodeAt(cpToUtf16Offset[splitCp - 1]!);
+      const nextCode = text.charCodeAt(cpToUtf16Offset[splitCp]!);
+      if (prevCode === 13 && nextCode === 10) {
+        if (splitCp > startCp + 1) {
+          splitCp -= 1;
+        }
       }
     }
 
-    chunks.push(text.slice(startIndex, startIndex + splitOffset));
-    startIndex += splitOffset;
+    chunks.push(text.slice(cpToUtf16Offset[startCp]!, cpToUtf16Offset[splitCp]!));
+    startCp = splitCp;
   }
 
   return chunks;
 }
 
-function findLatestMatchEnd(window: string, regex: RegExp): number {
+function collectBoundaryEnds(text: string, regex: RegExp, utf16ToCp: Int32Array): number[] {
   regex.lastIndex = 0;
-  let latestEnd = -1;
+  const ends: number[] = [];
   let match: RegExpExecArray | null;
 
-  while ((match = regex.exec(window)) !== null) {
-    const end = match.index + match[0].length;
-    if (end > 0) {
-      latestEnd = end;
+  while ((match = regex.exec(text)) !== null) {
+    const endUtf16 = match.index + match[0].length;
+    const endCp = utf16ToCp[endUtf16]!;
+    if (endCp > 0 && (ends.length === 0 || ends[ends.length - 1]! !== endCp)) {
+      ends.push(endCp);
     }
   }
 
-  return latestEnd;
+  return ends;
 }
 
-function findLatestSentenceEnd(
-  window: string,
-  fullText: string,
-  startIndex: number,
-  windowEnd: number,
+function findLatestBoundary(
+  arr: readonly number[],
+  startCursor: number,
+  windowEndCp: number,
 ): number {
-  SENTENCE_REGEX.lastIndex = 0;
-  let latestEnd = -1;
-  let match: RegExpExecArray | null;
+  if (startCursor >= arr.length || arr[startCursor]! > windowEndCp) {
+    return -1;
+  }
 
-  while ((match = SENTENCE_REGEX.exec(window)) !== null) {
-    const end = match.index + match[0].length;
-    if (end > 0) {
-      // If the match ends exactly at the window boundary and the very next character
-      // in fullText is a closing punctuation mark, this sentence closing quote was truncated
-      // by windowEnd. Skip this match so we don't orphan the closing quote.
-      if (
-        end === window.length &&
-        windowEnd < fullText.length &&
-        CLOSING_PUNCTUATION_REGEX.test(fullText.slice(windowEnd))
-      ) {
-        continue;
-      }
-      latestEnd = end;
+  let low = startCursor;
+  let high = arr.length - 1;
+  let best = -1;
+
+  while (low <= high) {
+    const mid = (low + high) >>> 1;
+    if (arr[mid]! <= windowEndCp) {
+      best = arr[mid]!;
+      low = mid + 1;
+    } else {
+      high = mid - 1;
     }
   }
 
-  return latestEnd;
+  return best;
 }
