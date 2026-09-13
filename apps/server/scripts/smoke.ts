@@ -24,7 +24,7 @@ async function consumeAudioStream(res: Response): Promise<{ chunks: number; byte
 
 async function runSmoke(): Promise<void> {
   const dependencies = createProductionDependencies();
-  const app = createApp(dependencies);
+  const app = createApp(dependencies, { serveStatic: true });
 
   try {
     await app.listen({ host: "127.0.0.1", port: 0 });
@@ -161,6 +161,31 @@ async function runSmoke(): Promise<void> {
       );
     }
 
+    // 6. Check production static web hosting
+    const rootRes = await fetch(`${baseUrl}/`);
+    if (rootRes.status !== 200) {
+      throw new Error(`Static web hosting root returned status ${rootRes.status}`);
+    }
+    const rootContentType = rootRes.headers.get("content-type") ?? "";
+    if (!rootContentType.includes("text/html")) {
+      throw new Error(`Static web hosting expected text/html but received: ${rootContentType}`);
+    }
+    const rootText = await rootRes.text();
+    if (!rootText.includes('<div id="root">')) {
+      throw new Error("Static web hosting index.html missing root container");
+    }
+
+    const missingApiRes = await fetch(`${baseUrl}/api/nonexistent`);
+    if (missingApiRes.status !== 404) {
+      throw new Error(`Missing API route expected 404 but received: ${missingApiRes.status}`);
+    }
+    const missingApiJson = (await missingApiRes.json()) as { error?: { code?: string } };
+    if (missingApiJson.error?.code !== "NOT_FOUND") {
+      throw new Error(
+        `Missing API route expected NOT_FOUND code: ${JSON.stringify(missingApiJson)}`,
+      );
+    }
+
     console.log("Server HTTP smoke test\n");
     console.log("Health:");
     console.log("200 PASS\n");
@@ -185,6 +210,11 @@ async function runSmoke(): Promise<void> {
     console.log(`Content-Type: audio/mpeg`);
     console.log(`HTTP chunks: ${nativeResult.chunks}`);
     console.log(`Bytes: ${nativeResult.bytes}`);
+    console.log("PASS\n");
+    console.log("Static Web Hosting:");
+    console.log(`Root status: ${rootRes.status}`);
+    console.log(`Content-Type: ${rootContentType}`);
+    console.log("Missing API 404: PASS");
     console.log("PASS\n");
     console.log("PASS");
   } finally {

@@ -4,15 +4,22 @@ import type { AppDependencies } from "./dependencies.js";
 import { healthRoutes } from "./routes/health.js";
 import { createSpeechRoutes } from "./routes/speech.js";
 import { createVoicesRoutes } from "./routes/voices.js";
+import { registerStaticHosting, type StaticHostingOptions } from "./static.js";
 
-export function createApp(dependencies: AppDependencies): FastifyInstance {
+export function createApp(
+  dependencies: AppDependencies,
+  options?: StaticHostingOptions,
+): FastifyInstance {
   const app = Fastify({
     logger: process.env["NODE_ENV"] === "test" ? false : true,
   });
 
   void app.register(healthRoutes, { prefix: "/api" });
+  void app.register(healthRoutes);
   void app.register(createVoicesRoutes(dependencies.ttsService), { prefix: "/api" });
   void app.register(createSpeechRoutes(dependencies.ttsService));
+
+  registerStaticHosting(app, options);
 
   return app;
 }
