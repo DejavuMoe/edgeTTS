@@ -298,6 +298,41 @@ describe("Production Static Web Hosting & SPA Fallback", () => {
 
     expect(response.statusCode).toBe(404);
   });
+
+  it("integration: static WebUI root and assets remain public (200) without Authorization when API key authentication is enabled", async () => {
+    app = createApp(
+      { ttsService: dummyService },
+      {
+        webDistDir: tempDir,
+        serveStatic: true,
+        apiKey: "production-test-key-1234567890",
+      },
+    );
+
+    // Root index.html is served without auth
+    const rootRes = await app.inject({
+      method: "GET",
+      url: "/",
+    });
+    expect(rootRes.statusCode).toBe(200);
+    expect(rootRes.headers["content-type"]).toContain("text/html");
+    expect(rootRes.body).toContain("EdgeTTS Workbench");
+
+    // Static asset is served without auth
+    const assetRes = await app.inject({
+      method: "GET",
+      url: "/assets/index-test1234.js",
+    });
+    expect(assetRes.statusCode).toBe(200);
+    expect(assetRes.body).toContain("console.log('edgetts bundle');");
+
+    // Protected API endpoint /api/voices still requires auth
+    const voicesRes = await app.inject({
+      method: "GET",
+      url: "/api/voices",
+    });
+    expect(voicesRes.statusCode).toBe(401);
+  });
 });
 
 describe("Deterministic static hosting enablement contract matrix", () => {

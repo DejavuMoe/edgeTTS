@@ -151,13 +151,94 @@ NODE_ENV=production pnpm --filter @edgetts/server start
 
 ### Environment Configuration
 
-| Variable       | Description                                               | Default                                                       |
-| -------------- | --------------------------------------------------------- | ------------------------------------------------------------- |
-| `HOST`         | Bind address for Fastify server                           | `127.0.0.1`                                                   |
-| `PORT`         | Listening port for Fastify server                         | `8080`                                                        |
-| `NODE_ENV`     | Environment mode (`production`, `development`, `test`)    | Unset by default; static hosting auto-enabled in `production` |
-| `SERVE_STATIC` | Explicit toggle for static web hosting (`true` / `false`) | Unset (explicit override; auto-enabled in `production`)       |
-| `WEB_DIST_DIR` | Absolute or relative path to web static assets directory  | `../../web/dist` relative to server                           |
+| Variable       | Description                                                                                 | Default                                                       |
+| -------------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| `HOST`         | Bind address for Fastify server                                                             | `127.0.0.1`                                                   |
+| `PORT`         | Listening port for Fastify server                                                           | `8080`                                                        |
+| `NODE_ENV`     | Environment mode (`production`, `development`, `test`)                                      | Unset by default; static hosting auto-enabled in `production` |
+| `SERVE_STATIC` | Explicit toggle for static web hosting (`true` / `false`)                                   | Unset (explicit override; auto-enabled in `production`)       |
+| `WEB_DIST_DIR` | Absolute or relative path to web static assets directory                                    | `../../web/dist` relative to server                           |
+| `API_KEY`      | Optional Bearer secret protecting synthesis & voices APIs (>= 16 characters, no whitespace) | Unset (authentication disabled)                               |
+
+## Authentication
+
+EdgeTTS provides an optional, stateless Bearer API key authentication layer:
+
+- **When `API_KEY` is unset**: Authentication is completely disabled. All endpoints retain open unauthenticated behavior.
+- **When `API_KEY` is configured**: Protected synthesis and voice discovery APIs require a valid Bearer token in the `Authorization` header (`Authorization: Bearer <API_KEY>`).
+
+### Endpoint Access Policy
+
+- **Public Endpoints** (never require authentication):
+  - `GET /health` (Container / orchestrator uptime probe)
+  - `GET /api/health`
+  - Static WebUI (`/`, `/assets/*`, and client SPA routes)
+- **Protected Endpoints** (require Bearer key when `API_KEY` is configured):
+  - `GET /api/voices`
+  - `POST /api/speech`
+  - `POST /v1/audio/speech`
+
+### Security Guidance
+
+- Use a high-entropy random secret containing at least 16 characters with no whitespace.
+- Generate a secure random secret using OpenSSL:
+  ```bash
+  openssl rand -hex 32
+  ```
+- **Never** expose `API_KEY` in client-side build variables, frontend bundles, or commit secrets to version control.
+- Credentials are verified via constant-time SHA-256 comparison (`timingSafeEqual`) and are never written to server logs.
+
+### Running with Authentication
+
+Start the production server with the `API_KEY` environment variable:
+
+```bash
+API_KEY='<your-secret>' \
+NODE_ENV=production \
+node apps/server/dist/server.js
+```
+
+### Calling Protected Endpoints
+
+#### OpenAI-Compatible Endpoint:
+
+```bash
+curl \
+  -H 'Authorization: Bearer <your-secret>' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "model": "tts-1",
+    "voice": "zh-CN-XiaoxiaoNeural",
+    "input": "你好，世界。"
+  }' \
+  http://127.0.0.1:8080/v1/audio/speech \
+  --output speech.mp3
+```
+
+#### Native Speech Endpoint:
+
+```bash
+curl \
+  -H 'Authorization: Bearer <your-secret>' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "input": "示例文本内容",
+    "voice": "zh-CN-XiaoxiaoNeural"
+  }' \
+  http://127.0.0.1:8080/api/speech \
+  --output speech.mp3
+```
+
+### WebUI In-Memory Key Policy
+
+The built-in Web Workbench does not persist API keys in `localStorage`, `sessionStorage`, `IndexedDB`, cookies, or URL query/hash parameters. When application authentication is enabled, the key is kept only in current browser memory and must be re-entered after a page reload.
+
+### Reverse Proxy & Private Network Deployment
+
+If your deployment is already protected by an external reverse proxy authentication layer (e.g. Authelia, Cloudflare Access) or private network/VPN, setting `API_KEY` can be omitted. Note that when `API_KEY` is unset, application APIs are unauthenticated.
+
+> [!NOTE]
+> API key authentication provides access control but does not perform rate limiting or per-user quota management. Rate limiting remains intentionally deferred.
 
 ## Validation
 
