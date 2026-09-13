@@ -2,7 +2,7 @@
 
 Self-hosted Edge TTS Web application and API skeleton.
 
-> **Note:** The Edge provider is implemented internally, but no public speech HTTP endpoint exists yet.
+> **Note:** The Edge provider and application service are implemented internally, but no public speech HTTP endpoint exists yet.
 
 ## Architecture
 
@@ -11,6 +11,7 @@ Self-hosted Edge TTS Web application and API skeleton.
 - `packages/shared`: Shared TypeScript types and Zod schemas (`@edgetts/shared`).
 - `packages/tts-core`: Provider-neutral TTS domain contracts (`@edgetts/tts-core`), defining synthesis controls: `speed` (0.5–2.0), `pitchSemitones` (-12–12), and `volume` (0–1).
 - `packages/edge-provider`: Microsoft Edge Read Aloud adapter (`@edgetts/edge-provider`), mapping domain prosody controls to `msedge-tts`.
+- `packages/tts-service`: Provider-independent application service (`@edgetts/tts-service`), providing cached voice discovery, configurable in-memory voice TTL, concurrent voice-fetch de-duplication, and provider-neutral synthesis delegation.
 
 ## Requirements
 
@@ -48,4 +49,10 @@ To run the live Edge TTS provider smoke test against the Microsoft endpoint:
 
 ```bash
 pnpm --filter @edgetts/edge-provider smoke
+```
+
+To run the live TTS service smoke test:
+
+```bash
+pnpm --filter @edgetts/tts-service smoke
 ```
