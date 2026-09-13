@@ -14,6 +14,16 @@ export interface StreamPlaybackCallbacks {
   readonly onFinish: () => void;
 }
 
+interface PlaybackSession {
+  readonly id: number;
+  reader: ReadableStreamDefaultReader<Uint8Array> | null;
+  mediaSource: MediaSource | null;
+  sourceBuffer: SourceBuffer | null;
+  mediaUrl: string | null;
+  downloadUrl: string | null;
+  closed: boolean;
+}
+
 function waitForUpdateEnd(buffer: SourceBuffer): Promise<void> {
   return new Promise((resolve, reject) => {
     const onEnd = () => {
@@ -34,35 +44,72 @@ function waitForUpdateEnd(buffer: SourceBuffer): Promise<void> {
 }
 
 export class StreamPlaybackController {
-  private activeReader: ReadableStreamDefaultReader<Uint8Array> | null = null;
-  private activeMediaSource: MediaSource | null = null;
-  private activeMediaUrl: string | null = null;
-  private activeDownloadUrl: string | null = null;
+  private currentSession: PlaybackSession | null = null;
+  private nextSessionId = 0;
+
+  private cleanupSession(session: PlaybackSession): void {
+    if (session.closed) {
+      return;
+    }
+    session.closed = true;
+
+    if (this.currentSession?.id === session.id) {
+      this.currentSession = null;
+    }
+
+    if (session.reader) {
+      try {
+        session.reader.cancel().catch(() => {});
+      } catch {
+        // ignore
+      }
+      session.reader = null;
+    }
+
+    if (session.sourceBuffer) {
+      try {
+        if (session.sourceBuffer.updating) {
+          session.sourceBuffer.abort();
+        }
+      } catch {
+        // ignore
+      }
+      session.sourceBuffer = null;
+    }
+
+    if (session.mediaSource) {
+      try {
+        if (session.mediaSource.readyState === "open") {
+          session.mediaSource.endOfStream();
+        }
+      } catch {
+        // ignore
+      }
+      session.mediaSource = null;
+    }
+
+    const urlsToRevoke = new Set<string>();
+    if (session.mediaUrl) {
+      urlsToRevoke.add(session.mediaUrl);
+      session.mediaUrl = null;
+    }
+    if (session.downloadUrl) {
+      urlsToRevoke.add(session.downloadUrl);
+      session.downloadUrl = null;
+    }
+
+    for (const url of urlsToRevoke) {
+      try {
+        URL.revokeObjectURL(url);
+      } catch {
+        // ignore
+      }
+    }
+  }
 
   cleanup(): void {
-    if (this.activeReader) {
-      this.activeReader.cancel().catch(() => {});
-      this.activeReader = null;
-    }
-    if (this.activeMediaSource) {
-      if (this.activeMediaSource.readyState === "open") {
-        try {
-          this.activeMediaSource.endOfStream();
-        } catch {
-          // ignore cleanup error
-        }
-      }
-      this.activeMediaSource = null;
-    }
-    if (this.activeMediaUrl) {
-      URL.revokeObjectURL(this.activeMediaUrl);
-      this.activeMediaUrl = null;
-    }
-    if (this.activeDownloadUrl) {
-      if (this.activeDownloadUrl !== this.activeMediaUrl) {
-        URL.revokeObjectURL(this.activeDownloadUrl);
-      }
-      this.activeDownloadUrl = null;
+    if (this.currentSession) {
+      this.cleanupSession(this.currentSession);
     }
   }
 
@@ -77,22 +124,57 @@ export class StreamPlaybackController {
   ): Promise<void> {
     this.cleanup();
 
+    const session: PlaybackSession = {
+      id: ++this.nextSessionId,
+      reader: null,
+      mediaSource: null,
+      sourceBuffer: null,
+      mediaUrl: null,
+      downloadUrl: null,
+      closed: false,
+    };
+    this.currentSession = session;
+
+    const isCurrent = () => !session.closed && this.currentSession?.id === session.id;
+
+    const onAbort = () => {
+      this.cleanupSession(session);
+    };
+
+    if (signal.aborted) {
+      this.cleanupSession(session);
+      return;
+    }
+    signal.addEventListener("abort", onAbort, { once: true });
+
     // Fallback path: If MediaSource is unavailable or audio/mpeg is unsupported
     if (!isMediaSourceAudioSupported()) {
       try {
         const blob = await response.blob();
-        if (signal.aborted) return;
+        if (!isCurrent() || signal.aborted) {
+          this.cleanupSession(session);
+          return;
+        }
+
         const blobUrl = URL.createObjectURL(blob);
-        this.activeMediaUrl = blobUrl;
-        this.activeDownloadUrl = blobUrl;
-        callbacks.onStreamReady(blobUrl);
-        callbacks.onDownloadReady(blobUrl);
-        callbacks.onFinish();
+        session.mediaUrl = blobUrl;
+        session.downloadUrl = blobUrl;
+
+        if (isCurrent()) {
+          callbacks.onStreamReady(blobUrl);
+          callbacks.onDownloadReady(blobUrl);
+          callbacks.onFinish();
+        } else {
+          this.cleanupSession(session);
+        }
       } catch (err: unknown) {
-        if (signal.aborted || (err instanceof Error && err.name === "AbortError")) {
+        this.cleanupSession(session);
+        if (!isCurrent() || signal.aborted || (err instanceof Error && err.name === "AbortError")) {
           return;
         }
         callbacks.onError(err instanceof Error ? err : new Error(String(err)));
+      } finally {
+        signal.removeEventListener("abort", onAbort);
       }
       return;
     }
@@ -100,9 +182,14 @@ export class StreamPlaybackController {
     // Primary path: MediaSource audio/mpeg streaming
     try {
       const mediaSource = new MediaSource();
-      this.activeMediaSource = mediaSource;
+      session.mediaSource = mediaSource;
       const mediaUrl = URL.createObjectURL(mediaSource);
-      this.activeMediaUrl = mediaUrl;
+      session.mediaUrl = mediaUrl;
+
+      if (!isCurrent()) {
+        this.cleanupSession(session);
+        return;
+      }
 
       // Notify UI of stream player availability
       callbacks.onStreamReady(mediaUrl);
@@ -129,25 +216,30 @@ export class StreamPlaybackController {
         mediaSource.addEventListener("error", onError);
       });
 
-      if (signal.aborted) {
-        this.cleanup();
+      if (!isCurrent() || signal.aborted) {
+        this.cleanupSession(session);
         return;
       }
 
       let sourceBuffer: SourceBuffer;
       try {
         sourceBuffer = mediaSource.addSourceBuffer("audio/mpeg");
+        session.sourceBuffer = sourceBuffer;
       } catch {
         // If adding sourceBuffer fails unexpectedly, fallback to consuming blob
-        this.cleanup();
+        this.cleanupSession(session);
         const blob = await response.blob();
-        if (signal.aborted) return;
+        if (!isCurrent() || signal.aborted) {
+          return;
+        }
         const blobUrl = URL.createObjectURL(blob);
-        this.activeMediaUrl = blobUrl;
-        this.activeDownloadUrl = blobUrl;
-        callbacks.onStreamReady(blobUrl);
-        callbacks.onDownloadReady(blobUrl);
-        callbacks.onFinish();
+        session.mediaUrl = blobUrl;
+        session.downloadUrl = blobUrl;
+        if (isCurrent()) {
+          callbacks.onStreamReady(blobUrl);
+          callbacks.onDownloadReady(blobUrl);
+          callbacks.onFinish();
+        }
         return;
       }
 
@@ -158,15 +250,15 @@ export class StreamPlaybackController {
       }
 
       const reader = response.body.getReader();
-      this.activeReader = reader;
+      session.reader = reader;
 
       while (true) {
-        if (signal.aborted) {
+        if (!isCurrent() || signal.aborted) {
           break;
         }
 
         const { done, value } = await reader.read();
-        if (done) {
+        if (done || !isCurrent()) {
           break;
         }
 
@@ -177,15 +269,15 @@ export class StreamPlaybackController {
             await waitForUpdateEnd(sourceBuffer);
           }
 
-          if (mediaSource.readyState === "open" && !signal.aborted) {
+          if (mediaSource.readyState === "open" && isCurrent() && !signal.aborted) {
             sourceBuffer.appendBuffer(value);
             await waitForUpdateEnd(sourceBuffer);
           }
         }
       }
 
-      if (signal.aborted) {
-        this.cleanup();
+      if (!isCurrent() || signal.aborted) {
+        this.cleanupSession(session);
         return;
       }
 
@@ -200,15 +292,22 @@ export class StreamPlaybackController {
       // Generate complete blob for download
       const finalBlob = new Blob(chunks as unknown as BlobPart[], { type: "audio/mpeg" });
       const downloadUrl = URL.createObjectURL(finalBlob);
-      this.activeDownloadUrl = downloadUrl;
-      callbacks.onDownloadReady(downloadUrl);
-      callbacks.onFinish();
+      session.downloadUrl = downloadUrl;
+
+      if (isCurrent()) {
+        callbacks.onDownloadReady(downloadUrl);
+        callbacks.onFinish();
+      } else {
+        this.cleanupSession(session);
+      }
     } catch (err: unknown) {
-      this.cleanup();
-      if (signal.aborted || (err instanceof Error && err.name === "AbortError")) {
+      this.cleanupSession(session);
+      if (!isCurrent() || signal.aborted || (err instanceof Error && err.name === "AbortError")) {
         return;
       }
       callbacks.onError(err instanceof Error ? err : new Error(String(err)));
+    } finally {
+      signal.removeEventListener("abort", onAbort);
     }
   }
 }

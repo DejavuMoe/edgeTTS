@@ -21,6 +21,231 @@ export interface SegmentedSynthesisOptions {
   readonly maxSegmentCodePoints: number;
 }
 
+class ManagedAudioStream implements AsyncIterableIterator<Uint8Array> {
+  private readonly upstreamIterator: AsyncIterator<Uint8Array>;
+  private readonly signal: AbortSignal;
+  private readonly onAbort: () => void;
+  private readonly permit: Permit;
+  private released = false;
+
+  constructor(upstreamAudio: AsyncIterable<Uint8Array>, signal: AbortSignal, permit: Permit) {
+    this.signal = signal;
+    this.permit = permit;
+    this.upstreamIterator = upstreamAudio[Symbol.asyncIterator]();
+
+    this.onAbort = () => {
+      this.releaseOnce();
+      void this.upstreamIterator.return?.().catch(() => {});
+    };
+
+    if (signal.aborted) {
+      this.releaseOnce();
+    } else {
+      signal.addEventListener("abort", this.onAbort, { once: true });
+    }
+  }
+
+  private releaseOnce(): void {
+    if (this.released) {
+      return;
+    }
+    this.released = true;
+    this.signal.removeEventListener("abort", this.onAbort);
+    this.permit.release();
+  }
+
+  [Symbol.asyncIterator](): AsyncIterableIterator<Uint8Array> {
+    return this;
+  }
+
+  async next(): Promise<IteratorResult<Uint8Array>> {
+    if (this.released) {
+      return { done: true, value: undefined };
+    }
+
+    try {
+      const result = await this.upstreamIterator.next();
+      if (result.done) {
+        this.releaseOnce();
+        return { done: true, value: undefined };
+      }
+      return result;
+    } catch (error) {
+      this.releaseOnce();
+      try {
+        await this.upstreamIterator.return?.();
+      } catch {
+        // ignore secondary error on cleanup
+      }
+      throw error;
+    }
+  }
+
+  async return(value?: unknown): Promise<IteratorResult<Uint8Array>> {
+    this.releaseOnce();
+    try {
+      if (this.upstreamIterator.return) {
+        return await this.upstreamIterator.return(value);
+      }
+    } catch {
+      // ignore
+    }
+    return { done: true, value: value as undefined };
+  }
+
+  async throw(error?: unknown): Promise<IteratorResult<Uint8Array>> {
+    this.releaseOnce();
+    try {
+      if (this.upstreamIterator.throw) {
+        return await this.upstreamIterator.throw(error);
+      }
+    } catch {
+      // ignore
+    }
+    throw error;
+  }
+}
+
+class SegmentedAudioStream implements AsyncIterableIterator<Uint8Array> {
+  private readonly service: TtsService;
+  private readonly segments: readonly string[];
+  private readonly request: SynthesisRequest;
+  private readonly signal: AbortSignal;
+  private readonly expectedFormat: string;
+  private readonly expectedContentType: string;
+  private currentSegmentIndex = 0;
+  private currentIterator: AsyncIterator<Uint8Array> | null;
+  private closed = false;
+  private readonly onAbort: () => void;
+
+  constructor(
+    service: TtsService,
+    firstResult: SynthesisResult,
+    segments: readonly string[],
+    request: SynthesisRequest,
+    signal: AbortSignal,
+  ) {
+    this.service = service;
+    this.segments = segments;
+    this.request = request;
+    this.signal = signal;
+    this.expectedFormat = firstResult.format;
+    this.expectedContentType = firstResult.contentType;
+    this.currentIterator = firstResult.audio[Symbol.asyncIterator]();
+
+    this.onAbort = () => {
+      void this.cleanupCurrent();
+    };
+
+    if (signal.aborted) {
+      this.closed = true;
+      void this.cleanupCurrent();
+    } else {
+      signal.addEventListener("abort", this.onAbort, { once: true });
+    }
+  }
+
+  private async cleanupCurrent(): Promise<void> {
+    this.signal.removeEventListener("abort", this.onAbort);
+    const iter = this.currentIterator;
+    this.currentIterator = null;
+    if (iter?.return) {
+      try {
+        await iter.return();
+      } catch {
+        // ignore
+      }
+    }
+  }
+
+  [Symbol.asyncIterator](): AsyncIterableIterator<Uint8Array> {
+    return this;
+  }
+
+  async next(): Promise<IteratorResult<Uint8Array>> {
+    if (this.closed) {
+      if (this.signal.aborted) {
+        throw createAbortError(this.signal.reason);
+      }
+      return { done: true, value: undefined };
+    }
+
+    if (this.signal.aborted) {
+      this.closed = true;
+      await this.cleanupCurrent();
+      throw createAbortError(this.signal.reason);
+    }
+
+    while (this.currentSegmentIndex < this.segments.length) {
+      if (!this.currentIterator) {
+        if (this.signal.aborted) {
+          this.closed = true;
+          throw createAbortError(this.signal.reason);
+        }
+
+        const nextResult = await this.service.synthesize(
+          {
+            ...this.request,
+            text: this.segments[this.currentSegmentIndex]!,
+          },
+          this.signal,
+        );
+
+        if (
+          nextResult.format !== this.expectedFormat ||
+          nextResult.contentType !== this.expectedContentType
+        ) {
+          this.closed = true;
+          const iter = nextResult.audio[Symbol.asyncIterator]();
+          await iter.return?.();
+          throw new Error(
+            `Segment ${this.currentSegmentIndex} returned inconsistent audio metadata: expected format ${this.expectedFormat}, got ${nextResult.format}; expected contentType ${this.expectedContentType}, got ${nextResult.contentType}`,
+          );
+        }
+
+        this.currentIterator = nextResult.audio[Symbol.asyncIterator]();
+      }
+
+      try {
+        if (this.signal.aborted) {
+          this.closed = true;
+          await this.cleanupCurrent();
+          throw createAbortError(this.signal.reason);
+        }
+
+        const item = await this.currentIterator.next();
+        if (!item.done) {
+          return item;
+        }
+
+        // Current segment is done; advance to next segment
+        this.currentIterator = null;
+        this.currentSegmentIndex++;
+      } catch (error) {
+        this.closed = true;
+        await this.cleanupCurrent();
+        throw error;
+      }
+    }
+
+    this.closed = true;
+    await this.cleanupCurrent();
+    return { done: true, value: undefined };
+  }
+
+  async return(value?: unknown): Promise<IteratorResult<Uint8Array>> {
+    this.closed = true;
+    await this.cleanupCurrent();
+    return { done: true, value: value as undefined };
+  }
+
+  async throw(error?: unknown): Promise<IteratorResult<Uint8Array>> {
+    this.closed = true;
+    await this.cleanupCurrent();
+    throw error;
+  }
+}
+
 export class TtsService {
   private readonly provider: TtsProvider;
   private readonly voiceCache: VoiceCache;
@@ -97,61 +322,8 @@ export class TtsService {
     return {
       format: firstResult.format,
       contentType: firstResult.contentType,
-      audio: this.streamSegmentedAudio(firstResult, segmentsToSynthesize, request, signal),
+      audio: new SegmentedAudioStream(this, firstResult, segmentsToSynthesize, request, signal),
     };
-  }
-
-  private async *streamSegmentedAudio(
-    firstResult: SynthesisResult,
-    segments: readonly string[],
-    request: SynthesisRequest,
-    signal: AbortSignal,
-  ): AsyncIterable<Uint8Array> {
-    if (signal.aborted) {
-      throw createAbortError(signal.reason);
-    }
-
-    for await (const chunk of firstResult.audio) {
-      if (signal.aborted) {
-        throw createAbortError(signal.reason);
-      }
-      yield chunk;
-    }
-
-    const { format, contentType } = firstResult;
-
-    for (let i = 1; i < segments.length; i++) {
-      if (signal.aborted) {
-        throw createAbortError(signal.reason);
-      }
-
-      const nextResult = await this.synthesize(
-        {
-          ...request,
-          text: segments[i]!,
-        },
-        signal,
-      );
-
-      if (nextResult.format !== format || nextResult.contentType !== contentType) {
-        try {
-          const iter = nextResult.audio[Symbol.asyncIterator]();
-          await iter.return?.();
-        } catch {
-          // ignore cleanup failure
-        }
-        throw new Error(
-          `Segment ${i} returned inconsistent audio metadata: expected format ${format}, got ${nextResult.format}; expected contentType ${contentType}, got ${nextResult.contentType}`,
-        );
-      }
-
-      for await (const chunk of nextResult.audio) {
-        if (signal.aborted) {
-          throw createAbortError(signal.reason);
-        }
-        yield chunk;
-      }
-    }
   }
 
   private wrapSynthesisResult(
@@ -159,41 +331,10 @@ export class TtsService {
     signal: AbortSignal,
     permit: Permit,
   ): SynthesisResult {
-    let released = false;
-    const releaseOnce = () => {
-      if (!released) {
-        released = true;
-        signal.removeEventListener("abort", onAbort);
-        permit.release();
-      }
-    };
-
-    const onAbort = () => {
-      releaseOnce();
-    };
-
-    if (signal.aborted) {
-      releaseOnce();
-    } else {
-      signal.addEventListener("abort", onAbort, { once: true });
-    }
-
-    const upstreamAudio = result.audio;
-
-    async function* streamAudio(): AsyncIterable<Uint8Array> {
-      try {
-        for await (const chunk of upstreamAudio) {
-          yield chunk;
-        }
-      } finally {
-        releaseOnce();
-      }
-    }
-
     return {
       format: result.format,
       contentType: result.contentType,
-      audio: streamAudio(),
+      audio: new ManagedAudioStream(result.audio, signal, permit),
     };
   }
 }
