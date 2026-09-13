@@ -1,5 +1,5 @@
 import { EdgeTtsProvider } from "@edgetts/edge-provider";
-import { TtsService } from "../src/index.js";
+import { TtsService, segmentText } from "../src/index.js";
 
 async function runSmoke(): Promise<void> {
   const provider = new EdgeTtsProvider();
@@ -73,6 +73,55 @@ async function runSmoke(): Promise<void> {
     throw new Error(`Smoke failed: total bytes <= 1000 (got ${totalBytes})`);
   }
 
+  // 5. Segmented synthesis via service
+  const segmentedText = "你好，世界。这是分段语音合成测试。";
+  const segments = segmentText(segmentedText, { maxCodePoints: 8 });
+  if (segments.length < 2) {
+    throw new Error(`Smoke failed: expected at least 2 segments, got ${segments.length}`);
+  }
+
+  const segmentedAc = new AbortController();
+  const segmentedResult = await service.synthesizeSegmented(
+    {
+      text: segmentedText,
+      voice: selected.id,
+      format: "mp3-48k",
+      prosody: {
+        speed: 1,
+        pitchSemitones: 0,
+        volume: 1,
+      },
+    },
+    segmentedAc.signal,
+    { maxSegmentCodePoints: 8 },
+  );
+
+  if (segmentedResult.format !== "mp3-48k") {
+    throw new Error(
+      `Smoke failed: expected segmented format mp3-48k, got ${segmentedResult.format}`,
+    );
+  }
+  if (segmentedResult.contentType !== "audio/mpeg") {
+    throw new Error(
+      `Smoke failed: expected segmented contentType audio/mpeg, got ${segmentedResult.contentType}`,
+    );
+  }
+
+  let segChunkCount = 0;
+  let segTotalBytes = 0;
+
+  for await (const chunk of segmentedResult.audio) {
+    segChunkCount++;
+    segTotalBytes += chunk.byteLength;
+  }
+
+  if (segChunkCount === 0) {
+    throw new Error("Smoke failed: segmented chunk count is 0");
+  }
+  if (segTotalBytes <= 1000) {
+    throw new Error(`Smoke failed: segmented total bytes <= 1000 (got ${segTotalBytes})`);
+  }
+
   console.log("TTS Service smoke test\n");
   console.log(`Voices: ${initialVoices.length}`);
   console.log(`Selected: ${selected.id}`);
@@ -82,6 +131,11 @@ async function runSmoke(): Promise<void> {
   console.log(`Format: ${result.format}`);
   console.log(`Chunks: ${chunkCount}`);
   console.log(`Bytes: ${totalBytes}`);
+  console.log("Segmented synthesis:");
+  console.log(`Segments: ${segments.length}`);
+  console.log(`Format: ${segmentedResult.format}`);
+  console.log(`Chunks: ${segChunkCount}`);
+  console.log(`Bytes: ${segTotalBytes}`);
   console.log("PASS");
 }
 
