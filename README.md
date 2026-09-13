@@ -2,16 +2,62 @@
 
 Self-hosted Edge TTS Web application and API skeleton.
 
-> **Note:** The Edge provider and application service are implemented internally, but no public speech HTTP endpoint exists yet.
+> **Note:** `POST /v1/audio/speech` currently implements an OpenAI-compatible subset.
 
 ## Architecture
 
-- `apps/server`: Fastify HTTP API service (`@edgetts/server`), providing `GET /api/health` and `GET /api/voices` backed by `TtsService` and `EdgeTtsProvider`.
+- `apps/server`: Fastify HTTP API service (`@edgetts/server`), providing `GET /api/health`, `GET /api/voices`, and `POST /v1/audio/speech` backed by `TtsService` and `EdgeTtsProvider`.
 - `apps/web`: React + Vite frontend application (`@edgetts/web`).
 - `packages/shared`: Shared TypeScript types and Zod schemas (`@edgetts/shared`).
 - `packages/tts-core`: Provider-neutral TTS domain contracts (`@edgetts/tts-core`), defining synthesis controls: `speed` (0.5–2.0), `pitchSemitones` (-12–12), and `volume` (0–1).
 - `packages/edge-provider`: Microsoft Edge Read Aloud adapter (`@edgetts/edge-provider`), mapping domain prosody controls to `msedge-tts`.
 - `packages/tts-service`: Provider-independent application service (`@edgetts/tts-service`), providing cached voice discovery, configurable in-memory voice TTL, concurrent voice-fetch de-duplication, and provider-neutral synthesis delegation.
+
+## API Endpoints
+
+### `GET /api/health`
+
+Health check endpoint returning `{ "status": "ok" }`.
+
+### `GET /api/voices`
+
+Returns cached Edge TTS voices in `{ "voices": [...] }`.
+
+### `POST /v1/audio/speech`
+
+OpenAI-compatible speech endpoint subset with MP3 streaming.
+
+**Supported options:**
+
+- `model`: `tts-1` (mapped to `mp3-48k`) or `tts-1-hd` (mapped to `mp3-96k`)
+- `voice`: Edge TTS ShortName (e.g. `zh-CN-XiaoxiaoNeural`, `en-US-JennyNeural`)
+- `input`: Plain text (1–4096 characters, non-empty)
+- `response_format`: `mp3` (optional, default: `mp3`)
+- `speed`: `0.5`–`2.0` (optional, default: `1.0`)
+
+**Unsupported options:**
+
+- `instructions`
+- `stream_format`
+- non-MP3 output (`opus`, `aac`, `flac`, `wav`, `pcm`, `webm`)
+- long-text chunking (> 4096 characters)
+- authentication
+
+**Example usage:**
+
+```bash
+curl \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "model":"tts-1",
+    "voice":"zh-CN-XiaoxiaoNeural",
+    "input":"你好，世界。",
+    "response_format":"mp3",
+    "speed":1
+  }' \
+  http://127.0.0.1:8080/v1/audio/speech \
+  --output speech.mp3
+```
 
 ## Requirements
 
