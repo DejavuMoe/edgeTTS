@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { SynthesisRequest, SynthesisResult, TtsProvider, TtsVoice } from "@edgetts/tts-core";
+import { SynthesisQueueFullError } from "../src/index.js";
 import { TtsService } from "../src/tts-service.js";
 
 interface Deferred<T> {
@@ -16,6 +17,14 @@ function createDeferred<T>(): Deferred<T> {
     reject = rej;
   });
   return { promise, resolve, reject };
+}
+
+async function consumeStream(audio: AsyncIterable<Uint8Array>): Promise<number> {
+  let bytes = 0;
+  for await (const chunk of audio) {
+    bytes += chunk.byteLength;
+  }
+  return bytes;
 }
 
 class FakeTtsProvider implements TtsProvider {
@@ -44,6 +53,8 @@ class FakeTtsProvider implements TtsProvider {
     })(),
   };
   public synthesisError?: Error | undefined;
+  public customSynthesize?:
+    ((request: SynthesisRequest, signal: AbortSignal) => Promise<SynthesisResult>) | undefined;
 
   async listVoices(): Promise<readonly TtsVoice[]> {
     this.listVoicesCallCount++;
@@ -60,6 +71,9 @@ class FakeTtsProvider implements TtsProvider {
     this.synthesizeCallCount++;
     this.lastRequest = request;
     this.lastSignal = signal;
+    if (this.customSynthesize) {
+      return this.customSynthesize(request, signal);
+    }
     if (this.synthesisError) {
       throw this.synthesisError;
     }
@@ -371,7 +385,8 @@ describe("TtsService", () => {
       expect(provider.listVoicesCallCount).toBe(0);
       expect(provider.lastRequest).toEqual(request);
       expect(provider.lastSignal).toBe(ac.signal); // identical object reference
-      expect(result).toBe(provider.synthesisResult);
+      expect(result.format).toBe(provider.synthesisResult.format);
+      expect(result.contentType).toBe(provider.synthesisResult.contentType);
     });
 
     it("propagates synthesis error without swallowing or retrying", async () => {
@@ -387,6 +402,782 @@ describe("TtsService", () => {
       ).rejects.toThrow("Upstream synthesis failed");
 
       expect(provider.synthesizeCallCount).toBe(1);
+    });
+  });
+
+  describe("synthesis concurrency limiter and bounded FIFO queue", () => {
+    describe("configuration validation", () => {
+      it("rejects invalid maxConcurrentSyntheses values with RangeError", () => {
+        const provider = new FakeTtsProvider();
+        for (const invalid of [0, -1, 1.5, NaN, Infinity, -Infinity]) {
+          expect(() => new TtsService(provider, { maxConcurrentSyntheses: invalid })).toThrowError(
+            RangeError,
+          );
+        }
+      });
+
+      it("accepts valid positive integer maxConcurrentSyntheses values", () => {
+        const provider = new FakeTtsProvider();
+        for (const valid of [1, 4, 100]) {
+          expect(() => new TtsService(provider, { maxConcurrentSyntheses: valid })).not.toThrow();
+        }
+      });
+
+      it("rejects invalid maxQueuedSyntheses values with RangeError", () => {
+        const provider = new FakeTtsProvider();
+        for (const invalid of [-1, 1.5, NaN, Infinity, -Infinity]) {
+          expect(() => new TtsService(provider, { maxQueuedSyntheses: invalid })).toThrowError(
+            RangeError,
+          );
+        }
+      });
+
+      it("accepts valid non-negative integer maxQueuedSyntheses values", () => {
+        const provider = new FakeTtsProvider();
+        for (const valid of [0, 1, 16]) {
+          expect(() => new TtsService(provider, { maxQueuedSyntheses: valid })).not.toThrow();
+        }
+      });
+    });
+
+    it("defaults to 4 active syntheses and queues the 5th", async () => {
+      const provider = new FakeTtsProvider();
+      const service = new TtsService(provider); // default 4 active, 16 queued
+      const unblocks: Array<() => void> = [];
+
+      provider.customSynthesize = async () => {
+        const d = createDeferred<void>();
+        unblocks.push(d.resolve);
+        return {
+          format: "mp3-48k",
+          contentType: "audio/mpeg",
+          audio: (async function* () {
+            await d.promise;
+            yield new Uint8Array([1]);
+          })(),
+        };
+      };
+
+      const ac = new AbortController();
+      const req = { text: "t", voice: "v" };
+
+      // Launch 4 active syntheses
+      const r1 = await service.synthesize(req, ac.signal);
+      const r2 = await service.synthesize(req, ac.signal);
+      const r3 = await service.synthesize(req, ac.signal);
+      const r4 = await service.synthesize(req, ac.signal);
+      expect(provider.synthesizeCallCount).toBe(4);
+
+      // Start consuming slightly so they are active
+      const it1 = r1.audio[Symbol.asyncIterator]();
+      const p1 = it1.next();
+
+      // Launch 5th: should be queued, provider not yet called for it
+      let fifthCalled = false;
+      const r5Promise = service.synthesize(req, ac.signal).then((res) => {
+        fifthCalled = true;
+        return res;
+      });
+
+      // Give microtasks a tick
+      await new Promise((r) => setTimeout(r, 0));
+      expect(provider.synthesizeCallCount).toBe(4);
+      expect(fifthCalled).toBe(false);
+
+      // Complete 1st stream
+      unblocks[0]!();
+      await p1;
+      await it1.next(); // finish stream
+
+      // Now 5th should acquire slot and call provider
+      const r5 = await r5Promise;
+      expect(provider.synthesizeCallCount).toBe(5);
+      expect(fifthCalled).toBe(true);
+
+      // Cleanup remaining
+      for (const unblock of unblocks) {
+        unblock();
+      }
+      await Promise.all([
+        consumeStream(r2.audio),
+        consumeStream(r3.audio),
+        consumeStream(r4.audio),
+        consumeStream(r5.audio),
+      ]);
+    });
+
+    it("active slot covers entire stream lifetime, not just provider.synthesize resolution", async () => {
+      const provider = new FakeTtsProvider();
+      const service = new TtsService(provider, {
+        maxConcurrentSyntheses: 1,
+        maxQueuedSyntheses: 5,
+      });
+      const streamDeferred = createDeferred<void>();
+
+      provider.customSynthesize = async () => {
+        return {
+          format: "mp3-48k",
+          contentType: "audio/mpeg",
+          audio: (async function* () {
+            yield new Uint8Array([1, 2]);
+            await streamDeferred.promise;
+            yield new Uint8Array([3, 4]);
+          })(),
+        };
+      };
+
+      const ac = new AbortController();
+      const resultA = await service.synthesize({ text: "A", voice: "v" }, ac.signal);
+      expect(provider.synthesizeCallCount).toBe(1);
+
+      // Call B while A's audio stream is NOT yet finished
+      let bResolved = false;
+      const bPromise = service.synthesize({ text: "B", voice: "v" }, ac.signal).then((res) => {
+        bResolved = true;
+        return res;
+      });
+
+      await new Promise((r) => setTimeout(r, 0));
+      // CRITICAL: B's provider.synthesize must NOT have been called yet!
+      expect(provider.synthesizeCallCount).toBe(1);
+      expect(bResolved).toBe(false);
+
+      // Consume A fully
+      for await (const chunk of resultA.audio) {
+        expect(chunk).toBeDefined();
+        // reading chunk 1, then unblocking
+        streamDeferred.resolve();
+      }
+
+      // Now B should have resolved
+      await bPromise;
+      expect(provider.synthesizeCallCount).toBe(2);
+      expect(bResolved).toBe(true);
+    });
+
+    it("schedules queued requests in strict FIFO order", async () => {
+      const provider = new FakeTtsProvider();
+      const service = new TtsService(provider, {
+        maxConcurrentSyntheses: 1,
+        maxQueuedSyntheses: 5,
+      });
+      const callOrder: string[] = [];
+
+      provider.customSynthesize = async (req) => {
+        callOrder.push(req.text);
+        return {
+          format: "mp3-48k",
+          contentType: "audio/mpeg",
+          audio: (async function* () {
+            yield new Uint8Array([1]);
+          })(),
+        };
+      };
+
+      const ac = new AbortController();
+      const resA = await service.synthesize({ text: "A", voice: "v" }, ac.signal);
+
+      // Queue B, C, D
+      const pB = service.synthesize({ text: "B", voice: "v" }, ac.signal);
+      const pC = service.synthesize({ text: "C", voice: "v" }, ac.signal);
+      const pD = service.synthesize({ text: "D", voice: "v" }, ac.signal);
+
+      expect(callOrder).toEqual(["A"]);
+
+      // Finish A
+      await consumeStream(resA.audio);
+      const resB = await pB;
+      expect(callOrder).toEqual(["A", "B"]);
+
+      // Finish B
+      await consumeStream(resB.audio);
+      const resC = await pC;
+      expect(callOrder).toEqual(["A", "B", "C"]);
+
+      // Finish C
+      await consumeStream(resC.audio);
+      const resD = await pD;
+      expect(callOrder).toEqual(["A", "B", "C", "D"]);
+
+      await consumeStream(resD.audio);
+    });
+
+    it("rejects with SynthesisQueueFullError when queue capacity is exceeded", async () => {
+      const provider = new FakeTtsProvider();
+      const service = new TtsService(provider, {
+        maxConcurrentSyntheses: 1,
+        maxQueuedSyntheses: 1,
+      });
+      const unblockA = createDeferred<void>();
+
+      provider.customSynthesize = async () => {
+        return {
+          format: "mp3-48k",
+          contentType: "audio/mpeg",
+          audio: (async function* () {
+            await unblockA.promise;
+            yield new Uint8Array([1]);
+          })(),
+        };
+      };
+
+      const ac = new AbortController();
+      const resA = await service.synthesize({ text: "A", voice: "v" }, ac.signal);
+      const itA = resA.audio[Symbol.asyncIterator]();
+      const pA = itA.next();
+
+      // B enters queue
+      const pB = service.synthesize({ text: "B", voice: "v" }, ac.signal);
+
+      // C exceeds queue
+      await expect(service.synthesize({ text: "C", voice: "v" }, ac.signal)).rejects.toThrowError(
+        SynthesisQueueFullError,
+      );
+
+      expect(provider.synthesizeCallCount).toBe(1);
+
+      // Clean up A and B
+      unblockA.resolve();
+      await pA;
+      await itA.next();
+      const resB = await pB;
+      await consumeStream(resB.audio);
+    });
+
+    it("rejects immediately with SynthesisQueueFullError when maxQueuedSyntheses is 0", async () => {
+      const provider = new FakeTtsProvider();
+      const service = new TtsService(provider, {
+        maxConcurrentSyntheses: 1,
+        maxQueuedSyntheses: 0,
+      });
+      const unblockA = createDeferred<void>();
+
+      provider.customSynthesize = async () => {
+        return {
+          format: "mp3-48k",
+          contentType: "audio/mpeg",
+          audio: (async function* () {
+            await unblockA.promise;
+            yield new Uint8Array([1]);
+          })(),
+        };
+      };
+
+      const ac = new AbortController();
+      const resA = await service.synthesize({ text: "A", voice: "v" }, ac.signal);
+      const itA = resA.audio[Symbol.asyncIterator]();
+      const pA = itA.next();
+
+      await expect(service.synthesize({ text: "B", voice: "v" }, ac.signal)).rejects.toThrowError(
+        SynthesisQueueFullError,
+      );
+
+      expect(provider.synthesizeCallCount).toBe(1);
+
+      unblockA.resolve();
+      await pA;
+      await itA.next();
+    });
+
+    it("removes canceled queued requests and directly advances to next valid waiter", async () => {
+      const provider = new FakeTtsProvider();
+      const service = new TtsService(provider, {
+        maxConcurrentSyntheses: 1,
+        maxQueuedSyntheses: 5,
+      });
+      const unblockA = createDeferred<void>();
+
+      provider.customSynthesize = async (req) => {
+        return {
+          format: "mp3-48k",
+          contentType: "audio/mpeg",
+          audio: (async function* () {
+            if (req.text === "A") {
+              await unblockA.promise;
+            }
+            yield new Uint8Array([1]);
+          })(),
+        };
+      };
+
+      const acA = new AbortController();
+      const acB = new AbortController();
+      const acC = new AbortController();
+
+      const resA = await service.synthesize({ text: "A", voice: "v" }, acA.signal);
+      const itA = resA.audio[Symbol.asyncIterator]();
+      const pA = itA.next();
+
+      const pB = service.synthesize({ text: "B", voice: "v" }, acB.signal);
+      const pC = service.synthesize({ text: "C", voice: "v" }, acC.signal);
+
+      // Cancel B while queued
+      acB.abort();
+      await expect(pB).rejects.toThrow();
+
+      // Finish A
+      unblockA.resolve();
+      await pA;
+      await itA.next();
+
+      // C should be dispatched; B was never dispatched to provider
+      const resC = await pC;
+      expect(provider.lastRequest?.text).toBe("C");
+      await consumeStream(resC.audio);
+    });
+
+    it("immediately rejects already aborted signal without calling provider or affecting capacity", async () => {
+      const provider = new FakeTtsProvider();
+      const service = new TtsService(provider, {
+        maxConcurrentSyntheses: 1,
+        maxQueuedSyntheses: 1,
+      });
+      const ac = new AbortController();
+      ac.abort();
+
+      await expect(service.synthesize({ text: "test", voice: "v" }, ac.signal)).rejects.toThrow();
+      expect(provider.synthesizeCallCount).toBe(0);
+
+      // Still accepts valid calls
+      const validAc = new AbortController();
+      const result = await service.synthesize({ text: "valid", voice: "v" }, validAc.signal);
+      expect(provider.synthesizeCallCount).toBe(1);
+      await consumeStream(result.audio);
+    });
+
+    it("releases permit upon consumer early break", async () => {
+      const provider = new FakeTtsProvider();
+      const service = new TtsService(provider, {
+        maxConcurrentSyntheses: 1,
+        maxQueuedSyntheses: 5,
+      });
+
+      provider.customSynthesize = async () => {
+        return {
+          format: "mp3-48k",
+          contentType: "audio/mpeg",
+          audio: (async function* () {
+            yield new Uint8Array([1]);
+            yield new Uint8Array([2]);
+            yield new Uint8Array([3]);
+          })(),
+        };
+      };
+
+      const ac = new AbortController();
+      const resA = await service.synthesize({ text: "A", voice: "v" }, ac.signal);
+
+      const pB = service.synthesize({ text: "B", voice: "v" }, ac.signal);
+
+      // Consumer breaks early after reading 1 chunk
+      for await (const chunk of resA.audio) {
+        expect(chunk).toBeDefined();
+        break;
+      }
+
+      const resB = await pB;
+      expect(provider.lastRequest?.text).toBe("B");
+      await consumeStream(resB.audio);
+    });
+
+    it("releases permit upon stream failure during iteration", async () => {
+      const provider = new FakeTtsProvider();
+      const service = new TtsService(provider, {
+        maxConcurrentSyntheses: 1,
+        maxQueuedSyntheses: 5,
+      });
+
+      provider.customSynthesize = async (req) => {
+        return {
+          format: "mp3-48k",
+          contentType: "audio/mpeg",
+          audio: (async function* () {
+            if (req.text === "A") {
+              yield new Uint8Array([1]);
+              throw new Error("Stream exploded");
+            }
+            yield new Uint8Array([2]);
+          })(),
+        };
+      };
+
+      const ac = new AbortController();
+      const resA = await service.synthesize({ text: "A", voice: "v" }, ac.signal);
+      const pB = service.synthesize({ text: "B", voice: "v" }, ac.signal);
+
+      await expect(consumeStream(resA.audio)).rejects.toThrow("Stream exploded");
+
+      const resB = await pB;
+      expect(provider.lastRequest?.text).toBe("B");
+      await consumeStream(resB.audio);
+    });
+
+    it("releases permit upon provider pre-stream failure", async () => {
+      const provider = new FakeTtsProvider();
+      const service = new TtsService(provider, {
+        maxConcurrentSyntheses: 1,
+        maxQueuedSyntheses: 5,
+      });
+
+      let callIndex = 0;
+      provider.customSynthesize = async () => {
+        callIndex++;
+        if (callIndex === 1) {
+          throw new Error("Provider pre-stream error");
+        }
+        return {
+          format: "mp3-48k",
+          contentType: "audio/mpeg",
+          audio: (async function* () {
+            yield new Uint8Array([1]);
+          })(),
+        };
+      };
+
+      const ac = new AbortController();
+      // First call fails at provider
+      await expect(service.synthesize({ text: "A", voice: "v" }, ac.signal)).rejects.toThrow(
+        "Provider pre-stream error",
+      );
+
+      // Second call must succeed because permit was released
+      const resB = await service.synthesize({ text: "B", voice: "v" }, ac.signal);
+      await consumeStream(resB.audio);
+      expect(callIndex).toBe(2);
+    });
+
+    it("releases permit when active request is aborted mid-stream", async () => {
+      const provider = new FakeTtsProvider();
+      const service = new TtsService(provider, {
+        maxConcurrentSyntheses: 1,
+        maxQueuedSyntheses: 5,
+      });
+      const blockedPromise = createDeferred<void>();
+
+      provider.customSynthesize = async (req) => {
+        return {
+          format: "mp3-48k",
+          contentType: "audio/mpeg",
+          audio: (async function* () {
+            if (req.text === "A") {
+              yield new Uint8Array([1]);
+              await blockedPromise.promise;
+              yield new Uint8Array([2]);
+            } else {
+              yield new Uint8Array([3]);
+            }
+          })(),
+        };
+      };
+
+      const acA = new AbortController();
+      const resA = await service.synthesize({ text: "A", voice: "v" }, acA.signal);
+      const itA = resA.audio[Symbol.asyncIterator]();
+      await itA.next(); // read chunk 1
+
+      const pB = service.synthesize({ text: "B", voice: "v" }, new AbortController().signal);
+
+      // Abort A
+      acA.abort();
+
+      const resB = await pB;
+      expect(provider.lastRequest?.text).toBe("B");
+      await consumeStream(resB.audio);
+      blockedPromise.resolve();
+    });
+
+    it("releases permit when active request is aborted before consumer starts iteration", async () => {
+      const provider = new FakeTtsProvider();
+      const service = new TtsService(provider, {
+        maxConcurrentSyntheses: 1,
+        maxQueuedSyntheses: 5,
+      });
+
+      provider.customSynthesize = async () => {
+        return {
+          format: "mp3-48k",
+          contentType: "audio/mpeg",
+          audio: (async function* () {
+            yield new Uint8Array([1]);
+          })(),
+        };
+      };
+
+      const acA = new AbortController();
+      // Returns SynthesisResult, but consumer does NOT iterate resA.audio
+      await service.synthesize({ text: "A", voice: "v" }, acA.signal);
+
+      const pB = service.synthesize({ text: "B", voice: "v" }, new AbortController().signal);
+
+      // Abort A before consumer iteration
+      acA.abort();
+
+      const resB = await pB;
+      expect(provider.lastRequest?.text).toBe("B");
+      await consumeStream(resB.audio);
+    });
+
+    it("prevents double release from causing over-allocation", async () => {
+      const provider = new FakeTtsProvider();
+      const service = new TtsService(provider, {
+        maxConcurrentSyntheses: 1,
+        maxQueuedSyntheses: 5,
+      });
+
+      provider.customSynthesize = async () => {
+        return {
+          format: "mp3-48k",
+          contentType: "audio/mpeg",
+          audio: (async function* () {
+            yield new Uint8Array([1]);
+          })(),
+        };
+      };
+
+      const acA = new AbortController();
+      const resA = await service.synthesize({ text: "A", voice: "v" }, acA.signal);
+
+      // B and C queued
+      const pB = service.synthesize({ text: "B", voice: "v" }, new AbortController().signal);
+      let cResolved = false;
+      void service.synthesize({ text: "C", voice: "v" }, new AbortController().signal).then(() => {
+        cResolved = true;
+      });
+
+      // Consumer consumes A AND aborts A
+      for await (const chunk of resA.audio) {
+        expect(chunk).toBeDefined();
+        acA.abort();
+      }
+
+      // Only B should be dispatched, C should remain queued
+      await pB;
+      await new Promise((r) => setTimeout(r, 0));
+      expect(cResolved).toBe(false);
+    });
+
+    it("never exceeds configured maxConcurrentSyntheses limit under concurrency", async () => {
+      const provider = new FakeTtsProvider();
+      const service = new TtsService(provider, {
+        maxConcurrentSyntheses: 2,
+        maxQueuedSyntheses: 10,
+      });
+
+      let currentActive = 0;
+      let maxActiveObserved = 0;
+      const unblocks: Array<() => void> = [];
+      let allowAll = false;
+
+      provider.customSynthesize = async () => {
+        currentActive++;
+        if (currentActive > maxActiveObserved) {
+          maxActiveObserved = currentActive;
+        }
+        const d = createDeferred<void>();
+        if (allowAll) {
+          d.resolve();
+        } else {
+          unblocks.push(d.resolve);
+        }
+
+        return {
+          format: "mp3-48k",
+          contentType: "audio/mpeg",
+          audio: (async function* () {
+            await d.promise;
+            yield new Uint8Array([1]);
+          })(),
+        };
+      };
+
+      const ac = new AbortController();
+      // Submit 6 requests
+      const promises = [
+        service.synthesize({ text: "1", voice: "v" }, ac.signal),
+        service.synthesize({ text: "2", voice: "v" }, ac.signal),
+        service.synthesize({ text: "3", voice: "v" }, ac.signal),
+        service.synthesize({ text: "4", voice: "v" }, ac.signal),
+        service.synthesize({ text: "5", voice: "v" }, ac.signal),
+        service.synthesize({ text: "6", voice: "v" }, ac.signal),
+      ];
+
+      // Wait for first 2 to resolve
+      const [res1, res2] = await Promise.all([promises[0]!, promises[1]!]);
+      expect(maxActiveObserved).toBe(2);
+
+      // Consume res1
+      unblocks[0]!();
+      for await (const chunk of res1.audio) {
+        expect(chunk).toBeDefined();
+        currentActive--;
+      }
+
+      // Now 3rd should resolve
+      const res3 = await promises[2]!;
+      expect(maxActiveObserved).toBe(2);
+
+      // Finish remaining
+      allowAll = true;
+      for (const u of unblocks) {
+        u();
+      }
+      for await (const chunk of res2.audio) {
+        expect(chunk).toBeDefined();
+        currentActive--;
+      }
+      for await (const chunk of res3.audio) {
+        expect(chunk).toBeDefined();
+        currentActive--;
+      }
+      // res4 and res5 resolve because res2 and res3 completed
+      const [res4, res5] = await Promise.all([promises[3]!, promises[4]!]);
+      expect(maxActiveObserved).toBeLessThanOrEqual(2);
+
+      // Consuming res4 frees a slot for request 6
+      for await (const chunk of res4.audio) {
+        expect(chunk).toBeDefined();
+        currentActive--;
+      }
+
+      // Now request 6 resolves
+      const res6 = await promises[5]!;
+      expect(maxActiveObserved).toBeLessThanOrEqual(2);
+
+      for await (const chunk of res5.audio) {
+        expect(chunk).toBeDefined();
+        currentActive--;
+      }
+      for await (const chunk of res6.audio) {
+        expect(chunk).toBeDefined();
+        currentActive--;
+      }
+
+      expect(maxActiveObserved).toBeLessThanOrEqual(2);
+    });
+
+    it("recovers queue capacity when a queued request is canceled", async () => {
+      const provider = new FakeTtsProvider();
+      const service = new TtsService(provider, {
+        maxConcurrentSyntheses: 1,
+        maxQueuedSyntheses: 1,
+      });
+      const unblockA = createDeferred<void>();
+
+      provider.customSynthesize = async () => {
+        return {
+          format: "mp3-48k",
+          contentType: "audio/mpeg",
+          audio: (async function* () {
+            await unblockA.promise;
+            yield new Uint8Array([1]);
+          })(),
+        };
+      };
+
+      const acA = new AbortController();
+      const acB = new AbortController();
+      const acC = new AbortController();
+
+      const resA = await service.synthesize({ text: "A", voice: "v" }, acA.signal);
+      const itA = resA.audio[Symbol.asyncIterator]();
+      const pA = itA.next();
+
+      // B is queued
+      const pB = service.synthesize({ text: "B", voice: "v" }, acB.signal);
+
+      // Now queue is full (1 queued). Aborting B frees the queue slot!
+      acB.abort();
+      await expect(pB).rejects.toThrow();
+
+      // C should now successfully enter the queue instead of throwing SynthesisQueueFullError
+      const pC = service.synthesize({ text: "C", voice: "v" }, acC.signal);
+
+      unblockA.resolve();
+      await pA;
+      await itA.next();
+
+      const resC = await pC;
+      await consumeStream(resC.audio);
+    });
+
+    it("queue-full error on a new request does not affect existing queued requests", async () => {
+      const provider = new FakeTtsProvider();
+      const service = new TtsService(provider, {
+        maxConcurrentSyntheses: 1,
+        maxQueuedSyntheses: 1,
+      });
+      const unblockA = createDeferred<void>();
+
+      provider.customSynthesize = async () => {
+        return {
+          format: "mp3-48k",
+          contentType: "audio/mpeg",
+          audio: (async function* () {
+            await unblockA.promise;
+            yield new Uint8Array([1]);
+          })(),
+        };
+      };
+
+      const ac = new AbortController();
+      const resA = await service.synthesize({ text: "A", voice: "v" }, ac.signal);
+      const itA = resA.audio[Symbol.asyncIterator]();
+      const pA = itA.next();
+
+      // B queued
+      const pB = service.synthesize({ text: "B", voice: "v" }, ac.signal);
+
+      // C rejected because queue is full
+      await expect(service.synthesize({ text: "C", voice: "v" }, ac.signal)).rejects.toThrowError(
+        SynthesisQueueFullError,
+      );
+
+      // Finish A -> B should complete normally
+      unblockA.resolve();
+      await pA;
+      await itA.next();
+
+      const resB = await pB;
+      await consumeStream(resB.audio);
+      expect(provider.synthesizeCallCount).toBe(2);
+    });
+
+    it("listVoices is completely unaffected by synthesis limiter saturation", async () => {
+      const provider = new FakeTtsProvider();
+      const service = new TtsService(provider, {
+        maxConcurrentSyntheses: 1,
+        maxQueuedSyntheses: 0,
+      });
+      const unblockA = createDeferred<void>();
+
+      provider.customSynthesize = async () => {
+        return {
+          format: "mp3-48k",
+          contentType: "audio/mpeg",
+          audio: (async function* () {
+            await unblockA.promise;
+            yield new Uint8Array([1]);
+          })(),
+        };
+      };
+
+      const ac = new AbortController();
+      const resA = await service.synthesize({ text: "A", voice: "v" }, ac.signal);
+      const itA = resA.audio[Symbol.asyncIterator]();
+      const pA = itA.next();
+
+      // Synthesis capacity is totally full
+      await expect(service.synthesize({ text: "B", voice: "v" }, ac.signal)).rejects.toThrowError(
+        SynthesisQueueFullError,
+      );
+
+      // listVoices should still work seamlessly!
+      const voices = await service.listVoices();
+      expect(voices).toEqual(provider.voicesResult);
+
+      unblockA.resolve();
+      await pA;
+      await itA.next();
     });
   });
 });

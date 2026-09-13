@@ -1,7 +1,8 @@
 import { describe, it, expect, afterEach } from "vitest";
 import type { FastifyInstance } from "fastify";
-import type { SynthesisRequest, SynthesisResult, TtsVoice } from "@edgetts/tts-core";
+import type { SynthesisRequest, SynthesisResult, TtsProvider, TtsVoice } from "@edgetts/tts-core";
 import { ApiErrorSchema } from "@edgetts/shared";
+import { SynthesisQueueFullError, TtsService } from "@edgetts/tts-service";
 import { createApp } from "../src/app.js";
 import type { TtsServicePort } from "../src/dependencies.js";
 
@@ -477,6 +478,56 @@ describe("POST /v1/audio/speech", () => {
     expect(response.body).not.toContain("token=xyz123");
   });
 
+  it("returns HTTP 503 SERVER_BUSY when service throws SynthesisQueueFullError", async () => {
+    const fakeService = new FakeSpeechTtsService();
+    fakeService.errorToThrow = new SynthesisQueueFullError();
+    app = createApp({ ttsService: fakeService });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/audio/speech",
+      headers: { "content-type": "application/json" },
+      payload: {
+        model: "tts-1",
+        voice: "zh-CN-XiaoxiaoNeural",
+        input: "队列已满测试",
+      },
+    });
+
+    expect(response.statusCode).toBe(503);
+    expect(response.headers["content-type"]).toContain("application/json");
+
+    const parsed = ApiErrorSchema.parse(response.json());
+    expect(parsed).toEqual({
+      error: {
+        code: "SERVER_BUSY",
+        message: "Speech synthesis capacity is full",
+      },
+    });
+  });
+
+  it("rejects concurrency request parameter with HTTP 400 INVALID_REQUEST", async () => {
+    const fakeService = new FakeSpeechTtsService();
+    app = createApp({ ttsService: fakeService });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/audio/speech",
+      headers: { "content-type": "application/json" },
+      payload: {
+        model: "tts-1",
+        voice: "zh-CN-XiaoxiaoNeural",
+        input: "测试并发参数",
+        concurrency: 100,
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    const parsed = ApiErrorSchema.parse(response.json());
+    expect(parsed.error.code).toBe("INVALID_REQUEST");
+    expect(fakeService.synthesizeCalls).toBe(0);
+  });
+
   it("verifies health and voices regressions are unaffected", async () => {
     const fakeService = new FakeSpeechTtsService();
     app = createApp({ ttsService: fakeService });
@@ -646,5 +697,104 @@ describe("Deterministic Streaming & Disconnect Integration Tests (localhost)", (
 
     // Clean up generator
     unblockGenerator();
+  });
+
+  it("releases concurrency permit when HTTP client disconnects so queued request can proceed", async () => {
+    class FakeIntegrationProvider implements TtsProvider {
+      public callOrder: string[] = [];
+      public blockedStreamResolver: () => void = () => {};
+
+      async listVoices(): Promise<readonly TtsVoice[]> {
+        return [];
+      }
+
+      async synthesize(request: SynthesisRequest): Promise<SynthesisResult> {
+        this.callOrder.push(request.text);
+        if (request.text === "reqA") {
+          const promise = new Promise<void>((resolve) => {
+            this.blockedStreamResolver = resolve;
+          });
+          return {
+            format: "mp3-48k",
+            contentType: "audio/mpeg",
+            audio: (async function* () {
+              yield new Uint8Array([1, 2]);
+              await promise;
+              yield new Uint8Array([3, 4]);
+            })(),
+          };
+        }
+
+        return {
+          format: "mp3-48k",
+          contentType: "audio/mpeg",
+          audio: (async function* () {
+            yield new Uint8Array([5, 6]);
+          })(),
+        };
+      }
+    }
+
+    const provider = new FakeIntegrationProvider();
+    const service = new TtsService(provider, {
+      maxConcurrentSyntheses: 1,
+      maxQueuedSyntheses: 5,
+    });
+
+    app = createApp({ ttsService: service });
+    await app.listen({ host: "127.0.0.1", port: 0 });
+    const address = app.addresses()[0]!;
+    const baseUrl = `http://127.0.0.1:${address.port}`;
+
+    const clientAController = new AbortController();
+
+    // Start request A
+    const resA = await fetch(`${baseUrl}/v1/audio/speech`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        model: "tts-1",
+        voice: "zh-CN-XiaoxiaoNeural",
+        input: "reqA",
+      }),
+      signal: clientAController.signal,
+    });
+
+    expect(resA.status).toBe(200);
+    const readerA = resA.body!.getReader();
+    const chunkA = await readerA.read();
+    expect(chunkA.done).toBe(false);
+    expect(provider.callOrder).toEqual(["reqA"]);
+
+    // Start request B (queued in service because reqA holds slot)
+    const resBPromise = fetch(`${baseUrl}/v1/audio/speech`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        model: "tts-1",
+        voice: "zh-CN-XiaoxiaoNeural",
+        input: "reqB",
+      }),
+    });
+
+    // Verify reqB not yet dispatched
+    await new Promise((r) => setTimeout(r, 20));
+    expect(provider.callOrder).toEqual(["reqA"]);
+
+    // Client A aborts
+    clientAController.abort();
+    await readerA.cancel().catch(() => {});
+
+    // Request B should now acquire slot and be dispatched
+    const resB = await resBPromise;
+    expect(resB.status).toBe(200);
+    expect(provider.callOrder).toEqual(["reqA", "reqB"]);
+
+    const readerB = resB.body!.getReader();
+    const chunkB = await readerB.read();
+    expect(chunkB.done).toBe(false);
+    expect(chunkB.value).toEqual(new Uint8Array([5, 6]));
+
+    provider.blockedStreamResolver();
   });
 });

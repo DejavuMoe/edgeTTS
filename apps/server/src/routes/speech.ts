@@ -2,6 +2,7 @@ import { Readable } from "node:stream";
 import type { FastifyPluginAsync } from "fastify";
 import { type ApiError, SpeechRequestSchema } from "@edgetts/shared";
 import type { SynthesisRequest, TtsAudioFormat } from "@edgetts/tts-core";
+import { SynthesisQueueFullError } from "@edgetts/tts-service";
 import type { TtsServicePort } from "../dependencies.js";
 
 function mapSpeechModelToFormat(model: "tts-1" | "tts-1-hd"): TtsAudioFormat {
@@ -81,6 +82,29 @@ export function createSpeechRoutes(ttsService: TtsServicePort): FastifyPluginAsy
           .send(audioStream);
       } catch (error) {
         cleanup();
+
+        if (error instanceof SynthesisQueueFullError) {
+          request.log.warn(
+            { model: validatedBody.model, voice: validatedBody.voice },
+            "Speech synthesis capacity full",
+          );
+          const errorPayload: ApiError = {
+            error: {
+              code: "SERVER_BUSY",
+              message: "Speech synthesis capacity is full",
+            },
+          };
+          return reply.code(503).type("application/json").send(errorPayload);
+        }
+
+        if (
+          controller.signal.aborted ||
+          (error instanceof Error && error.name === "AbortError") ||
+          reply.raw.destroyed
+        ) {
+          return;
+        }
+
         request.log.error(
           { err: error, model: validatedBody.model, voice: validatedBody.voice },
           "Pre-stream speech synthesis failed",

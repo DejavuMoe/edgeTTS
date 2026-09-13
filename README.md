@@ -11,7 +11,15 @@ Self-hosted Edge TTS Web application and API skeleton.
 - `packages/shared`: Shared TypeScript types and Zod schemas (`@edgetts/shared`).
 - `packages/tts-core`: Provider-neutral TTS domain contracts (`@edgetts/tts-core`), defining synthesis controls: `speed` (0.5–2.0), `pitchSemitones` (-12–12), and `volume` (0–1).
 - `packages/edge-provider`: Microsoft Edge Read Aloud adapter (`@edgetts/edge-provider`), mapping domain prosody controls to `msedge-tts`.
-- `packages/tts-service`: Provider-independent application service (`@edgetts/tts-service`), providing cached voice discovery, configurable in-memory voice TTL, concurrent voice-fetch de-duplication, and provider-neutral synthesis delegation.
+- `packages/tts-service`: Provider-independent application service (`@edgetts/tts-service`), providing cached voice discovery, configurable in-memory voice TTL, concurrent voice-fetch de-duplication, bounded FIFO synthesis concurrency limiting (4 active, 16 queued), and provider-neutral synthesis delegation.
+
+## Synthesis Concurrency
+
+- Concurrency limit: 4 active synthesis streams per `TtsService` instance.
+- Waiting queue: up to 16 queued synthesis requests in strict FIFO order.
+- Queued cancellation: client disconnect cancels queued requests and frees queue capacity immediately.
+- Capacity exhaustion: excess requests when capacity is full receive `HTTP 503 SERVER_BUSY`.
+- Scope: per-instance in-memory limiter; values are currently fixed defaults and are not environment-configurable yet.
 
 ## API Endpoints
 
