@@ -571,6 +571,44 @@ describe("EdgeTTS Web Workbench", () => {
       const alert = await screen.findByRole("alert");
       expect(alert.textContent).toBe("语音服务暂时不可用");
     });
+
+    it("exits generating state and displays stable error message when playback stream fails", async () => {
+      const user = userEvent.setup();
+      fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+        const url = typeof input === "string" ? input : input.toString();
+        if (url === "/api/health") return new Response(JSON.stringify({ status: "ok" }));
+        if (url === "/api/voices") return new Response(JSON.stringify({ voices: mockVoices }));
+        if (url === "/api/speech") {
+          const failingStream = new ReadableStream({
+            start(controller) {
+              controller.error(new Error("Audio stream read failure"));
+            },
+          });
+          return new Response(failingStream, {
+            status: 200,
+            headers: { "Content-Type": "audio/mpeg" },
+          });
+        }
+        return new Response(null, { status: 404 });
+      });
+
+      render(<App />);
+      await screen.findByLabelText(/选择声音/i);
+      const textarea = screen.getByLabelText(/文本内容/i);
+      await user.type(textarea, "Playback error test");
+
+      await user.click(screen.getByRole("button", { name: /合成语音/i }));
+
+      // Alert displays friendly message
+      const alert = await screen.findByRole("alert");
+      expect(alert.textContent).toBe("语音服务暂时不可用");
+
+      // Generating state cleared: Cancel button disappears, Generate button re-enabled
+      expect(screen.queryByRole("button", { name: /取消/i })).toBeNull();
+      const generateBtn = screen.getByRole("button", { name: /合成语音/i }) as HTMLButtonElement;
+      expect(generateBtn.disabled).toBe(false);
+      expect(generateBtn.textContent).not.toContain("正在合成");
+    });
   });
 
   describe("Result replacement & single player guarantee", () => {
