@@ -4,6 +4,9 @@
   "private": true,
   "type": "module",
   "main": "./dist/server.js",
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build": "tsc -p tsconfig.json",

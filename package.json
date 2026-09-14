@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "packageManager": "pnpm@12.3.4",
   "scripts": {
     "dev": "concurrently --kill-others-on-fail -n \"server,web\" \"pnpm --filter @edgetts/server dev\" \"pnpm --filter @edgetts/web dev\"",
     "build": "pnpm -r build",

@@ -240,6 +240,73 @@ If your deployment is already protected by an external reverse proxy authenticat
 > [!NOTE]
 > API key authentication provides access control but does not perform rate limiting or per-user quota management. Rate limiting remains intentionally deferred.
 
+## Docker
+
+edgeTTS provides a hardened, multi-stage production Docker image running as a non-root user with a minimal Node 24 runtime, built-in healthcheck, and read-only container filesystem support.
+
+### Build Image
+
+```bash
+docker build -t edgetts:local .
+```
+
+### Run Directly
+
+Without authentication (for environments protected by external network policies or upstream reverse proxies):
+
+```bash
+docker run -d \
+  --name edgetts \
+  --read-only \
+  --cap-drop=ALL \
+  --security-opt=no-new-privileges \
+  --tmpfs /tmp \
+  -p 127.0.0.1:8080:8080 \
+  edgetts:local
+```
+
+With optional API key authentication:
+
+```bash
+docker run -d \
+  --name edgetts \
+  --read-only \
+  --cap-drop=ALL \
+  --security-opt=no-new-privileges \
+  --tmpfs /tmp \
+  -e API_KEY='replace-with-a-random-secret' \
+  -p 127.0.0.1:8080:8080 \
+  edgetts:local
+```
+
+### Docker Compose
+
+1. Copy the example environment file:
+   ```bash
+   cp .env.example .env
+   ```
+2. Edit `.env` to configure your API key (uncomment `API_KEY` if application-level authentication is desired).
+3. Start the service:
+   ```bash
+   docker compose up -d --build
+   ```
+4. Check status and logs:
+   ```bash
+   docker compose ps
+   docker compose logs -f edgetts
+   ```
+5. Stop the service:
+   ```bash
+   docker compose down
+   ```
+
+### Security & Deployment Notes
+
+- **Port Binding**: Compose defaults to `127.0.0.1:8080` (loopback only) so that traffic is routed through a reverse proxy (such as Nginx, Caddy, or Cloudflare Tunnel). If you change `EDGETTS_BIND_ADDRESS` to `0.0.0.0`, the port will be exposed directly to all public network interfaces.
+- **Unauthenticated Default**: If `API_KEY` is unset or commented out, application endpoints operate in unauthenticated mode.
+- **TLS Termination**: Production TLS / SSL certificates and HTTPS termination should be handled outside this container by your reverse proxy or tunnel.
+- **Container Environment**: The container environment is configured with `NODE_ENV=production`, `HOST=0.0.0.0`, `PORT=8080`, and `WEB_DIST_DIR=/app/web-dist`. Users configure `API_KEY`, `EDGETTS_BIND_ADDRESS`, and `EDGETTS_HOST_PORT` in `.env`. Do not change the container internal `HOST` to `127.0.0.1`, or external container traffic will not be reachable.
+
 ## Validation
 
 Run full workspace validation:
