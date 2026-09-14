@@ -33,6 +33,7 @@ Self-hosted Microsoft Edge TTS Web application and streaming speech synthesis AP
   - Voice discovery with locale partition filtering, search across voice name, ID, locale, and gender, favorite voice toggling, favorites-first grouping, and selected voice stability.
   - Workbench supports local UTF-8 .txt import without uploading or persisting document contents.
   - Ctrl/Cmd+Enter synthesizes from the editor; Escape cancels an active synthesis.
+  - Workbench displays real-time request and streaming telemetry with actual received audio size without misleading percentages or ETA.
 - **Production Single-Origin Web Hosting**:
   - Fastify hosts built frontend assets (`apps/web/dist`) and API endpoints under a single port/domain.
   - Immutable long-term caching for hashed assets (`/assets/*`).
@@ -80,7 +81,7 @@ curl \
 
 ### `POST /api/speech`
 
-Native segmented long-text speech API returning streaming MP3 audio.
+Native segmented long-text speech API returning streaming MP3 audio. Successful responses return headers including `X-EdgeTTS-Segment-Count` and `X-EdgeTTS-Segment-Max-Code-Points` providing deterministic segment plan metadata.
 
 **Supported options:**
 

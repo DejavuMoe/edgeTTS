@@ -3,6 +3,7 @@ import type { FastifyInstance } from "fastify";
 import type { SynthesisRequest, SynthesisResult, TtsProvider, TtsVoice } from "@edgetts/tts-core";
 import { ApiErrorSchema } from "@edgetts/shared";
 import {
+  segmentText,
   SynthesisQueueFullError,
   TtsService,
   type SegmentedSynthesisOptions,
@@ -1173,5 +1174,131 @@ describe("POST /api/speech", () => {
     expect(res4097.statusCode).toBe(400);
     const errorJson = JSON.parse(res4097.payload);
     expect(errorJson.error.code).toBe("INVALID_REQUEST");
+  });
+
+  describe("Phase 24: Long-Text Synthesis Status & Streaming Telemetry Headers", () => {
+    it("returns segment-count 1 and segment-max 300 for short native input", async () => {
+      const fakeService = new FakeSpeechTtsService();
+      app = createApp({ ttsService: fakeService });
+
+      const res = await app.inject({
+        method: "POST",
+        url: "/api/speech",
+        headers: { "content-type": "application/json" },
+        payload: {
+          voice: "zh-CN-XiaoxiaoNeural",
+          input: "短文本测试。",
+        },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.headers["content-type"]).toBe("audio/mpeg");
+      expect(res.headers["cache-control"]).toBe("no-store");
+      expect(res.headers["x-edgetts-segment-count"]).toBe("1");
+      expect(res.headers["x-edgetts-segment-max-code-points"]).toBe("300");
+      expect(fakeService.synthesizeSegmentedCalls).toBe(1);
+    });
+
+    it("returns segment-count matching real segmentText algorithm for long native input", async () => {
+      const fakeService = new FakeSpeechTtsService();
+      app = createApp({ ttsService: fakeService });
+
+      // Generate a long text with multiple paragraphs exceeding 300 code points
+      const paragraph = "这是第一段很长的测试文本，用于验证长文本分段规划响应头信息。".repeat(10);
+      const longInput = `${paragraph}\n\n${paragraph}\n\n${paragraph}`;
+
+      const realSegments = segmentText(longInput, { maxCodePoints: 300 });
+      expect(realSegments.length).toBeGreaterThan(1);
+
+      const res = await app.inject({
+        method: "POST",
+        url: "/api/speech",
+        headers: { "content-type": "application/json" },
+        payload: {
+          voice: "zh-CN-XiaoxiaoNeural",
+          input: longInput,
+        },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.headers["x-edgetts-segment-count"]).toBe(String(realSegments.length));
+      expect(res.headers["x-edgetts-segment-max-code-points"]).toBe("300");
+      expect(fakeService.synthesizeSegmentedCalls).toBe(1);
+    });
+
+    it("verifies telemetry headers are decimal integer strings with no input text leakage", async () => {
+      const fakeService = new FakeSpeechTtsService();
+      app = createApp({ ttsService: fakeService });
+
+      const secretText = "SuperSecretConfidentialInputDataThatMustNeverLeakIntoHeaders";
+      const res = await app.inject({
+        method: "POST",
+        url: "/api/speech",
+        headers: { "content-type": "application/json" },
+        payload: {
+          voice: "zh-CN-XiaoxiaoNeural",
+          input: secretText,
+        },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const segmentCountHeader = res.headers["x-edgetts-segment-count"];
+      const maxCodePointsHeader = res.headers["x-edgetts-segment-max-code-points"];
+
+      expect(typeof segmentCountHeader).toBe("string");
+      expect(typeof maxCodePointsHeader).toBe("string");
+      expect(/^[1-9]\d*$/.test(segmentCountHeader as string)).toBe(true);
+      expect(/^[1-9]\d*$/.test(maxCodePointsHeader as string)).toBe(true);
+
+      // Verify no input text leaks into any response header
+      for (const headerValue of Object.values(res.headers)) {
+        if (typeof headerValue === "string") {
+          expect(headerValue.includes(secretText)).toBe(false);
+          expect(headerValue.includes("SuperSecret")).toBe(false);
+        }
+      }
+    });
+
+    it("does not expose native segment telemetry headers on OpenAI /v1/audio/speech", async () => {
+      const fakeService = new FakeSpeechTtsService();
+      app = createApp({ ttsService: fakeService });
+
+      const res = await app.inject({
+        method: "POST",
+        url: "/v1/audio/speech",
+        headers: { "content-type": "application/json" },
+        payload: {
+          model: "tts-1",
+          voice: "zh-CN-XiaoxiaoNeural",
+          input: "OpenAI contract verification.",
+        },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.headers["content-type"]).toBe("audio/mpeg");
+      expect(res.headers["cache-control"]).toBe("no-store");
+      expect(res.headers["x-edgetts-segment-count"]).toBeUndefined();
+      expect(res.headers["x-edgetts-segment-max-code-points"]).toBeUndefined();
+    });
+
+    it("does not attach segment headers on 400 invalid native speech requests", async () => {
+      const fakeService = new FakeSpeechTtsService();
+      app = createApp({ ttsService: fakeService });
+
+      const res = await app.inject({
+        method: "POST",
+        url: "/api/speech",
+        headers: { "content-type": "application/json" },
+        payload: {
+          voice: "", // Invalid empty voice
+          input: "Hello",
+        },
+      });
+
+      expect(res.statusCode).toBe(400);
+      expect(fakeService.synthesizeSegmentedCalls).toBe(0);
+      expect(res.headers["x-edgetts-segment-count"]).toBeUndefined();
+      expect(res.headers["x-edgetts-segment-max-code-points"]).toBeUndefined();
+    });
   });
 });
