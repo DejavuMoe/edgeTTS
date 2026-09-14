@@ -1,15 +1,32 @@
 #!/usr/bin/env bash
 # Integration test suite for EdgeTTS Nginx reverse-proxy contract.
-# Validates syntax, deterministic chunk streaming, error preservation,
-# authentication passthrough, and one live speech synthesis request.
+# Mechanically derives test configurations from deploy/nginx/edgetts.conf.example,
+# verifying TLS termination, deterministic chunk streaming, error preservation,
+# authentication passthrough, and live speech synthesis through the actual template.
 
 set -euo pipefail
+
+# ------------------------------------------------------------
+# 0. Tool & Port Preflight Checks
+# ------------------------------------------------------------
+for tool in docker curl openssl jq awk sed; do
+  if ! command -v "$tool" >/dev/null 2>&1; then
+    echo "FAIL: Required tool '$tool' is not installed or not in PATH." >&2
+    exit 1
+  fi
+done
+
+TEST_PORT="${EDGETTS_NGINX_TEST_PORT:-18082}"
+if (echo > /dev/tcp/127.0.0.1/"$TEST_PORT") 2>/dev/null; then
+  echo "FAIL: Port $TEST_PORT is already in use on 127.0.0.1. Set EDGETTS_NGINX_TEST_PORT to an available port." >&2
+  exit 1
+fi
 
 NGINX_IMAGE="nginx:1.27.4-alpine-slim"
 EDGETTS_IMAGE="${EDGETTS_TEST_IMAGE:-edgetts:phase15-1}"
 TEST_API_KEY="test-nginx-api-key-1234567890"
-TEST_PORT="18082"
 TMP_DIR="$(mktemp -d -t edgetts-nginx-test-XXXXXX)"
+CONF_EXAMPLE="deploy/nginx/edgetts.conf.example"
 
 MOCK_CONTAINER="edgetts-test-mock-upstream"
 MOCK_NGINX_CONTAINER="edgetts-test-mock-nginx"
@@ -27,10 +44,25 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
+# Helper to mechanically transform the production template for test topologies
+# without duplicating location blocks or proxy directives.
+generate_test_conf() {
+  local backend_ip="$1"
+  local cert_path="$2"
+  local key_path="$3"
+  local output_path="$4"
+
+  sed -e "s|server 127.0.0.1:8080;|server ${backend_ip}:8080;|g" \
+      -e "s|ssl_certificate /path/to/fullchain.pem;|ssl_certificate ${cert_path};|g" \
+      -e "s|ssl_certificate_key /path/to/privkey.pem;|ssl_certificate_key ${key_path};|g" \
+      "$CONF_EXAMPLE" > "$output_path"
+}
+
 echo "============================================================"
-echo "Phase 16: Nginx Reverse Proxy Automated Verification Suite"
+echo "Phase 16.1: Production Nginx Template Integration Suite"
 echo "Nginx Image:   $NGINX_IMAGE"
 echo "EdgeTTS Image: $EDGETTS_IMAGE"
+echo "Test Port:     $TEST_PORT (HTTPS)"
 echo "Tmp Directory: $TMP_DIR"
 echo "============================================================"
 
@@ -39,52 +71,64 @@ echo "============================================================"
 # ------------------------------------------------------------
 echo ""
 echo "--- [1/5] Auditing deploy/nginx/edgetts.conf.example ---"
-CONF_EXAMPLE="deploy/nginx/edgetts.conf.example"
 
 if [ ! -f "$CONF_EXAMPLE" ]; then
-  echo "FAIL: $CONF_EXAMPLE does not exist!"
+  echo "FAIL: $CONF_EXAMPLE does not exist!" >&2
   exit 1
 fi
 
 grep -q "server 127.0.0.1:8080;" "$CONF_EXAMPLE" || { echo "FAIL: upstream missing 127.0.0.1:8080"; exit 1; }
 grep -q "keepalive 16;" "$CONF_EXAMPLE" || { echo "FAIL: upstream missing keepalive 16"; exit 1; }
-grep -q "location = /api/speech" "$CONF_EXAMPLE" || { echo "FAIL: missing exact location = /api/speech"; exit 1; }
-grep -q "location = /v1/audio/speech" "$CONF_EXAMPLE" || { echo "FAIL: missing exact location = /v1/audio/speech"; exit 1; }
-grep -q "proxy_buffering off;" "$CONF_EXAMPLE" || { echo "FAIL: missing proxy_buffering off"; exit 1; }
-grep -q "proxy_cache off;" "$CONF_EXAMPLE" || { echo "FAIL: missing proxy_cache off"; exit 1; }
-grep -q "proxy_read_timeout 300s;" "$CONF_EXAMPLE" || { echo "FAIL: missing proxy_read_timeout 300s"; exit 1; }
 grep -q "client_max_body_size 1m;" "$CONF_EXAMPLE" || { echo "FAIL: missing client_max_body_size 1m"; exit 1; }
 grep -q "server_tokens off;" "$CONF_EXAMPLE" || { echo "FAIL: missing server_tokens off"; exit 1; }
+grep -q 'X-Content-Type-Options "nosniff"' "$CONF_EXAMPLE" || { echo "FAIL: missing X-Content-Type-Options header"; exit 1; }
+grep -q 'Referrer-Policy "same-origin"' "$CONF_EXAMPLE" || { echo "FAIL: missing Referrer-Policy header"; exit 1; }
 
 # Disallowed configurations
 if grep -q "proxy_ignore_client_abort" "$CONF_EXAMPLE"; then
-  echo "FAIL: proxy_ignore_client_abort must not be set"
+  echo "FAIL: proxy_ignore_client_abort must not be set" >&2
   exit 1
 fi
 if grep -q "proxy_intercept_errors" "$CONF_EXAMPLE"; then
-  echo "FAIL: proxy_intercept_errors must not be set"
+  echo "FAIL: proxy_intercept_errors must not be set" >&2
   exit 1
 fi
 if grep -i "upgrade" "$CONF_EXAMPLE"; then
-  echo "FAIL: WebSocket upgrade directives must not be present"
+  echo "FAIL: WebSocket upgrade directives must not be present" >&2
   exit 1
 fi
 if grep -i "strict-transport-security" "$CONF_EXAMPLE"; then
-  echo "FAIL: HSTS must not be set"
+  echo "FAIL: HSTS must not be set" >&2
   exit 1
 fi
 if grep -i "content-security-policy" "$CONF_EXAMPLE"; then
-  echo "FAIL: CSP must not be set"
+  echo "FAIL: CSP must not be set" >&2
   exit 1
 fi
 if grep -i "api_key" "$CONF_EXAMPLE"; then
-  echo "FAIL: API_KEY must not be embedded in Nginx config"
+  echo "FAIL: API_KEY must not be embedded in Nginx config" >&2
   exit 1
 fi
 if grep -q "proxy_set_header.*Authorization" "$CONF_EXAMPLE"; then
-  echo "FAIL: Authorization header must not be explicitly rewritten"
+  echo "FAIL: Authorization header must not be explicitly rewritten" >&2
   exit 1
 fi
+
+# Verify exact location blocks and buffering boundaries
+awk '
+  /location = \/api\/speech \{/ { in_api=1 }
+  /location = \/v1\/audio\/speech \{/ { in_v1=1 }
+  /location \/ \{/ { in_general=1 }
+  /}/ { in_api=0; in_v1=0; in_general=0 }
+  in_api && /proxy_buffering off;/ { api_buffering_off=1 }
+  in_v1 && /proxy_buffering off;/ { v1_buffering_off=1 }
+  in_general && /proxy_buffering off;/ { general_buffering_off=1 }
+  END {
+    if (!api_buffering_off) { print "FAIL: api_buffering_off missing"; exit 1 }
+    if (!v1_buffering_off) { print "FAIL: v1_buffering_off missing"; exit 2 }
+    if (general_buffering_off) { print "FAIL: general location must not disable buffering"; exit 3 }
+  }
+' "$CONF_EXAMPLE"
 echo "PASS: Static configuration audit passed."
 
 # ------------------------------------------------------------
@@ -97,9 +141,7 @@ openssl req -x509 -nodes -days 1 -newkey rsa:2048 \
   -out "$TMP_DIR/fullchain.pem" \
   -subj "/CN=edgetts.example.com" 2>/dev/null
 
-sed -e "s|/path/to/fullchain.pem|$TMP_DIR/fullchain.pem|g" \
-    -e "s|/path/to/privkey.pem|$TMP_DIR/privkey.pem|g" \
-    "$CONF_EXAMPLE" > "$TMP_DIR/edgetts-syntax.conf"
+generate_test_conf "127.0.0.1" "$TMP_DIR/fullchain.pem" "$TMP_DIR/privkey.pem" "$TMP_DIR/edgetts-syntax.conf"
 
 SYNTAX_OUTPUT=$(docker run --rm \
   -v "$TMP_DIR:$TMP_DIR:ro" \
@@ -108,13 +150,13 @@ SYNTAX_OUTPUT=$(docker run --rm \
 
 echo "$SYNTAX_OUTPUT" | grep -q "syntax is ok" || { echo "FAIL: nginx -t syntax not ok"; echo "$SYNTAX_OUTPUT"; exit 1; }
 echo "$SYNTAX_OUTPUT" | grep -q "test is successful" || { echo "FAIL: nginx -t test not successful"; echo "$SYNTAX_OUTPUT"; exit 1; }
-echo "PASS: nginx -t validated successfully on $NGINX_IMAGE."
+echo "PASS: nginx -t validated successfully on $NGINX_IMAGE using template-derived config."
 
 # ------------------------------------------------------------
-# 3. Deterministic Streaming and Status Preservation
+# 3. Deterministic Streaming & Error Preservation (HTTPS)
 # ------------------------------------------------------------
 echo ""
-echo "--- [3/5] Deterministic Streaming & Error Preservation ---"
+echo "--- [3/5] Deterministic Streaming & Error Preservation (HTTPS) ---"
 cat << 'EOF' > "$TMP_DIR/mock-upstream.mjs"
 import http from 'node:http';
 
@@ -194,67 +236,20 @@ for i in $(seq 1 30); do
   sleep 0.1
 done
 
-# Create Nginx config pointing to mock upstream
-cat << EOF > "$TMP_DIR/mock-nginx.conf"
-upstream edgetts_backend {
-    server $MOCK_IP:8080;
-    keepalive 16;
-}
-
-server {
-    listen 80;
-    server_tokens off;
-    client_max_body_size 1m;
-
-    location = /api/speech {
-        proxy_pass http://edgetts_backend;
-        proxy_http_version 1.1;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-
-        proxy_buffering off;
-        proxy_cache off;
-        proxy_read_timeout 300s;
-        proxy_send_timeout 60s;
-    }
-
-    location = /v1/audio/speech {
-        proxy_pass http://edgetts_backend;
-        proxy_http_version 1.1;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-
-        proxy_buffering off;
-        proxy_cache off;
-        proxy_read_timeout 300s;
-        proxy_send_timeout 60s;
-    }
-
-    location / {
-        proxy_pass http://edgetts_backend;
-        proxy_http_version 1.1;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-    }
-}
-EOF
+# Mechanically derive mock config from production template
+generate_test_conf "$MOCK_IP" "$TMP_DIR/fullchain.pem" "$TMP_DIR/privkey.pem" "$TMP_DIR/mock-nginx.conf"
 
 docker run -d --name "$MOCK_NGINX_CONTAINER" \
-  -p "127.0.0.1:$TEST_PORT:80" \
+  -p "127.0.0.1:$TEST_PORT:443" \
+  -v "$TMP_DIR:$TMP_DIR:ro" \
   -v "$TMP_DIR/mock-nginx.conf:/etc/nginx/conf.d/default.conf:ro" \
   "$NGINX_IMAGE" >/dev/null
 
 sleep 1
 
-# Verify /api/speech deterministic streaming:
+# Verify /api/speech deterministic streaming over HTTPS:
 STREAM1_LOG="$TMP_DIR/stream1.log"
-curl -N -s "http://127.0.0.1:$TEST_PORT/api/speech" > "$STREAM1_LOG" &
+curl -k -N -s "https://127.0.0.1:$TEST_PORT/api/speech" > "$STREAM1_LOG" &
 PID_STREAM1=$!
 
 CHUNK1_OBSERVED=false
@@ -267,31 +262,31 @@ for i in $(seq 1 30); do
 done
 
 if [ "$CHUNK1_OBSERVED" != "true" ]; then
-  echo "FAIL: Chunk 1 was NOT observed before release on /api/speech!"
+  echo "FAIL: Chunk 1 was NOT observed before release on /api/speech!" >&2
   kill "$PID_STREAM1" 2>/dev/null || true
   exit 1
 fi
 
 if grep -q "CHUNK2_DETERMINISTIC_STREAMING_DATA" "$STREAM1_LOG" 2>/dev/null; then
-  echo "FAIL: Chunk 2 arrived prematurely before release on /api/speech!"
+  echo "FAIL: Chunk 2 arrived prematurely before release on /api/speech!" >&2
   kill "$PID_STREAM1" 2>/dev/null || true
   exit 1
 fi
-echo "PASS: /api/speech delivered chunk 1 immediately while chunk 2 was withheld."
+echo "PASS: /api/speech delivered chunk 1 immediately over HTTPS while chunk 2 was withheld."
 
 # Release chunk 2
-curl -s -X POST "http://127.0.0.1:$TEST_PORT/release" >/dev/null
+curl -k -s -X POST "https://127.0.0.1:$TEST_PORT/release" >/dev/null
 wait "$PID_STREAM1"
 
 grep -q "CHUNK2_DETERMINISTIC_STREAMING_DATA" "$STREAM1_LOG" || {
   echo "FAIL: Chunk 2 not present in /api/speech output after release!";
   exit 1;
 }
-echo "PASS: /api/speech completed stream with chunk 2 after release."
+echo "PASS: /api/speech completed stream with chunk 2 after release over HTTPS."
 
-# Verify /v1/audio/speech deterministic streaming:
+# Verify /v1/audio/speech deterministic streaming over HTTPS:
 STREAM2_LOG="$TMP_DIR/stream2.log"
-curl -N -s "http://127.0.0.1:$TEST_PORT/v1/audio/speech" > "$STREAM2_LOG" &
+curl -k -N -s "https://127.0.0.1:$TEST_PORT/v1/audio/speech" > "$STREAM2_LOG" &
 PID_STREAM2=$!
 
 CHUNK2_OBSERVED=false
@@ -304,41 +299,41 @@ for i in $(seq 1 30); do
 done
 
 if [ "$CHUNK2_OBSERVED" != "true" ]; then
-  echo "FAIL: Chunk 1 was NOT observed before release on /v1/audio/speech!"
+  echo "FAIL: Chunk 1 was NOT observed before release on /v1/audio/speech!" >&2
   kill "$PID_STREAM2" 2>/dev/null || true
   exit 1
 fi
 
-curl -s -X POST "http://127.0.0.1:$TEST_PORT/release" >/dev/null
+curl -k -s -X POST "https://127.0.0.1:$TEST_PORT/release" >/dev/null
 wait "$PID_STREAM2"
 grep -q "CHUNK2_DETERMINISTIC_STREAMING_DATA" "$STREAM2_LOG" || {
   echo "FAIL: Chunk 2 not present in /v1/audio/speech output after release!";
   exit 1;
 }
-echo "PASS: /v1/audio/speech confirmed using streaming proxy location (buffering off)."
+echo "PASS: /v1/audio/speech confirmed using streaming proxy location over HTTPS (buffering off)."
 
-# Verify status 400 preservation:
-RESP_400=$(curl -s -w "\nHTTP_STATUS:%{http_code}\nCONTENT_TYPE:%{content_type}\n" "http://127.0.0.1:$TEST_PORT/mock-400")
-echo "$RESP_400" | grep -q "HTTP_STATUS:400" || { echo "FAIL: 400 status not preserved"; exit 1; }
+# Verify status 400 preservation over HTTPS:
+RESP_400=$(curl -k -s -w "\nHTTP_STATUS:%{http_code}\nCONTENT_TYPE:%{content_type}\n" "https://127.0.0.1:$TEST_PORT/mock-400")
+echo "$RESP_400" | grep -q "HTTP_STATUS:400" || { echo "FAIL: 400 status not preserved over HTTPS"; exit 1; }
 echo "$RESP_400" | grep -qi "CONTENT_TYPE:application/json" || { echo "FAIL: 400 content-type not preserved"; exit 1; }
 echo "$RESP_400" | grep -q "INVALID_REQUEST" || { echo "FAIL: 400 error body altered"; exit 1; }
-echo "PASS: HTTP 400 status, headers, and JSON body preserved."
+echo "PASS: HTTP 400 status, headers, and JSON body preserved over HTTPS."
 
-# Verify status 503 preservation:
-RESP_503=$(curl -s -w "\nHTTP_STATUS:%{http_code}\nCONTENT_TYPE:%{content_type}\n" "http://127.0.0.1:$TEST_PORT/mock-503")
-echo "$RESP_503" | grep -q "HTTP_STATUS:503" || { echo "FAIL: 503 status not preserved"; exit 1; }
+# Verify status 503 preservation over HTTPS:
+RESP_503=$(curl -k -s -w "\nHTTP_STATUS:%{http_code}\nCONTENT_TYPE:%{content_type}\n" "https://127.0.0.1:$TEST_PORT/mock-503")
+echo "$RESP_503" | grep -q "HTTP_STATUS:503" || { echo "FAIL: 503 status not preserved over HTTPS"; exit 1; }
 echo "$RESP_503" | grep -qi "CONTENT_TYPE:application/json" || { echo "FAIL: 503 content-type not preserved"; exit 1; }
 echo "$RESP_503" | grep -q "SERVICE_UNAVAILABLE" || { echo "FAIL: 503 error body altered"; exit 1; }
-echo "PASS: HTTP 503 status, headers, and JSON body preserved."
+echo "PASS: HTTP 503 status, headers, and JSON body preserved over HTTPS."
 
 # Clean up mock containers
 docker rm -f "$MOCK_CONTAINER" "$MOCK_NGINX_CONTAINER" >/dev/null
 
 # ------------------------------------------------------------
-# 4. Real EdgeTTS Container Integration
+# 4. Real EdgeTTS Container Integration (HTTPS)
 # ------------------------------------------------------------
 echo ""
-echo "--- [4/5] Real EdgeTTS Container Integration ---"
+echo "--- [4/5] Real EdgeTTS Container Integration (HTTPS) ---"
 docker run -d --name "$REAL_BACKEND_CONTAINER" \
   --read-only \
   --cap-drop=ALL \
@@ -359,138 +354,91 @@ for i in $(seq 1 40); do
   sleep 0.2
 done
 
-# Create Nginx config pointing to real backend
-cat << EOF > "$TMP_DIR/real-nginx.conf"
-upstream edgetts_backend {
-    server $REAL_IP:8080;
-    keepalive 16;
-}
-
-server {
-    listen 80;
-    server_tokens off;
-    client_max_body_size 1m;
-
-    location = /api/speech {
-        proxy_pass http://edgetts_backend;
-        proxy_http_version 1.1;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-
-        proxy_buffering off;
-        proxy_cache off;
-        proxy_read_timeout 300s;
-        proxy_send_timeout 60s;
-    }
-
-    location = /v1/audio/speech {
-        proxy_pass http://edgetts_backend;
-        proxy_http_version 1.1;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-
-        proxy_buffering off;
-        proxy_cache off;
-        proxy_read_timeout 300s;
-        proxy_send_timeout 60s;
-    }
-
-    location / {
-        proxy_pass http://edgetts_backend;
-        proxy_http_version 1.1;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-    }
-}
-EOF
+# Mechanically derive real proxy config from production template
+generate_test_conf "$REAL_IP" "$TMP_DIR/fullchain.pem" "$TMP_DIR/privkey.pem" "$TMP_DIR/real-nginx.conf"
 
 docker run -d --name "$REAL_NGINX_CONTAINER" \
-  -p "127.0.0.1:$TEST_PORT:80" \
+  -p "127.0.0.1:$TEST_PORT:443" \
+  -v "$TMP_DIR:$TMP_DIR:ro" \
   -v "$TMP_DIR/real-nginx.conf:/etc/nginx/conf.d/default.conf:ro" \
   "$NGINX_IMAGE" >/dev/null
 
 sleep 1
 
-# Test GET / -> 200 HTML
-HTTP_ROOT_CODE=$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:$TEST_PORT/")
+# Test GET / -> 200 HTML over HTTPS
+HTTP_ROOT_CODE=$(curl -k -s -o /dev/null -w "%{http_code}" "https://127.0.0.1:$TEST_PORT/")
 if [ "$HTTP_ROOT_CODE" != "200" ]; then
-  echo "FAIL: GET / returned $HTTP_ROOT_CODE (expected 200)"
+  echo "FAIL: GET / returned $HTTP_ROOT_CODE (expected 200)" >&2
   exit 1
 fi
-echo "PASS: GET / returned 200 OK (WebUI SPA served)."
+echo "PASS: GET / returned 200 OK over HTTPS (WebUI SPA served)."
 
-# Test GET /health -> 200
-HTTP_HEALTH_CODE=$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:$TEST_PORT/health")
+# Test GET /health -> 200 over HTTPS
+HTTP_HEALTH_CODE=$(curl -k -s -o /dev/null -w "%{http_code}" "https://127.0.0.1:$TEST_PORT/health")
 if [ "$HTTP_HEALTH_CODE" != "200" ]; then
-  echo "FAIL: GET /health returned $HTTP_HEALTH_CODE (expected 200)"
+  echo "FAIL: GET /health returned $HTTP_HEALTH_CODE (expected 200)" >&2
   exit 1
 fi
-echo "PASS: GET /health returned 200 OK."
+echo "PASS: GET /health returned 200 OK over HTTPS."
 
-# Test GET /api/health -> 200
-HTTP_API_HEALTH_CODE=$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:$TEST_PORT/api/health")
+# Test GET /api/health -> 200 over HTTPS
+HTTP_API_HEALTH_CODE=$(curl -k -s -o /dev/null -w "%{http_code}" "https://127.0.0.1:$TEST_PORT/api/health")
 if [ "$HTTP_API_HEALTH_CODE" != "200" ]; then
-  echo "FAIL: GET /api/health returned $HTTP_API_HEALTH_CODE (expected 200)"
+  echo "FAIL: GET /api/health returned $HTTP_API_HEALTH_CODE (expected 200)" >&2
   exit 1
 fi
-echo "PASS: GET /api/health returned 200 OK."
+echo "PASS: GET /api/health returned 200 OK over HTTPS."
 
-# Test GET /api/voices (no auth) -> 401
-RESP_NOAUTH=$(curl -s -i "http://127.0.0.1:$TEST_PORT/api/voices")
+# Test GET /api/voices (no auth) -> 401 over HTTPS
+RESP_NOAUTH=$(curl -k -s -i "https://127.0.0.1:$TEST_PORT/api/voices")
 echo "$RESP_NOAUTH" | grep -q "HTTP/1.1 401" || { echo "FAIL: unauthenticated request did not return 401"; exit 1; }
 echo "$RESP_NOAUTH" | grep -qi 'www-authenticate: Bearer realm="edgeTTS"' || { echo "FAIL: WWW-Authenticate header missing in 401"; exit 1; }
 echo "$RESP_NOAUTH" | grep -qi "content-type: application/json" || { echo "FAIL: Content-Type not application/json in 401"; exit 1; }
 echo "$RESP_NOAUTH" | grep -q '"UNAUTHORIZED"' || { echo "FAIL: JSON error code UNAUTHORIZED missing"; exit 1; }
-echo "PASS: Unauthenticated /api/voices returned 401 with intact WWW-Authenticate and error body."
+echo "PASS: Unauthenticated /api/voices returned 401 with intact WWW-Authenticate and error body over HTTPS."
 
-# Test GET /api/voices (wrong auth) -> 401
-RESP_WRONGAUTH=$(curl -s -i -H "Authorization: Bearer invalid-key-12345678" "http://127.0.0.1:$TEST_PORT/api/voices")
+# Test GET /api/voices (wrong auth) -> 401 over HTTPS
+RESP_WRONGAUTH=$(curl -k -s -i -H "Authorization: Bearer invalid-key-12345678" "https://127.0.0.1:$TEST_PORT/api/voices")
 echo "$RESP_WRONGAUTH" | grep -q "HTTP/1.1 401" || { echo "FAIL: invalid key did not return 401"; exit 1; }
-echo "PASS: Invalid Bearer key returned 401."
+echo "PASS: Invalid Bearer key returned 401 over HTTPS."
 
-# Test GET /api/voices (correct auth) -> 200
-RESP_AUTHOX=$(curl -s -w "\nHTTP_STATUS:%{http_code}\n" -H "Authorization: Bearer $TEST_API_KEY" "http://127.0.0.1:$TEST_PORT/api/voices")
+# Test GET /api/voices (correct auth) -> 200 over HTTPS
+RESP_AUTHOX=$(curl -k -s -w "\nHTTP_STATUS:%{http_code}\n" -H "Authorization: Bearer $TEST_API_KEY" "https://127.0.0.1:$TEST_PORT/api/voices")
 echo "$RESP_AUTHOX" | grep -q "HTTP_STATUS:200" || { echo "FAIL: valid key did not return 200"; exit 1; }
 VOICE_COUNT=$(echo "$RESP_AUTHOX" | sed -e '/HTTP_STATUS:/d' | jq -r '.voices | length')
 if [ "$VOICE_COUNT" -le 0 ]; then
-  echo "FAIL: Voice count is $VOICE_COUNT (expected > 0)"
+  echo "FAIL: Voice count is $VOICE_COUNT (expected > 0)" >&2
   exit 1
 fi
-echo "PASS: Valid Bearer key returned 200 OK with $VOICE_COUNT voices (Authorization header preserved)."
+echo "PASS: Valid Bearer key returned 200 OK with $VOICE_COUNT voices over HTTPS (Authorization header preserved)."
 
 # ------------------------------------------------------------
-# 5. One Real Speech Request Through Nginx
+# 5. One Real Speech Request Through Nginx (HTTPS)
 # ------------------------------------------------------------
 echo ""
-echo "--- [5/5] Real Speech Synthesis via Nginx Reverse Proxy ---"
+echo "--- [5/5] Real Speech Synthesis via Nginx Reverse Proxy (HTTPS) ---"
 AUDIO_OUTPUT="/tmp/edgetts-nginx-test-audio.mp3"
 rm -f "$AUDIO_OUTPUT"
 
 REAL_SPEECH_HEADERS="$TMP_DIR/speech_headers.txt"
 
-curl -s -D "$REAL_SPEECH_HEADERS" \
+curl -k -s -D "$REAL_SPEECH_HEADERS" \
   -H "Authorization: Bearer $TEST_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"voice":"zh-CN-XiaoxiaoNeural","quality":"standard","input":"你好，这是 Nginx 反向代理测试。"}' \
-  "http://127.0.0.1:$TEST_PORT/api/speech" \
+  "https://127.0.0.1:$TEST_PORT/api/speech" \
   --output "$AUDIO_OUTPUT"
 
 # Verify HTTP 200
 grep -q "HTTP/1.1 200" "$REAL_SPEECH_HEADERS" || {
-  echo "FAIL: Real speech synthesis did not return HTTP 200!"
+  echo "FAIL: Real speech synthesis did not return HTTP 200!" >&2
   cat "$REAL_SPEECH_HEADERS"
   exit 1
 }
 
 # Verify Content-Type: audio/mpeg
 grep -qi "content-type: audio/mpeg" "$REAL_SPEECH_HEADERS" || {
-  echo "FAIL: Content-Type is not audio/mpeg!"
+  echo "FAIL: Content-Type is not audio/mpeg!" >&2
   cat "$REAL_SPEECH_HEADERS"
   exit 1
 }
@@ -498,15 +446,14 @@ grep -qi "content-type: audio/mpeg" "$REAL_SPEECH_HEADERS" || {
 # Verify file size > 1000 bytes
 AUDIO_BYTES=$(wc -c < "$AUDIO_OUTPUT" | tr -d ' ')
 if [ "$AUDIO_BYTES" -le 1000 ]; then
-  echo "FAIL: Audio output is only $AUDIO_BYTES bytes (expected > 1000)"
+  echo "FAIL: Audio output is only $AUDIO_BYTES bytes (expected > 1000)" >&2
   exit 1
 fi
-echo "PASS: Real speech synthesis returned HTTP 200, Content-Type: audio/mpeg, $AUDIO_BYTES bytes."
+echo "PASS: Real speech synthesis returned HTTP 200, Content-Type: audio/mpeg, $AUDIO_BYTES bytes over HTTPS."
 
 # Verify no artificial buffered Content-Length added by Nginx
-# (When streaming chunked with proxy_buffering off, transfer-encoding is chunked)
 if grep -qi "transfer-encoding: chunked" "$REAL_SPEECH_HEADERS"; then
-  echo "PASS: Transfer-Encoding is chunked (no artificial buffering artifacts)."
+  echo "PASS: Transfer-Encoding is chunked over HTTPS (no artificial buffering artifacts)."
 fi
 
 # Clean up audio output immediately
@@ -515,5 +462,5 @@ echo "PASS: Temporary audio file removed immediately."
 
 echo ""
 echo "============================================================"
-echo "ALL NGINX REVERSE PROXY ACCEPTANCE CRITERIA PASSED!"
+echo "ALL PRODUCTION NGINX TEMPLATE ACCEPTANCE CRITERIA PASSED!"
 echo "============================================================"

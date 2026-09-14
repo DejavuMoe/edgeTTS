@@ -99,3 +99,32 @@ In `edgetts.conf.example`:
 - **No Hardcoded Keys**: The Nginx configuration does **not** define an `API_KEY` or `auth_basic`.
 - **Bearer Passthrough**: Nginx natively preserves incoming `Authorization: Bearer <token>` headers so EdgeTTS performs constant-time validation inside the application.
 - **Unmodified Error Responses**: `proxy_intercept_errors` is omitted so application error JSON bodies (400, 401, 502, 503) and the `WWW-Authenticate: Bearer realm="edgeTTS"` challenge header pass unaltered directly to clients.
+
+## Automated Integration Testing
+
+An automated verification script is provided in [`test-proxy.sh`](test-proxy.sh). It mechanically derives its test configurations directly from `edgetts.conf.example` without maintaining duplicate proxy definitions, spins up ephemeral Nginx and EdgeTTS containers in Docker, and validates:
+
+1. `nginx -t` configuration syntax using a pinned container (`nginx:1.27.4-alpine-slim`).
+2. Immediate first-chunk delivery on `/api/speech` and `/v1/audio/speech` with response buffering disabled over HTTPS.
+3. HTTP 400 and 503 error status code, header, and JSON body preservation.
+4. HTTPS TLS termination and client Bearer authentication passthrough.
+5. End-to-end real speech synthesis through the proxy.
+
+### Prerequisites
+
+The integration test script requires the following host tools:
+
+- `docker` (with permissions to run containers)
+- `curl` (for issuing HTTP/HTTPS test requests)
+- `openssl` (for generating ephemeral self-signed test certificates)
+- `jq` (for parsing JSON responses)
+
+### Running the Test Suite
+
+```bash
+# Run with local EdgeTTS image
+EDGETTS_TEST_IMAGE=edgetts:local ./deploy/nginx/test-proxy.sh
+
+# Optional: configure custom test port (default: 18082)
+EDGETTS_NGINX_TEST_PORT=18085 ./deploy/nginx/test-proxy.sh
+```
