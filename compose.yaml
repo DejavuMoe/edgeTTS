@@ -11,6 +11,9 @@ services:
       - PORT=8080
       - WEB_DIST_DIR=/app/web-dist
       - API_KEY
+      - REQUIRE_API_KEY=${REQUIRE_API_KEY:-true}
+      - SPEECH_RATE_LIMIT_MAX
+      - SPEECH_RATE_LIMIT_WINDOW_MS
     image: edgetts:local
     init: true
     ports:

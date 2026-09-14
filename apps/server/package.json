@@ -20,6 +20,7 @@
     "@edgetts/shared": "workspace:*",
     "@edgetts/tts-core": "workspace:*",
     "@edgetts/tts-service": "workspace:*",
+    "@fastify/rate-limit": "11.2.0",
     "@fastify/static": "10.1.3",
     "fastify": "^5.2.1",
     "zod": "^3.24.2"

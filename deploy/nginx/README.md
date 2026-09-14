@@ -118,6 +118,8 @@ The integration test script requires the following host tools:
 - `curl` (for issuing HTTP/HTTPS test requests)
 - `openssl` (for generating ephemeral self-signed test certificates)
 - `jq` (for parsing JSON responses)
+- `awk` (for static configuration auditing)
+- `sed` (for template transformation)
 
 ### Running the Test Suite
 

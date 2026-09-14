@@ -5,8 +5,14 @@ import { registerGracefulShutdown } from "./shutdown.js";
 const host = process.env["HOST"] ?? "127.0.0.1";
 const port = Number(process.env["PORT"] ?? "8080");
 
-const dependencies = createProductionDependencies();
-const app = createApp(dependencies);
+let app;
+try {
+  const dependencies = createProductionDependencies();
+  app = createApp(dependencies);
+} catch (error) {
+  console.error(error instanceof Error ? error.message : error);
+  process.exit(1);
+}
 
 registerGracefulShutdown(app);
 
