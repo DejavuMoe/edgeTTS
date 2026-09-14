@@ -291,9 +291,6 @@ jobs:
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@1f40c72289eff860ee54a304f1438e3cff362e0a # v4.3.0
-        with:
-          image: tonistiigi/binfmt:qemu-v7.0.0-28
-          platforms: arm64
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
@@ -424,15 +421,33 @@ jobs:
       - name: Verify multi-arch runtime execution and security posture
         run: |
           set -euo pipefail
-          DIGEST="${{ steps.build.outputs.digest }}"
+          IMAGE_TAG="ghcr.io/dejavumoe/edgetts:sha-${GITHUB_SHA}"
 
-          echo "Inspecting binfmt registrations:"
-          ls -la /proc/sys/fs/binfmt_misc/ || true
+          run_cmd() {
+            local desc="$1"
+            shift
+            echo ">>> RUNNING: $desc"
+            local out
+            set +e
+            out=$("$@" 2>&1)
+            local rc=$?
+            set -e
+            if [ $rc -ne 0 ]; then
+              echo "::error::$desc FAILED (rc=$rc): $out"
+              echo "$desc FAILED (rc=$rc):" >&2
+              echo "$out" >&2
+              exit $rc
+            fi
+            echo ">>> PASS: $desc"
+            if [ -n "$out" ]; then
+              echo "$out"
+            fi
+          }
 
           # 1. Test linux/amd64 runtime
-          echo "Testing linux/amd64 runtime from registry..."
-          docker pull --platform linux/amd64 "ghcr.io/dejavumoe/edgetts@${DIGEST}"
-          docker run --rm --platform linux/amd64 "ghcr.io/dejavumoe/edgetts@${DIGEST}" node -e '
+          run_cmd "Pull linux/amd64 image" docker pull --platform linux/amd64 "$IMAGE_TAG"
+
+          run_cmd "Verify linux/amd64 runtime" docker run --rm --platform linux/amd64 "$IMAGE_TAG" node -e '
             const fs = require("node:fs");
             console.log("AMD64 Process Arch:", process.arch);
             if (process.arch !== "x64") {
@@ -448,17 +463,18 @@ jobs:
               process.exit(1);
             }
           '
-          AMD64_UID=$(docker run --rm --platform linux/amd64 "ghcr.io/dejavumoe/edgetts@${DIGEST}" id -u)
+
+          AMD64_UID=$(docker run --rm --platform linux/amd64 "$IMAGE_TAG" id -u)
           if [ "$AMD64_UID" -eq 0 ]; then
-            echo "FAIL: linux/amd64 image runs as root (UID 0)" >&2
+            echo "::error::linux/amd64 image runs as root (UID 0)"
             exit 1
           fi
-          echo "PASS: linux/amd64 verified (x64, files present, UID $AMD64_UID non-root)."
+          echo "PASS: linux/amd64 UID is $AMD64_UID (non-root)."
 
           # 2. Test linux/arm64 runtime under QEMU
-          echo "Testing linux/arm64 runtime from registry under QEMU..."
-          docker pull --platform linux/arm64 "ghcr.io/dejavumoe/edgetts@${DIGEST}"
-          docker run --rm --platform linux/arm64 "ghcr.io/dejavumoe/edgetts@${DIGEST}" node -e '
+          run_cmd "Pull linux/arm64 image" docker pull --platform linux/arm64 "$IMAGE_TAG"
+
+          run_cmd "Verify linux/arm64 runtime under QEMU" docker run --rm --platform linux/arm64 "$IMAGE_TAG" node -e '
             const fs = require("node:fs");
             console.log("ARM64 Process Arch:", process.arch);
             if (process.arch !== "arm64") {
@@ -474,19 +490,19 @@ jobs:
               process.exit(1);
             }
           '
-          ARM64_UID=$(docker run --rm --platform linux/arm64 "ghcr.io/dejavumoe/edgetts@${DIGEST}" id -u)
+
+          ARM64_UID=$(docker run --rm --platform linux/arm64 "$IMAGE_TAG" id -u)
           if [ "$ARM64_UID" -eq 0 ]; then
-            echo "FAIL: linux/arm64 image runs as root (UID 0)" >&2
+            echo "::error::linux/arm64 image runs as root (UID 0)"
             exit 1
           fi
-          echo "PASS: linux/arm64 verified (arm64, files present, UID $ARM64_UID non-root)."
+          echo "PASS: linux/arm64 UID is $ARM64_UID (non-root)."
 
           # 3. Verify no secrets in published image config/env
-          echo "Auditing image environment for secrets..."
           for PLATFORM in linux/amd64 linux/arm64; do
-            IMAGE_ENV=$(docker run --rm --platform "$PLATFORM" "ghcr.io/dejavumoe/edgetts@${DIGEST}" env)
+            IMAGE_ENV=$(docker run --rm --platform "$PLATFORM" "$IMAGE_TAG" env)
             if echo "$IMAGE_ENV" | grep -Eqi 'API_KEY|GHCR|TOKEN'; then
-              echo "FAIL: Secret found in $PLATFORM image environment" >&2
+              echo "::error::Secret found in $PLATFORM image environment"
               exit 1
             fi
           done
