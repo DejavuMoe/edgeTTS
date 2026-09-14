@@ -309,6 +309,9 @@ jobs:
             org.opencontainers.image.source=https://github.com/DejavuMoe/edgeTTS
             org.opencontainers.image.revision=${{ github.sha }}
 
+      # Security by construction: github.token is used only by docker/login-action
+      # for ephemeral registry authentication. It is never passed to Dockerfile
+      # as an ARG, ENV, secret mount, or build input.
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
@@ -498,12 +501,54 @@ jobs:
           fi
           echo "PASS: linux/arm64 UID is $ARM64_UID (non-root)."
 
-          # 3. Verify no secrets in published image config/env
+          # 3. Audit image layer history for credential material
+          for PLATFORM in linux/amd64 linux/arm64; do
+            run_cmd "Pull $PLATFORM image for history inspection" docker pull --platform "$PLATFORM" "$IMAGE_TAG"
+            HISTORY_OUTPUT=$(docker history --no-trunc "$IMAGE_TAG")
+            if echo "$HISTORY_OUTPUT" | grep -Eqi 'GITHUB_TOKEN=|GHCR_TOKEN=|API_KEY=[^ $]|Authorization:[[:space:]]*Bearer|ghp_[A-Za-z0-9]|github_pat_[A-Za-z0-9]'; then
+              echo "::error::Credential pattern detected in $PLATFORM image history"
+              exit 1
+            fi
+            echo "PASS: $PLATFORM image history clean of credential material."
+          done
+
+          # 4. Audit runtime filesystem for prohibited credential/config artifacts
+          for PLATFORM in linux/amd64 linux/arm64; do
+            run_cmd "Audit $PLATFORM runtime filesystem boundary" docker run --rm --platform "$PLATFORM" "$IMAGE_TAG" node -e '
+              const fs = require("node:fs");
+              const prohibited = [
+                "/root/.docker/config.json",
+                "/home/node/.docker/config.json",
+                "/.docker/config.json",
+                "/root/.docker",
+                "/home/node/.docker",
+                "/.docker",
+                "/app/.env",
+                "/app/.env.local",
+                "/app/.env.production",
+                "/.env",
+                "/app/.git",
+                "/.git",
+                "/root/.npmrc",
+                "/home/node/.npmrc",
+                "/app/.npmrc"
+              ];
+              const found = prohibited.filter(p => fs.existsSync(p));
+              if (found.length > 0) {
+                console.error("Prohibited credential/config artifacts found:", found);
+                process.exit(1);
+              }
+            '
+            echo "PASS: $PLATFORM runtime filesystem boundary clean (no credential/config artifacts copied)."
+          done
+
+          # 5. Audit runtime container environment for secrets
           for PLATFORM in linux/amd64 linux/arm64; do
             IMAGE_ENV=$(docker run --rm --platform "$PLATFORM" "$IMAGE_TAG" env)
             if echo "$IMAGE_ENV" | grep -Eqi 'API_KEY|GHCR|TOKEN'; then
               echo "::error::Secret found in $PLATFORM image environment"
               exit 1
             fi
+            echo "PASS: $PLATFORM runtime environment clean."
           done
-          echo "PASS: No credentials or secrets present in image environments."
+          echo "PASS: All published image security and supply-chain audits succeeded."
