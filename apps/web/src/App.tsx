@@ -7,6 +7,18 @@ import {
 } from "@edgetts/shared";
 import { ApiHttpError, fetchHealth, fetchVoices, synthesizeSpeech } from "./api/client.js";
 import { StreamPlaybackController } from "./audio/stream-controller.js";
+import {
+  loadWorkbenchPreferences,
+  saveWorkbenchPreferences,
+  resolveEffectiveVoiceId,
+  type WorkbenchPreferencesV1,
+} from "./preferences.js";
+import {
+  createCompletedResultMeta,
+  formatResultMetadataDisplay,
+  type CompletedResultMeta,
+  type GenerationSnapshot,
+} from "./result-metadata.js";
 import "./App.css";
 
 type ApiStatus = "loading" | "healthy" | "unavailable";
@@ -17,14 +29,12 @@ export function isValidApiKeyFormat(key: string): boolean {
   return key.length >= MIN_API_KEY_LENGTH && !/\s/.test(key);
 }
 
-function selectDefaultVoice(voiceList: readonly VoiceDto[]): string {
-  const xiaoxiao = voiceList.find((v) => v.id === "zh-CN-XiaoxiaoNeural");
-  const anyZh = voiceList.find((v) => v.locale.toLowerCase().startsWith("zh-cn"));
-  const firstAvailable = voiceList[0];
-  return xiaoxiao?.id ?? anyZh?.id ?? firstAvailable?.id ?? "";
-}
-
 export function App() {
+  // Synchronous preference hydration on initial render
+  const [initialPreferences] = useState<WorkbenchPreferencesV1>(() => loadWorkbenchPreferences());
+  const savedVoiceIdRef = useRef<string>(initialPreferences.voiceId);
+  const isHydratedRef = useRef<boolean>(false);
+
   const [apiStatus, setApiStatus] = useState<ApiStatus>("loading");
   const [voices, setVoices] = useState<readonly VoiceDto[]>([]);
   const [selectedVoiceId, setSelectedVoiceId] = useState<string>("");
@@ -38,18 +48,19 @@ export function App() {
   const [authError, setAuthError] = useState<string | null>(null);
   const [isUnlocking, setIsUnlocking] = useState<boolean>(false);
 
-  // Form controls
+  // Form controls initialized from persisted preferences
   const [input, setInput] = useState<string>("");
-  const [quality, setQuality] = useState<"standard" | "high">("standard");
-  const [speed, setSpeed] = useState<number>(1.0);
-  const [pitchSemitones, setPitchSemitones] = useState<number>(0);
-  const [volume, setVolume] = useState<number>(1.0);
+  const [quality, setQuality] = useState<"standard" | "high">(initialPreferences.quality);
+  const [speed, setSpeed] = useState<number>(initialPreferences.speed);
+  const [pitchSemitones, setPitchSemitones] = useState<number>(initialPreferences.pitchSemitones);
+  const [volume, setVolume] = useState<number>(initialPreferences.volume);
 
   // Generation & Playback state
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const [generationError, setGenerationError] = useState<string | null>(null);
   const [audioSrc, setAudioSrc] = useState<string | null>(null);
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
+  const [completedResult, setCompletedResult] = useState<CompletedResultMeta | null>(null);
 
   const generationIdRef = useRef<number>(0);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -88,6 +99,42 @@ export function App() {
     );
   }, [voices, voiceSearch]);
 
+  // Parameters reset availability
+  const isAllParametersDefault =
+    quality === "standard" && speed === 1.0 && pitchSemitones === 0 && volume === 1.0;
+
+  const handleResetAllParameters = (): void => {
+    setQuality("standard");
+    setSpeed(1.0);
+    setPitchSemitones(0);
+    setVolume(1.0);
+  };
+
+  // Persist non-sensitive preferences only after hydration and when a valid voice is active
+  useEffect(() => {
+    if (!isHydratedRef.current) {
+      if (selectedVoiceId) {
+        isHydratedRef.current = true;
+        saveWorkbenchPreferences({
+          voiceId: selectedVoiceId,
+          quality,
+          speed,
+          pitchSemitones,
+          volume,
+        });
+      }
+      return;
+    }
+
+    saveWorkbenchPreferences({
+      voiceId: selectedVoiceId,
+      quality,
+      speed,
+      pitchSemitones,
+      volume,
+    });
+  }, [selectedVoiceId, quality, speed, pitchSemitones, volume]);
+
   // Initial load: health & voices
   useEffect(() => {
     let active = true;
@@ -111,9 +158,10 @@ export function App() {
         setVoiceError(null);
         setAuthRequired(false);
 
-        const defaultId = selectDefaultVoice(voiceList);
-        if (defaultId) {
-          setSelectedVoiceId(defaultId);
+        const targetId = resolveEffectiveVoiceId(voiceList, savedVoiceIdRef.current);
+        if (targetId) {
+          setSelectedVoiceId(targetId);
+          savedVoiceIdRef.current = targetId;
         }
       } catch (err: unknown) {
         if (!active) return;
@@ -170,9 +218,10 @@ export function App() {
       setVoices(voiceList);
       setVoiceError(null);
 
-      const defaultId = selectDefaultVoice(voiceList);
-      if (defaultId) {
-        setSelectedVoiceId(defaultId);
+      const targetId = resolveEffectiveVoiceId(voiceList, savedVoiceIdRef.current);
+      if (targetId) {
+        setSelectedVoiceId(targetId);
+        savedVoiceIdRef.current = targetId;
       }
     } catch (err: unknown) {
       apiKeyRef.current = null;
@@ -200,15 +249,26 @@ export function App() {
     const currentGen = ++generationIdRef.current;
     const isCurrent = () => generationIdRef.current === currentGen;
 
-    // Clean up previous playback stream and download URL
+    // Clean up previous playback stream, download URL, and completed metadata
     streamControllerRef.current?.cleanup();
     setAudioSrc(null);
     setDownloadUrl(null);
+    setCompletedResult(null);
     setGenerationError(null);
     setIsGenerating(true);
 
     const controller = new AbortController();
     abortControllerRef.current = controller;
+
+    const currentVoice = voices.find((v) => v.id === selectedVoiceId);
+    const snapshot: GenerationSnapshot = {
+      voiceId: selectedVoiceId,
+      voiceDisplayName: currentVoice?.displayName ?? selectedVoiceId,
+      quality,
+      speed,
+      pitchSemitones,
+      volume,
+    };
 
     const requestPayload: NativeSpeechRequest = {
       input,
@@ -274,11 +334,13 @@ export function App() {
         onDownloadReady: (url: string) => {
           if (!isCurrent()) return;
           setDownloadUrl(url);
+          setCompletedResult(createCompletedResultMeta(snapshot));
         },
         onError: () => {
           if (!isCurrent()) return;
           setAudioSrc(null);
           setDownloadUrl(null);
+          setCompletedResult(null);
           setGenerationError("语音服务暂时不可用");
           setIsGenerating(false);
         },
@@ -313,6 +375,7 @@ export function App() {
     streamControllerRef.current?.cancel();
     setAudioSrc(null);
     setDownloadUrl(null);
+    setCompletedResult(null);
     setIsGenerating(false);
     setGenerationError("已取消生成");
   };
@@ -437,7 +500,11 @@ export function App() {
                 id={voiceSelectId}
                 className="control-select"
                 value={selectedVoiceId}
-                onChange={(e) => setSelectedVoiceId(e.target.value)}
+                onChange={(e) => {
+                  const newVoice = e.target.value;
+                  setSelectedVoiceId(newVoice);
+                  savedVoiceIdRef.current = newVoice;
+                }}
                 disabled={isGenerating || filteredVoices.length === 0}
               >
                 {filteredVoices.map((v) => (
@@ -558,6 +625,19 @@ export function App() {
             />
           </div>
 
+          {/* Reset All Synthesis Parameters */}
+          <div className="reset-params-group">
+            <button
+              type="button"
+              className="btn-reset-params"
+              onClick={handleResetAllParameters}
+              disabled={isGenerating || isAllParametersDefault}
+              aria-label="恢复默认参数"
+            >
+              恢复默认参数
+            </button>
+          </div>
+
           {/* Action Buttons */}
           <div className="action-buttons">
             <button
@@ -607,16 +687,22 @@ export function App() {
               >
                 您的浏览器不支持音频播放。
               </audio>
-              {downloadUrl && (
+              {downloadUrl && completedResult && (
                 <a
                   href={downloadUrl}
-                  download="speech.mp3"
+                  download={completedResult.filename}
                   className="btn btn-download"
                   aria-label="下载合成音频"
                 >
                   下载 MP3
                 </a>
               )}
+            </div>
+          )}
+
+          {audioSrc && completedResult && (
+            <div className="result-metadata" aria-label="音频生成信息">
+              <span>{formatResultMetadataDisplay(completedResult)}</span>
             </div>
           )}
 
