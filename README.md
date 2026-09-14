@@ -307,6 +307,10 @@ docker run -d \
 - **TLS Termination**: Production TLS / SSL certificates and HTTPS termination should be handled outside this container by your reverse proxy or tunnel.
 - **Container Environment**: The container environment is configured with `NODE_ENV=production`, `HOST=0.0.0.0`, `PORT=8080`, and `WEB_DIST_DIR=/app/web-dist`. Users configure `API_KEY`, `EDGETTS_BIND_ADDRESS`, and `EDGETTS_HOST_PORT` in `.env`. Do not change the container internal `HOST` to `127.0.0.1`, or external container traffic will not be reachable.
 
+### Reverse Proxy (Nginx)
+
+For production deployments behind Nginx, a verified reverse proxy configuration template with streaming optimizations and TLS termination is provided in [`deploy/nginx/edgetts.conf.example`](deploy/nginx/edgetts.conf.example). See the [Nginx Deployment Guide](deploy/nginx/README.md) for step-by-step instructions.
+
 ## Validation
 
 Run full workspace validation:
