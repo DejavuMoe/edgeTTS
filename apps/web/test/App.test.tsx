@@ -3,6 +3,7 @@ import { render, screen, waitFor, fireEvent, cleanup } from "@testing-library/re
 import userEvent from "@testing-library/user-event";
 import type { VoiceDto } from "@edgetts/shared";
 import { App, isValidApiKeyFormat, MIN_API_KEY_LENGTH } from "../src/App.js";
+import { WORKBENCH_PREFERENCES_KEY } from "../src/preferences.js";
 
 const mockVoices: readonly VoiceDto[] = [
   {
@@ -37,6 +38,8 @@ describe("EdgeTTS Web Workbench", () => {
   let fetchMock: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
+    window.localStorage.clear();
+    window.sessionStorage.clear();
     createdUrls = [];
     revokedUrls = [];
 
@@ -333,7 +336,9 @@ describe("EdgeTTS Web Workbench", () => {
 
       const downloadLink = screen.getByRole("link", { name: /下载合成音频/i });
       expect(downloadLink).toBeDefined();
-      expect(downloadLink.getAttribute("download")).toBe("speech.mp3");
+      expect(downloadLink.getAttribute("download")).toMatch(
+        /^edgetts_zh-CN-XiaoxiaoNeural_standard_\d{8}-\d{6}\.mp3$/,
+      );
     });
 
     it("aborts active synthesis when Cancel button is clicked", async () => {
@@ -1318,6 +1323,276 @@ describe("EdgeTTS Web Workbench", () => {
 
       // Real buttons
       expect(screen.getByRole("button", { name: /合成语音/i })).toBeDefined();
+    });
+  });
+
+  describe("Phase 21: Preferences persistence & restoration", () => {
+    const TEST_AUTH_KEY = "test-auth-key-1234567890";
+
+    it("restores saved non-sensitive preferences from localStorage on mount", async () => {
+      window.localStorage.setItem(
+        WORKBENCH_PREFERENCES_KEY,
+        JSON.stringify({
+          voiceId: "en-US-JennyNeural",
+          quality: "high",
+          speed: 1.5,
+          pitchSemitones: 3,
+          volume: 0.8,
+        }),
+      );
+
+      render(<App />);
+      const select = (await screen.findByLabelText(/选择声音/i)) as HTMLSelectElement;
+      expect(select.value).toBe("en-US-JennyNeural");
+
+      const qualitySelect = screen.getByLabelText(/音质/i) as HTMLSelectElement;
+      expect(qualitySelect.value).toBe("high");
+
+      const speedSlider = screen.getByLabelText(/^语速/i) as HTMLInputElement;
+      expect(speedSlider.value).toBe("1.5");
+
+      const pitchSlider = screen.getByLabelText(/^音调/i) as HTMLInputElement;
+      expect(pitchSlider.value).toBe("3");
+
+      const volumeSlider = screen.getByLabelText(/^音量/i) as HTMLInputElement;
+      expect(volumeSlider.value).toBe("0.8");
+    });
+
+    it("falls back to default voice when saved voice is missing from catalog and updates storage", async () => {
+      window.localStorage.setItem(
+        WORKBENCH_PREFERENCES_KEY,
+        JSON.stringify({
+          voiceId: "ghost-voice-missing-from-catalog",
+          quality: "standard",
+          speed: 1.0,
+          pitchSemitones: 0,
+          volume: 1.0,
+        }),
+      );
+
+      render(<App />);
+      const select = (await screen.findByLabelText(/选择声音/i)) as HTMLSelectElement;
+      // Falls back to Xiaoxiao
+      expect(select.value).toBe("zh-CN-XiaoxiaoNeural");
+
+      await waitFor(() => {
+        const stored = JSON.parse(window.localStorage.getItem(WORKBENCH_PREFERENCES_KEY) || "{}");
+        expect(stored.voiceId).toBe("zh-CN-XiaoxiaoNeural");
+      });
+    });
+
+    it("restores saved voice on auth unlock path", async () => {
+      const user = userEvent.setup();
+      window.localStorage.setItem(
+        WORKBENCH_PREFERENCES_KEY,
+        JSON.stringify({
+          voiceId: "en-US-JennyNeural",
+          quality: "standard",
+          speed: 1.0,
+          pitchSemitones: 0,
+          volume: 1.0,
+        }),
+      );
+
+      fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === "string" ? input : input.toString();
+        if (url === "/api/health") return new Response(JSON.stringify({ status: "ok" }));
+        if (url === "/api/voices") {
+          const auth = (init?.headers as Record<string, string> | undefined)?.["Authorization"];
+          if (auth === `Bearer ${TEST_AUTH_KEY}`) {
+            return new Response(JSON.stringify({ voices: mockVoices }));
+          }
+          return new Response(JSON.stringify({ error: { code: "UNAUTHORIZED" } }), { status: 401 });
+        }
+        return new Response(null, { status: 404 });
+      });
+
+      render(<App />);
+      await screen.findByRole("region", { name: /API 认证/i });
+
+      await user.type(screen.getByLabelText(/API Key/i), TEST_AUTH_KEY);
+      await user.click(screen.getByRole("button", { name: /解锁/i }));
+
+      const select = (await screen.findByLabelText(/选择声音/i)) as HTMLSelectElement;
+      expect(select.value).toBe("en-US-JennyNeural");
+    });
+
+    it("persists preference updates when controls change", async () => {
+      const user = userEvent.setup();
+      render(<App />);
+      await screen.findByLabelText(/选择声音/i);
+
+      // Change speed
+      const speedSlider = screen.getByLabelText(/^语速/i);
+      fireEvent.change(speedSlider, { target: { value: "1.25" } });
+
+      await waitFor(() => {
+        const stored = JSON.parse(window.localStorage.getItem(WORKBENCH_PREFERENCES_KEY) || "{}");
+        expect(stored.speed).toBe(1.25);
+      });
+
+      // Change voice
+      const voiceSelect = screen.getByLabelText(/选择声音/i);
+      await user.selectOptions(voiceSelect, "ja-JP-NanamiNeural");
+
+      await waitFor(() => {
+        const stored = JSON.parse(window.localStorage.getItem(WORKBENCH_PREFERENCES_KEY) || "{}");
+        expect(stored.voiceId).toBe("ja-JP-NanamiNeural");
+      });
+    });
+  });
+
+  describe("Phase 21: Reset All Parameters", () => {
+    it("is disabled when all parameters are already default", async () => {
+      render(<App />);
+      await screen.findByLabelText(/选择声音/i);
+
+      const resetBtn = screen.getByRole("button", { name: /恢复默认参数/i }) as HTMLButtonElement;
+      expect(resetBtn.disabled).toBe(true);
+    });
+
+    it("becomes enabled when any parameter differs from default and resets all parameters without altering selected voice", async () => {
+      const user = userEvent.setup();
+      render(<App />);
+      const select = (await screen.findByLabelText(/选择声音/i)) as HTMLSelectElement;
+
+      // Select Jenny voice
+      await user.selectOptions(select, "en-US-JennyNeural");
+      expect(select.value).toBe("en-US-JennyNeural");
+
+      // Initially parameters are default, button is disabled
+      const resetBtn = screen.getByRole("button", { name: /恢复默认参数/i }) as HTMLButtonElement;
+      expect(resetBtn.disabled).toBe(true);
+
+      // Change quality, speed, pitch, volume
+      const qualitySelect = screen.getByLabelText(/音质/i);
+      await user.selectOptions(qualitySelect, "high");
+
+      const speedSlider = screen.getByLabelText(/^语速/i);
+      fireEvent.change(speedSlider, { target: { value: "1.5" } });
+
+      const pitchSlider = screen.getByLabelText(/^音调/i);
+      fireEvent.change(pitchSlider, { target: { value: "4" } });
+
+      const volumeSlider = screen.getByLabelText(/^音量/i);
+      fireEvent.change(volumeSlider, { target: { value: "0.5" } });
+
+      // Button is now enabled
+      expect(resetBtn.disabled).toBe(false);
+
+      // Click Reset All
+      await user.click(resetBtn);
+
+      // Parameters are reset to defaults
+      expect((screen.getByLabelText(/音质/i) as HTMLSelectElement).value).toBe("standard");
+      expect((screen.getByLabelText(/^语速/i) as HTMLInputElement).value).toBe("1");
+      expect((screen.getByLabelText(/^音调/i) as HTMLInputElement).value).toBe("0");
+      expect((screen.getByLabelText(/^音量/i) as HTMLInputElement).value).toBe("1");
+
+      // Selected voice is NOT reset
+      expect(select.value).toBe("en-US-JennyNeural");
+
+      // Button is disabled again
+      expect(resetBtn.disabled).toBe(true);
+    });
+  });
+
+  describe("Phase 21: Download Metadata & Snapshot Immutability", () => {
+    it("binds immutable generation metadata and does not mutate when controls change after completion", async () => {
+      const user = userEvent.setup();
+      render(<App />);
+      await screen.findByLabelText(/选择声音/i);
+
+      // Select Yunxi voice, high quality, speed 1.5, pitch 2, volume 0.8
+      await user.selectOptions(screen.getByLabelText(/选择声音/i), "zh-CN-YunxiNeural");
+      await user.selectOptions(screen.getByLabelText(/音质/i), "high");
+      fireEvent.change(screen.getByLabelText(/^语速/i), { target: { value: "1.5" } });
+      fireEvent.change(screen.getByLabelText(/^音调/i), { target: { value: "2" } });
+      fireEvent.change(screen.getByLabelText(/^音量/i), { target: { value: "0.8" } });
+
+      // Enter input and generate
+      await user.type(screen.getByLabelText(/文本内容/i), "Hello immutable metadata");
+      await user.click(screen.getByRole("button", { name: /合成语音/i }));
+
+      // Wait for audio player and download button
+      await screen.findByLabelText(/语音合成播放器/i);
+      const downloadLink = screen.getByRole("link", { name: /下载合成音频/i });
+      const originalFilename = downloadLink.getAttribute("download");
+      expect(originalFilename).toMatch(/^edgetts_zh-CN-YunxiNeural_high_\d{8}-\d{6}\.mp3$/);
+
+      // Metadata text is present
+      const metaContainer = screen.getByLabelText(/音频生成信息/i);
+      expect(metaContainer.textContent).toContain("Microsoft Yunxi");
+      expect(metaContainer.textContent).toContain("zh-CN-YunxiNeural");
+      expect(metaContainer.textContent).toContain("高品质");
+      expect(metaContainer.textContent).toContain("1.50×");
+      expect(metaContainer.textContent).toContain("+2半音");
+      expect(metaContainer.textContent).toContain("80%音量");
+
+      // Now mutate UI controls: switch voice to Jenny, quality to standard, speed to 1.0, pitch to 0
+      await user.selectOptions(screen.getByLabelText(/选择声音/i), "en-US-JennyNeural");
+      await user.selectOptions(screen.getByLabelText(/音质/i), "standard");
+      fireEvent.change(screen.getByLabelText(/^语速/i), { target: { value: "1.0" } });
+      fireEvent.change(screen.getByLabelText(/^音调/i), { target: { value: "0" } });
+
+      // Verification: Download filename and metadata container remain strictly unchanged!
+      expect(downloadLink.getAttribute("download")).toBe(originalFilename);
+      expect(metaContainer.textContent).toContain("Microsoft Yunxi");
+      expect(metaContainer.textContent).toContain("zh-CN-YunxiNeural");
+      expect(metaContainer.textContent).toContain("高品质");
+      expect(metaContainer.textContent).not.toContain("Microsoft Jenny");
+    });
+
+    it("new generation replaces result metadata, and cancelled/failed generation does not produce metadata", async () => {
+      const user = userEvent.setup();
+      render(<App />);
+      await screen.findByLabelText(/选择声音/i);
+
+      // 1. First generation succeeds
+      await user.type(screen.getByLabelText(/文本内容/i), "First audio");
+      await user.click(screen.getByRole("button", { name: /合成语音/i }));
+      await screen.findByLabelText(/语音合成播放器/i);
+
+      let downloadLink = screen.getByRole("link", { name: /下载合成音频/i });
+      expect(downloadLink.getAttribute("download")).toMatch(
+        /^edgetts_zh-CN-XiaoxiaoNeural_standard_\d{8}-\d{6}\.mp3$/,
+      );
+      expect(screen.getByLabelText(/音频生成信息/i)).toBeDefined();
+
+      // 2. Second generation with different voice
+      await user.selectOptions(screen.getByLabelText(/选择声音/i), "en-US-JennyNeural");
+      await user.clear(screen.getByLabelText(/文本内容/i));
+      await user.type(screen.getByLabelText(/文本内容/i), "Second audio");
+      await user.click(screen.getByRole("button", { name: /合成语音/i }));
+
+      // Wait for new audio to settle
+      await waitFor(() => {
+        downloadLink = screen.getByRole("link", { name: /下载合成音频/i });
+        expect(downloadLink.getAttribute("download")).toMatch(
+          /^edgetts_en-US-JennyNeural_standard_\d{8}-\d{6}\.mp3$/,
+        );
+      });
+      const metaContainer = screen.getByLabelText(/音频生成信息/i);
+      expect(metaContainer.textContent).toContain("Microsoft Jenny");
+
+      // 3. Third generation fails (400 Bad Request)
+      fetchMock.mockImplementationOnce(async () => {
+        return new Response(
+          JSON.stringify({ error: { code: "BAD_REQUEST", message: "Invalid" } }),
+          {
+            status: 400,
+          },
+        );
+      });
+
+      await user.clear(screen.getByLabelText(/文本内容/i));
+      await user.type(screen.getByLabelText(/文本内容/i), "Third audio fails");
+      await user.click(screen.getByRole("button", { name: /合成语音/i }));
+
+      await screen.findByText(/输入参数有误/i);
+      // Previous metadata is cleared and no new metadata is produced
+      expect(screen.queryByLabelText(/音频生成信息/i)).toBeNull();
+      expect(screen.queryByRole("link", { name: /下载合成音频/i })).toBeNull();
     });
   });
 });

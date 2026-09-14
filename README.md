@@ -24,10 +24,12 @@ Self-hosted Microsoft Edge TTS Web application and streaming speech synthesis AP
   - Bounded FIFO limiter (4 active streams, 16 queue slots).
   - Segmented synthesis acquires/releases limiter permits per-segment, preventing single long requests from monopolizing execution capacity.
   - Client disconnect cancels queued requests and active streams immediately.
-- **Progressive Browser Streaming**:
+- **Progressive Browser Streaming & Workbench UX**:
   - Workbench player leverages `MediaSource` and `SourceBuffer` for near-instant playback start.
   - Transparent fallback to Blob object URLs when `MediaSource` is unsupported.
   - Simultaneous stream chunk accumulation enables instant audio download upon completion.
+  - Non-sensitive voice and prosody preferences persist locally; API credentials and input text are never persisted.
+  - One-click synthesis parameter reset and descriptive, sanitized MP3 download filenames.
 - **Production Single-Origin Web Hosting**:
   - Fastify hosts built frontend assets (`apps/web/dist`) and API endpoints under a single port/domain.
   - Immutable long-term caching for hashed assets (`/assets/*`).

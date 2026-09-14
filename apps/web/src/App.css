@@ -310,6 +310,34 @@ body {
   border-radius: var(--radius-sm);
 }
 
+.reset-params-group {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.btn-reset-params {
+  background: none;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 0.25rem 0.6rem;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-reset-params:hover:not(:disabled) {
+  background-color: var(--border-color);
+  color: var(--text-primary);
+}
+
+.btn-reset-params:disabled {
+  color: var(--text-muted);
+  cursor: not-allowed;
+  opacity: 0.5;
+  border-color: transparent;
+}
+
 .action-buttons {
   display: flex;
   gap: 0.75rem;
@@ -407,6 +435,17 @@ body {
 
 .btn-download:hover {
   background-color: var(--border-color);
+}
+
+.result-metadata {
+  margin-top: 0.75rem;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  word-break: break-word;
 }
 
 .empty-result-text {
