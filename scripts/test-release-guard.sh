@@ -233,6 +233,157 @@ git -C "$MOCK_REPO" tag v1.0.0
 assert_exit_code "release-check.sh rejects already existing local tag" 1 \
   "$MOCK_REPO/scripts/release-check.sh" "v1.0.0" --skip-tests
 
+# ------------------------------------------------------------------------------
+# Test Suite 6: Strict SemVer Version Ordering (sort -V)
+# ------------------------------------------------------------------------------
+echo "--- Suite 6: SemVer Version Ordering Contract ---"
+
+compare_semver_gt() {
+  local v_higher="$1"
+  local v_lower="$2"
+  local top
+  top=$(printf "%s\n%s\n" "$v_higher" "$v_lower" | sort -V -r | head -n 1)
+  [ "$top" = "$v_higher" ]
+}
+
+assert_exit_code "1.10.0 > 1.9.9" 0 compare_semver_gt "1.10.0" "1.9.9"
+assert_exit_code "2.0.0 > 1.99.99" 0 compare_semver_gt "2.0.0" "1.99.99"
+assert_exit_code "1.3.0 > 1.2.3" 0 compare_semver_gt "1.3.0" "1.2.3"
+assert_exit_code "1.2.4 > 1.2.3" 0 compare_semver_gt "1.2.4" "1.2.3"
+assert_exit_code "1.2.10 > 1.2.9" 0 compare_semver_gt "1.2.10" "1.2.9"
+
+# ------------------------------------------------------------------------------
+# Test Suite 7: Monotonic Highest Published Version & latest Selection
+# ------------------------------------------------------------------------------
+echo "--- Suite 7: Monotonic latest Selection & Race Safety ---"
+
+STATE_DIR=$(mktemp -d)
+trap 'rm -rf "$TEMP_GIT_DIR" "$MOCK_REPO" "$STATE_DIR"' EXIT
+
+simulate_promotion() {
+  local tag="$1"
+  local version="${tag#v}"
+  local candidate_digest="$2"
+
+  local reg_dir="$STATE_DIR/registry"
+  mkdir -p "$reg_dir"
+
+  # 1. Version tag overwrite check
+  local ver_file="$reg_dir/$version"
+  if [ -f "$ver_file" ]; then
+    local existing_digest
+    existing_digest=$(cat "$ver_file")
+    if [ "$existing_digest" != "$candidate_digest" ]; then
+      echo "REJECT_OVERWRITE: $version already points to different digest" >&2
+      return 1
+    fi
+  else
+    echo "$candidate_digest" > "$ver_file"
+  fi
+
+  # Record git tag in simulated repository
+  mkdir -p "$STATE_DIR/git_tags"
+  touch "$STATE_DIR/git_tags/$tag"
+
+  # 2. Determine highest published version among all known git tags
+  local candidate_versions
+  candidate_versions=$(ls "$STATE_DIR/git_tags" 2>/dev/null | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sed 's/^v//' | sort -V -r || true)
+  local all_versions
+  all_versions=$(printf "%s\n%s\n" "$version" "$candidate_versions" | sed '/^$/d' | sort -u | sort -V -r)
+
+  local highest_published_version=""
+  local highest_published_digest=""
+  for v in $all_versions; do
+    if [ -f "$reg_dir/$v" ]; then
+      highest_published_version="$v"
+      highest_published_digest=$(cat "$reg_dir/$v")
+      break
+    fi
+  done
+
+  if [ -z "$highest_published_version" ]; then
+    echo "ERROR: Could not find highest published version" >&2
+    return 1
+  fi
+
+  # 3. latest update decision
+  local latest_updated="false"
+  if [ "$version" = "$highest_published_version" ]; then
+    echo "$candidate_digest" > "$reg_dir/latest"
+    echo "$version" > "$reg_dir/latest_version"
+    latest_updated="true"
+  else
+    if [ -f "$reg_dir/latest" ]; then
+      local cur_latest_digest
+      cur_latest_digest=$(cat "$reg_dir/latest")
+      if [ "$cur_latest_digest" = "$candidate_digest" ]; then
+        echo "DRIFT_ERROR: latest points to lower version digest" >&2
+        return 1
+      fi
+    fi
+  fi
+
+  echo "version=$version" > "$STATE_DIR/last_run.out"
+  echo "highest=$highest_published_version" >> "$STATE_DIR/last_run.out"
+  echo "latest_updated=$latest_updated" >> "$STATE_DIR/last_run.out"
+  return 0
+}
+
+reset_sim_state() {
+  rm -rf "$STATE_DIR"/*
+}
+
+# 7.1 First release owns latest
+reset_sim_state
+assert_exit_code "First release 0.1.0 succeeds" 0 simulate_promotion "v0.1.0" "sha256:010"
+assert_eq "First release sets latest_version to 0.1.0" "0.1.0" "$(cat "$STATE_DIR/registry/latest_version")"
+assert_eq "First release sets latest digest to 010" "sha256:010" "$(cat "$STATE_DIR/registry/latest")"
+
+# 7.2 New higher release advances latest
+assert_exit_code "New higher release 1.0.0 succeeds" 0 simulate_promotion "v1.0.0" "sha256:100"
+assert_eq "Higher release advances latest_version to 1.0.0" "1.0.0" "$(cat "$STATE_DIR/registry/latest_version")"
+assert_eq "Higher release advances latest digest to 100" "sha256:100" "$(cat "$STATE_DIR/registry/latest")"
+
+# 7.3 Lower maintenance release does not move latest backward (2.0.0 then 1.9.5)
+reset_sim_state
+simulate_promotion "v2.0.0" "sha256:200"
+assert_exit_code "Lower maintenance release 1.9.5 succeeds" 0 simulate_promotion "v1.9.5" "sha256:195"
+assert_eq "Maintenance release leaves latest_version at 2.0.0" "2.0.0" "$(cat "$STATE_DIR/registry/latest_version")"
+assert_eq "Maintenance release leaves latest digest at 200" "sha256:200" "$(cat "$STATE_DIR/registry/latest")"
+assert_eq "Maintenance release outputs latest_updated=false" "latest_updated=false" "$(grep latest_updated "$STATE_DIR/last_run.out")"
+
+# 7.4 Old lower workflow rerun does not move latest backward
+reset_sim_state
+simulate_promotion "v1.2.3" "sha256:123"
+simulate_promotion "v1.3.0" "sha256:130"
+assert_exit_code "Rerun old v1.2.3 succeeds" 0 simulate_promotion "v1.2.3" "sha256:123"
+assert_eq "Old rerun keeps latest_version at 1.3.0" "1.3.0" "$(cat "$STATE_DIR/registry/latest_version")"
+assert_eq "Old rerun keeps latest digest at 130" "sha256:130" "$(cat "$STATE_DIR/registry/latest")"
+assert_eq "Old rerun outputs latest_updated=false" "latest_updated=false" "$(grep latest_updated "$STATE_DIR/last_run.out")"
+
+# 7.5 Highest release rerun is idempotent
+assert_exit_code "Rerun highest v1.3.0 succeeds" 0 simulate_promotion "v1.3.0" "sha256:130"
+assert_eq "Highest rerun leaves latest at 1.3.0" "1.3.0" "$(cat "$STATE_DIR/registry/latest_version")"
+assert_eq "Highest rerun outputs latest_updated=true" "latest_updated=true" "$(grep latest_updated "$STATE_DIR/last_run.out")"
+
+# 7.6 Overwrite attempt with different digest is rejected
+assert_exit_code "Rerun with different digest fails" 1 simulate_promotion "v1.3.0" "sha256:corrupted_digest"
+
+# 7.7 Cross-release race safety: ordering convergence
+reset_sim_state
+simulate_promotion "v1.2.3" "sha256:123"
+simulate_promotion "v1.3.0" "sha256:130"
+LATEST_AB=$(cat "$STATE_DIR/registry/latest_version")
+
+reset_sim_state
+simulate_promotion "v1.3.0" "sha256:130"
+simulate_promotion "v1.2.3" "sha256:123"
+LATEST_BA=$(cat "$STATE_DIR/registry/latest_version")
+
+assert_eq "Ordering A then B yields latest=1.3.0" "1.3.0" "$LATEST_AB"
+assert_eq "Ordering B then A yields latest=1.3.0" "1.3.0" "$LATEST_BA"
+assert_eq "Cross-release race converges to identical latest" "$LATEST_AB" "$LATEST_BA"
+
 echo "======================================================================"
 echo " All $PASSED_TESTS / $TOTAL_TESTS Release Governance Tests PASSED"
 echo "======================================================================"

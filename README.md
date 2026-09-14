@@ -293,7 +293,7 @@ In container registries, image tags are mutable pointers that can technically be
 | `:sha-<full-git-sha>` | `ghcr.io/dejavumoe/edgetts:sha-<full-40-hex-sha>`  | **Commit-addressable traceability tag** generated from the full 40-character Git commit SHA. The project publishing workflow treats this as a stable traceability reference, but OCI tags are not intrinsically immutable. |
 | `:main`               | `ghcr.io/dejavumoe/edgetts:main`                   | **Moving branch alias** pointing to the latest validated build published from the `main` branch.                                                                                                                           |
 | `:X.Y.Z`              | `ghcr.io/dejavumoe/edgetts:0.1.0`                  | **Release tag** created on git tags matching `v*.*.*` by project publishing policy; remains a registry tag reference.                                                                                                      |
-| `:latest`             | `ghcr.io/dejavumoe/edgetts:latest`                 | **Moving stable-release alias** pointing to the most recent SemVer release (never updated by `main` branch pushes).                                                                                                        |
+| `:latest`             | `ghcr.io/dejavumoe/edgetts:latest`                 | **Moving stable-release alias** pointing to the highest successfully published strict stable SemVer release (never updated by `main` branch pushes, older workflow reruns, or lower maintenance patches).                  |
 
 ### Digest-First Production Deployment & Rollback Contract
 
@@ -332,8 +332,9 @@ services:
 edgeTTS enforces a strict two-stage promotion lifecycle for official releases:
 
 1. **Candidate Verification**: Tag builds compile and publish a commit-addressed candidate (`:sha-<git-sha>`), followed by exhaustive multi-architecture verification (`linux/amd64`, `linux/arm64`), non-root UID checks, attestation validation, and security scans.
-2. **Zero-Rebuild Promotion**: Upon verification success, `:X.Y.Z` and `:latest` aliases are promoted directly to the verified OCI index digest via `docker buildx imagetools create` with zero recompilation, preserving provenance, SBOM, and byte-for-byte content identity.
-3. **Governance Protections**: Release tags must be ancestors of `origin/main`, moved tags are rejected, and existing release versions cannot be overwritten. See the [Release Governance Guide](docs/releasing.md) for full operational details.
+2. **Zero-Rebuild Promotion**: Upon verification success, `:X.Y.Z` is promoted directly to the verified OCI index digest via `docker buildx imagetools create` with zero recompilation, preserving provenance, SBOM, and byte-for-byte content identity.
+3. **Monotonic `:latest` Alias**: The `:latest` alias is updated strictly when the current release is greater than or equal to all previously published releases. Rerunning older release workflows or backporting maintenance releases will never regress `:latest`.
+4. **Governance Protections & Serialization**: Registry publications run under a serialized concurrency group (`edgetts-ghcr-publish`). Release tags must be ancestors of `origin/main`, moved tags are rejected, and existing release versions cannot be overwritten. See the [Release Governance Guide](docs/releasing.md) for full operational details.
 
 ### Registry Authentication & Security by Construction
 
