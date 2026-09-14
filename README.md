@@ -295,14 +295,15 @@ In container registries, image tags are mutable pointers that can technically be
 | `:X.Y.Z`              | `ghcr.io/dejavumoe/edgetts:0.1.0`                  | **Release tag** created on git tags matching `v*.*.*` by project publishing policy; remains a registry tag reference.                                                                                                      |
 | `:latest`             | `ghcr.io/dejavumoe/edgetts:latest`                 | **Moving stable-release alias** pointing to the most recent SemVer release (never updated by `main` branch pushes).                                                                                                        |
 
-### Digest-First Production Deployment
+### Digest-First Production Deployment & Rollback Contract
 
 In production environments, always prefer deploying by exact image digest (`@sha256:<digest>`) rather than mutable tags (`:main`, `:latest`, or `:sha-<full-git-sha>`):
 
 1. **True Content-Addressed Immutability**: Container tags in any registry are mutable references that can be retagged. An OCI digest is a cryptographic hash of the OCI manifest index itself, guaranteeing permanent immutability.
-2. **Deterministic Rollouts**: Every node in a cluster pulls the exact same container layers, preventing configuration drift across instances.
-3. **Supply Chain Integrity**: edgeTTS builds publish BuildKit SLSA provenance (`mode=max`) and SPDX SBOM attestations attached directly to every image index.
-4. **Distinction Between Git SHA and OCI Digest**: The Git commit SHA identifies a specific source tree state in version control, whereas the OCI manifest digest cryptographically identifies the exact compiled multi-architecture container artifacts in the registry.
+2. **Deterministic Rollouts & Rollbacks**: Every node in a cluster pulls the exact same container layers, preventing configuration drift across instances.
+3. **Immutable Rollback Procedure**: _Rollback means redeploying a previously verified OCI digest. It does not mean rebuilding an old Git commit._ Never roll back by `:latest` (a moving pointer) or force-push old Git release tags. See [`docs/releasing.md`](docs/releasing.md) for the complete production rollback procedure.
+4. **Supply Chain Integrity**: edgeTTS builds publish BuildKit SLSA provenance (`mode=max`) and SPDX SBOM attestations attached directly to every image index.
+5. **Distinction Between Git SHA and OCI Digest**: The Git commit SHA identifies a specific source tree state in version control, whereas the OCI manifest digest cryptographically identifies the exact compiled multi-architecture container artifacts in the registry.
 
 **Example `docker run` by digest:**
 
@@ -325,6 +326,14 @@ services:
   edgetts:
     image: ghcr.io/dejavumoe/edgetts@sha256:<digest>
 ```
+
+### Release Promotion Lifecycle
+
+edgeTTS enforces a strict two-stage promotion lifecycle for official releases:
+
+1. **Candidate Verification**: Tag builds compile and publish a commit-addressed candidate (`:sha-<git-sha>`), followed by exhaustive multi-architecture verification (`linux/amd64`, `linux/arm64`), non-root UID checks, attestation validation, and security scans.
+2. **Zero-Rebuild Promotion**: Upon verification success, `:X.Y.Z` and `:latest` aliases are promoted directly to the verified OCI index digest via `docker buildx imagetools create` with zero recompilation, preserving provenance, SBOM, and byte-for-byte content identity.
+3. **Governance Protections**: Release tags must be ancestors of `origin/main`, moved tags are rejected, and existing release versions cannot be overwritten. See the [Release Governance Guide](docs/releasing.md) for full operational details.
 
 ### Registry Authentication & Security by Construction
 
@@ -456,7 +465,7 @@ The pipeline executes up to four jobs:
 1. **`quality`**: Frozen-lockfile dependency installation, workspace build, TypeScript typecheck, ESLint, test suites, Prettier formatting verification, and repository cleanliness audits.
 2. **`docker`**: Multi-stage production container build, non-root user and healthcheck metadata inspection, fail-closed startup validation (`REQUIRE_API_KEY=true`), and runtime security posture checks (read-only rootfs, dropped capabilities, no-new-privileges).
 3. **`proxy-contract`**: Containerized `nginx -t` validation and deterministic proxy tests via `EDGETTS_NGINX_SKIP_LIVE=1 ./deploy/nginx/test-proxy.sh` (validating TLS termination, chunk streaming, and HTTP 400/503/429 status preservation).
-4. **`publish`** (Multi-Arch GHCR Release): Runs strictly on `main` branch pushes or `v*.*.*` release tags after all three validation gates succeed. Builds multi-arch images for `linux/amd64` and `linux/arm64`, attaches BuildKit SLSA provenance (`mode=max`) and SPDX SBOM attestations, pushes to GHCR, and verifies manifest digests, tag resolutions, non-root execution, and architecture isolation under QEMU.
+4. **`publish`** (Multi-Arch GHCR Release): Runs strictly on `main` branch pushes or `v*.*.*` release tags after all three validation gates succeed. Enforces release governance (strict SemVer, immutability, origin/main ancestry). Builds multi-arch images for `linux/amd64` and `linux/arm64`, attaches BuildKit SLSA provenance (`mode=max`) and SPDX SBOM attestations, pushes the commit candidate (`:sha-<git-sha>`), verifies manifest digests, non-root execution, and security posture across platforms under QEMU, and promotes verified stable aliases (`:X.Y.Z` and `:latest`) with zero rebuild. See [`docs/releasing.md`](docs/releasing.md).
 
 > [!NOTE]
 > Live speech synthesis against Microsoft Edge TTS endpoints is intentionally excluded from automated CI to eliminate external network fragility and rate limit dependencies from pull request gating. Full upstream live qualification remains available locally in controlled environments via `./deploy/nginx/test-proxy.sh` and the package smoke test scripts.

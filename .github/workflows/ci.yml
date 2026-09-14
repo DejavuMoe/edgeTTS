@@ -277,17 +277,41 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 0
 
-      - name: Validate SemVer tag format
+      - name: Validate release tag governance
         if: startsWith(github.ref, 'refs/tags/')
+        env:
+          EVENT_BEFORE: ${{ github.event.before }}
         run: |
+          set -euo pipefail
           TAG="${GITHUB_REF#refs/tags/}"
-          echo "Validating tag: $TAG"
+          echo "Validating release tag governance for tag: $TAG"
+
+          # 1. Strict stable SemVer format validation
           if ! echo "$TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
-            echo "FAIL: Tag '$TAG' does not match strict SemVer format '^v[0-9]+\.[0-9]+\.[0-9]+$'" >&2
+            echo "::error::Release tag '$TAG' does not match strict stable SemVer format '^v[0-9]+\.[0-9]+\.[0-9]+$'"
             exit 1
           fi
-          echo "PASS: Tag '$TAG' is valid strict SemVer."
+          echo "PASS: Tag '$TAG' matches strict stable SemVer format."
+
+          # 2. Reject moved release tags (must be new ref creation: event.before all zeros)
+          ZERO_SHA="0000000000000000000000000000000000000000"
+          if [ -n "$EVENT_BEFORE" ] && [ "$EVENT_BEFORE" != "$ZERO_SHA" ]; then
+            echo "::error::existing release tags may not be moved or republished (event.before: $EVENT_BEFORE)"
+            exit 1
+          fi
+          echo "PASS: Tag creation verified (not a moved or republished tag)."
+
+          # 3. Release source must originate from origin/main history
+          if ! git rev-parse --verify origin/main >/dev/null 2>&1; then
+            git fetch origin main:refs/remotes/origin/main
+          fi
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::release tag target is not reachable from main"
+            exit 1
+          fi
+          echo "PASS: Commit $GITHUB_SHA is an ancestor of origin/main."
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@1f40c72289eff860ee54a304f1438e3cff362e0a # v4.3.0
@@ -303,8 +327,6 @@ jobs:
           tags: |
             type=raw,value=main,enable=${{ github.ref == 'refs/heads/main' }}
             type=sha,format=long,prefix=sha-
-            type=semver,pattern={{version}}
-            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
           labels: |
             org.opencontainers.image.source=https://github.com/DejavuMoe/edgeTTS
             org.opencontainers.image.revision=${{ github.sha }}
@@ -552,3 +574,114 @@ jobs:
             echo "PASS: $PLATFORM runtime environment clean."
           done
           echo "PASS: All published image security and supply-chain audits succeeded."
+
+      - name: Promote verified release candidate to stable SemVer and latest aliases
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF#refs/tags/}"
+          VERSION="${TAG#v}"
+          CANDIDATE_DIGEST="${{ steps.build.outputs.digest }}"
+          IMAGE_REPO="ghcr.io/dejavumoe/edgetts"
+
+          echo "Promoting verified release candidate for version: $VERSION"
+          echo "Candidate digest: $CANDIDATE_DIGEST"
+
+          # 1. Prevent release version overwrite:
+          EXISTING_RAW=$(docker buildx imagetools inspect "${IMAGE_REPO}:${VERSION}" --raw 2>/dev/null || true)
+          if [ -n "$EXISTING_RAW" ]; then
+            EXISTING_DIGEST="sha256:$(printf "%s" "$EXISTING_RAW" | sha256sum | awk '{print $1}')"
+            echo "Existing tag ${IMAGE_REPO}:${VERSION} resolves to: $EXISTING_DIGEST"
+            if [ "$EXISTING_DIGEST" = "$CANDIDATE_DIGEST" ]; then
+              echo "Existing version tag resolves to identical verified digest. Permitting idempotent rerun."
+            else
+              echo "::error::Release version ${VERSION} already points to different content ($EXISTING_DIGEST != $CANDIDATE_DIGEST). Refusing to overwrite existing release."
+              exit 1
+            fi
+          else
+            echo "Release version tag ${IMAGE_REPO}:${VERSION} is absent. Proceeding with promotion."
+          fi
+
+          # 2. Promote aliases directly from the verified candidate index without rebuilding
+          echo "Promoting tags ${VERSION} and latest pointing to ${IMAGE_REPO}@${CANDIDATE_DIGEST}..."
+          docker buildx imagetools create \
+            --tag "${IMAGE_REPO}:${VERSION}" \
+            --tag "${IMAGE_REPO}:latest" \
+            "${IMAGE_REPO}@${CANDIDATE_DIGEST}"
+
+          # 3. Verify promoted tag resolutions
+          echo "Verifying ${IMAGE_REPO}:${VERSION} resolution..."
+          VER_RAW=$(docker buildx imagetools inspect "${IMAGE_REPO}:${VERSION}" --raw)
+          VER_DIGEST="sha256:$(printf "%s" "$VER_RAW" | sha256sum | awk '{print $1}')"
+          if [ "$VER_DIGEST" != "$CANDIDATE_DIGEST" ]; then
+            echo "::error::Promoted version tag ${VERSION} digest $VER_DIGEST does not match verified digest $CANDIDATE_DIGEST"
+            exit 1
+          fi
+          echo "PASS: Tag ${VERSION} resolves to exact verified digest $CANDIDATE_DIGEST."
+
+          echo "Verifying ${IMAGE_REPO}:latest resolution..."
+          LATEST_RAW=$(docker buildx imagetools inspect "${IMAGE_REPO}:latest" --raw)
+          LATEST_DIGEST="sha256:$(printf "%s" "$LATEST_RAW" | sha256sum | awk '{print $1}')"
+          if [ "$LATEST_DIGEST" != "$CANDIDATE_DIGEST" ]; then
+            echo "::error::Promoted latest tag digest $LATEST_DIGEST does not match verified digest $CANDIDATE_DIGEST"
+            exit 1
+          fi
+          echo "PASS: Tag latest resolves to exact verified digest $CANDIDATE_DIGEST."
+
+          # 4. Verify multi-arch index integrity and attestation preservation on promoted tags
+          echo "Verifying multi-arch platforms and attestations on promoted tag..."
+          PROMOTED_INDEX=$(docker buildx imagetools inspect "${IMAGE_REPO}:${VERSION}" --raw)
+          PROMOTED_ARCHS=$(echo "$PROMOTED_INDEX" | jq -r '.manifests[] | select(.platform.architecture != "unknown") | "\(.platform.os)/\(.platform.architecture)"' | sort -u)
+          EXPECTED_ARCHS=$(printf "linux/amd64\nlinux/arm64")
+          if [ "$PROMOTED_ARCHS" != "$EXPECTED_ARCHS" ]; then
+            echo "::error::Promoted tag platforms do not match expected linux/amd64 and linux/arm64"
+            exit 1
+          fi
+
+          PROMOTED_ATTESTATIONS=$(echo "$PROMOTED_INDEX" | jq -r '.manifests[] | select(.platform.architecture == "unknown") | .digest')
+          if [ -z "$PROMOTED_ATTESTATIONS" ]; then
+            echo "::error::Promoted tag is missing attestation manifests"
+            exit 1
+          fi
+          echo "PASS: Multi-arch platforms and attestation manifests preserved on promoted tags."
+
+      - name: Generate release publication summary
+        if: always() && steps.build.outcome == 'success'
+        run: |
+          set -euo pipefail
+          DIGEST="${{ steps.build.outputs.digest }}"
+          RAW_INDEX=$(docker buildx imagetools inspect "ghcr.io/dejavumoe/edgetts@${DIGEST}" --raw 2>/dev/null || true)
+
+          AMD64_DIGEST=$(echo "$RAW_INDEX" | jq -r '.manifests[] | select(.platform.architecture == "amd64") | .digest' 2>/dev/null || echo "unknown")
+          ARM64_DIGEST=$(echo "$RAW_INDEX" | jq -r '.manifests[] | select(.platform.architecture == "arm64") | .digest' 2>/dev/null || echo "unknown")
+
+          HAS_PROV="false"
+          HAS_SBOM="false"
+          if echo "$RAW_INDEX" | grep -Eqi 'slsa|provenance'; then HAS_PROV="true"; fi
+          if echo "$RAW_INDEX" | grep -Eqi 'spdx|sbom'; then HAS_SBOM="true"; fi
+
+          {
+            echo "## Publication Summary"
+            echo ""
+            echo "| Field | Value |"
+            echo "| :--- | :--- |"
+            echo "| **Event** | \`${{ github.event_name }}\` |"
+            echo "| **Ref** | \`${{ github.ref }}\` |"
+            echo "| **Git Commit SHA** | \`${{ github.sha }}\` |"
+            echo "| **OCI Index Digest** | \`${DIGEST}\` |"
+            echo "| **linux/amd64 Manifest** | \`${AMD64_DIGEST}\` |"
+            echo "| **linux/arm64 Manifest** | \`${ARM64_DIGEST}\` |"
+            echo "| **SLSA Provenance** | \`${HAS_PROV}\` |"
+            echo "| **SPDX SBOM** | \`${HAS_SBOM}\` |"
+            echo "| **Candidate Ref** | \`ghcr.io/dejavumoe/edgetts:sha-${{ github.sha }}\` |"
+
+            if [ "${GITHUB_REF}" = "refs/heads/main" ]; then
+              echo "| **Branch Snapshot Ref** | \`ghcr.io/dejavumoe/edgetts:main\` |"
+            elif echo "${GITHUB_REF}" | grep -q '^refs/tags/v'; then
+              TAG="${GITHUB_REF#refs/tags/}"
+              VERSION="${TAG#v}"
+              echo "| **Release Version Ref** | \`ghcr.io/dejavumoe/edgetts:${VERSION}\` |"
+              echo "| **Latest Release Alias** | \`ghcr.io/dejavumoe/edgetts:latest\` |"
+            fi
+            echo ""
+          } >> "$GITHUB_STEP_SUMMARY"
