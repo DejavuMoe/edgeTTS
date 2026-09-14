@@ -5,4 +5,9 @@ coverage
 .env.*
 !.env.example
 *.log
+*.mp3
+*.wav
+*.webm
+*.aac
+*.flac
 .DS_Store
