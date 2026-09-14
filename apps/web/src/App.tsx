@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import {
   MAX_NATIVE_INPUT_CODE_POINTS,
   countCodePoints,
@@ -30,6 +30,8 @@ import {
   saveFavoriteVoiceIds,
   toggleFavoriteVoiceId,
 } from "./voice-favorites.js";
+import { countLines } from "./text-stats.js";
+import { readImportedTextFile } from "./text-import.js";
 import "./App.css";
 
 type ApiStatus = "loading" | "healthy" | "unavailable";
@@ -80,6 +82,18 @@ export function App() {
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
   const [completedResult, setCompletedResult] = useState<CompletedResultMeta | null>(null);
 
+  // Local file import & editor state
+  const [importError, setImportError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const importGenerationIdRef = useRef<number>(0);
+  const isMountedRef = useRef<boolean>(true);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
   const generationIdRef = useRef<number>(0);
   const abortControllerRef = useRef<AbortController | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -100,8 +114,9 @@ export function App() {
   const pitchSliderId = useId();
   const volumeSliderId = useId();
 
-  // Character count calculation
+  // Character count & line count calculation
   const codePointCount = useMemo(() => countCodePoints(input), [input]);
+  const lineCount = useMemo(() => countLines(input), [input]);
   const isOverLimit = codePointCount > MAX_NATIVE_INPUT_CODE_POINTS;
   const isInputEmpty = input.trim().length === 0;
 
@@ -169,6 +184,41 @@ export function App() {
     setSpeed(1.0);
     setPitchSemitones(0);
     setVolume(1.0);
+  };
+
+  // Local file import handler with async race and unmount guards
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>): Promise<void> => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) {
+      return;
+    }
+
+    const currentGen = ++importGenerationIdRef.current;
+    const result = await readImportedTextFile(file);
+
+    if (!isMountedRef.current || importGenerationIdRef.current !== currentGen) {
+      return;
+    }
+
+    if (result.success) {
+      setInput(result.text);
+      setImportError(null);
+    } else {
+      setImportError(result.error);
+    }
+  };
+
+  // Safe text clearing with native confirmation
+  const handleClearText = (): void => {
+    if (isGenerating || input.length === 0) {
+      return;
+    }
+    const confirmed = window.confirm("确定清空当前文本吗？此操作无法撤销。");
+    if (confirmed) {
+      setInput("");
+      setImportError(null);
+    }
   };
 
   // Persist non-sensitive preferences only after hydration and when a valid voice is active
@@ -427,7 +477,7 @@ export function App() {
     }
   };
 
-  const handleCancel = (): void => {
+  const handleCancel = useCallback((): void => {
     ++generationIdRef.current;
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
@@ -439,7 +489,26 @@ export function App() {
     setCompletedResult(null);
     setIsGenerating(false);
     setGenerationError("已取消生成");
-  };
+  }, []);
+
+  // Global Escape shortcut to cancel active synthesis
+  useEffect(() => {
+    if (!isGenerating) {
+      return;
+    }
+
+    const handleKeyDown = (e: KeyboardEvent): void => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        handleCancel();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isGenerating, handleCancel]);
 
   return (
     <div className="app-layout">
@@ -464,11 +533,43 @@ export function App() {
         {/* Left Column: Text Editor */}
         <section className="panel editor-panel" aria-label="文本编辑区域">
           <div className="panel-header">
-            <label htmlFor={textInputId} className="panel-title">
-              文本内容
-            </label>
+            <div className="editor-header-left">
+              <label htmlFor={textInputId} className="panel-title">
+                文本内容
+              </label>
+              <div className="editor-actions">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".txt,text/plain"
+                  className="hidden-file-input"
+                  tabIndex={-1}
+                  aria-hidden="true"
+                  onChange={handleFileChange}
+                />
+                <button
+                  type="button"
+                  className="btn-editor-action"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isGenerating}
+                  aria-label="导入 TXT 文件"
+                >
+                  导入 TXT
+                </button>
+                <button
+                  type="button"
+                  className="btn-editor-action"
+                  onClick={handleClearText}
+                  disabled={isGenerating || input.length === 0}
+                  aria-label="清空当前文本"
+                >
+                  清空
+                </button>
+              </div>
+            </div>
             <span className={`char-counter ${isOverLimit ? "counter-error" : ""}`}>
-              {codePointCount.toLocaleString()} / {MAX_NATIVE_INPUT_CODE_POINTS.toLocaleString()} 字
+              {lineCount} 行 · {codePointCount.toLocaleString()} /{" "}
+              {MAX_NATIVE_INPUT_CODE_POINTS.toLocaleString()} 字
             </span>
           </div>
 
@@ -477,10 +578,32 @@ export function App() {
             className={`text-editor ${isOverLimit ? "editor-invalid" : ""}`}
             placeholder="在此输入需要合成为语音的文本内容..."
             value={input}
-            onChange={(e) => setInput(e.target.value)}
+            onChange={(e) => {
+              setInput(e.target.value);
+              if (importError) {
+                setImportError(null);
+              }
+            }}
+            onKeyDown={(e) => {
+              if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+                e.preventDefault();
+                void handleGenerate();
+              }
+            }}
             disabled={isGenerating}
             rows={14}
+            aria-keyshortcuts="Control+Enter Meta+Enter"
           />
+
+          <div className="editor-footer">
+            <span className="shortcut-hint">Ctrl/⌘ + Enter 合成 · Esc 取消</span>
+          </div>
+
+          {importError && (
+            <div className="input-warning" role="alert">
+              {importError}
+            </div>
+          )}
 
           {isOverLimit && (
             <div className="input-warning" role="alert">
@@ -790,6 +913,7 @@ export function App() {
                 className="btn btn-secondary"
                 onClick={handleCancel}
                 aria-label="取消合成"
+                aria-keyshortcuts="Escape"
               >
                 取消
               </button>

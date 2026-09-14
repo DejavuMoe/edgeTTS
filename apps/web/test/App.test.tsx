@@ -1832,4 +1832,395 @@ describe("EdgeTTS Web Workbench", () => {
       expect(localeSelect.options[0]?.textContent).toBe("全部地区 (4)");
     });
   });
+
+  describe("Phase 23: Text Workspace Ergonomics & Local TXT Import", () => {
+    function createTxtFile(content: string | Uint8Array, name = "import.txt"): File {
+      const blobPart = typeof content === "string" ? content : content;
+      return new File([blobPart], name, { type: "text/plain" });
+    }
+
+    it("displays Import TXT button and sets accept attribute on hidden file input", async () => {
+      render(<App />);
+      await screen.findByLabelText(/选择声音/i);
+
+      const importBtn = screen.getByRole("button", { name: /导入 TXT 文件/i });
+      expect(importBtn).toBeDefined();
+
+      const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+      expect(fileInput).not.toBeNull();
+      expect(fileInput.getAttribute("accept")).toBe(".txt,text/plain");
+    });
+
+    it("successfully imports local TXT, updates line and char counts, and preserves voice/prosody", async () => {
+      const user = userEvent.setup();
+      render(<App />);
+      await screen.findByLabelText(/选择声音/i);
+
+      // Select high quality and custom speed
+      await user.selectOptions(screen.getByLabelText(/音质/i), "high");
+      const textarea = screen.getByLabelText(/文本内容/i) as HTMLTextAreaElement;
+
+      const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+      const file = createTxtFile("Line 1\nLine 2\nLine 3", "speech.txt");
+
+      fireEvent.change(fileInput, { target: { files: [file] } });
+
+      await waitFor(() => {
+        expect(textarea.value).toBe("Line 1\nLine 2\nLine 3");
+      });
+
+      // Check stats: 3 lines, 20 code points
+      expect(screen.getByText(/3 行 · 20 \/ 20,000 字/)).toBeDefined();
+
+      // Voice & prosody are unchanged
+      const qualitySelect = screen.getByLabelText(/音质/i) as HTMLSelectElement;
+      expect(qualitySelect.value).toBe("high");
+    });
+
+    it("import does not destroy existing completed audio result", async () => {
+      const user = userEvent.setup();
+      render(<App />);
+      await screen.findByLabelText(/选择声音/i);
+
+      // Generate audio first
+      const textarea = screen.getByLabelText(/文本内容/i) as HTMLTextAreaElement;
+      await user.type(textarea, "Initial text");
+      await user.click(screen.getByRole("button", { name: /合成语音/i }));
+      await screen.findByLabelText(/语音合成播放器/i);
+
+      expect(screen.getByRole("link", { name: /下载合成音频/i })).toBeDefined();
+      expect(screen.getByLabelText(/音频生成信息/i)).toBeDefined();
+
+      // Now import a new file
+      const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+      const file = createTxtFile("New imported text", "new.txt");
+      fireEvent.change(fileInput, { target: { files: [file] } });
+
+      await waitFor(() => {
+        expect(textarea.value).toBe("New imported text");
+      });
+
+      // Previous audio player and metadata remain available
+      expect(screen.getByRole("link", { name: /下载合成音频/i })).toBeDefined();
+      expect(screen.getByLabelText(/音频生成信息/i)).toBeDefined();
+    });
+
+    it("preserves old input and displays accessible alert when import fails (oversize, invalid UTF-8, over-limit, NUL, wrong extension)", async () => {
+      const user = userEvent.setup();
+      render(<App />);
+      await screen.findByLabelText(/选择声音/i);
+
+      const textarea = screen.getByLabelText(/文本内容/i) as HTMLTextAreaElement;
+      await user.type(textarea, "Existing preserved content");
+      const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+
+      // 1. Wrong extension (.md)
+      const mdFile = createTxtFile("Some markdown", "readme.md");
+      fireEvent.change(fileInput, { target: { files: [mdFile] } });
+      await screen.findByText("仅支持 UTF-8 TXT 文件");
+      expect(textarea.value).toBe("Existing preserved content");
+
+      // 2. Oversize file (> 256 KiB)
+      const oversizeBytes = new Uint8Array(256 * 1024 + 1).fill(0x61);
+      const oversizeFile = createTxtFile(oversizeBytes, "big.txt");
+      fireEvent.change(fileInput, { target: { files: [oversizeFile] } });
+      await screen.findByText("TXT 文件超过 256 KiB");
+      expect(textarea.value).toBe("Existing preserved content");
+
+      // 3. Invalid UTF-8
+      const invalidBytes = new Uint8Array([0x48, 0x65, 0xff, 0xfe]);
+      const invalidFile = createTxtFile(invalidBytes, "invalid.txt");
+      fireEvent.change(fileInput, { target: { files: [invalidFile] } });
+      await screen.findByText("TXT 文件不是有效的 UTF-8 文本");
+      expect(textarea.value).toBe("Existing preserved content");
+
+      // 4. Over 20,000 code points
+      const over20k = createTxtFile("a".repeat(20_001), "over20k.txt");
+      fireEvent.change(fileInput, { target: { files: [over20k] } });
+      await screen.findByText("TXT 内容超过 20,000 字符上限");
+      expect(textarea.value).toBe("Existing preserved content");
+
+      // 5. NUL byte
+      const nulFile = createTxtFile(new Uint8Array([0x61, 0x00, 0x62]), "nul.txt");
+      fireEvent.change(fileInput, { target: { files: [nulFile] } });
+      await screen.findByText("文件内容不是有效的纯文本");
+      expect(textarea.value).toBe("Existing preserved content");
+
+      // Next valid import clears the error
+      const validFile = createTxtFile("Valid replacement", "valid.txt");
+      fireEvent.change(fileInput, { target: { files: [validFile] } });
+      await waitFor(() => {
+        expect(textarea.value).toBe("Valid replacement");
+      });
+      expect(screen.queryByText("文件内容不是有效的纯文本")).toBeNull();
+    });
+
+    it("disables import while generating, but allows import while auth is locked", async () => {
+      fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === "string" ? input : input.toString();
+        if (url === "/api/health") return new Response(JSON.stringify({ status: "ok" }));
+        if (url === "/api/voices") return new Response(JSON.stringify({ voices: mockVoices }));
+        if (url === "/api/speech") {
+          return new Promise<Response>((_res, rej) => {
+            init?.signal?.addEventListener("abort", () => {
+              const err = new Error("Aborted");
+              err.name = "AbortError";
+              rej(err);
+            });
+          });
+        }
+        return new Response(null, { status: 404 });
+      });
+
+      render(<App />);
+      await screen.findByLabelText(/选择声音/i);
+
+      const importBtn = screen.getByRole("button", { name: /导入 TXT 文件/i });
+      expect(importBtn.hasAttribute("disabled")).toBe(false);
+
+      // Trigger generation
+      const textarea = screen.getByLabelText(/文本内容/i) as HTMLTextAreaElement;
+      fireEvent.change(textarea, { target: { value: "Generating text" } });
+      fireEvent.click(screen.getByRole("button", { name: /合成语音/i }));
+
+      // Import button is disabled while generating
+      expect(importBtn.hasAttribute("disabled")).toBe(true);
+
+      // Cancel to return to idle
+      fireEvent.click(screen.getByRole("button", { name: /取消合成/i }));
+      await screen.findByText(/已取消生成/i);
+      expect(importBtn.hasAttribute("disabled")).toBe(false);
+    });
+
+    it("allows importing while auth is required", async () => {
+      fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+        const url = typeof input === "string" ? input : input.toString();
+        if (url === "/api/health") return new Response(JSON.stringify({ status: "ok" }));
+        if (url === "/api/voices") {
+          return new Response(JSON.stringify({ error: { code: "UNAUTHORIZED" } }), { status: 401 });
+        }
+        return new Response(null, { status: 404 });
+      });
+
+      render(<App />);
+      await screen.findByText("API 需要认证");
+
+      // Import button is still enabled
+      const importBtn = screen.getByRole("button", { name: /导入 TXT 文件/i });
+      expect(importBtn.hasAttribute("disabled")).toBe(false);
+
+      const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+      const file = createTxtFile("Auth locked import text", "test.txt");
+      fireEvent.change(fileInput, { target: { files: [file] } });
+
+      const textarea = screen.getByLabelText(/文本内容/i) as HTMLTextAreaElement;
+      await waitFor(() => {
+        expect(textarea.value).toBe("Auth locked import text");
+      });
+    });
+
+    it("latest selected file wins async race", async () => {
+      render(<App />);
+      await screen.findByLabelText(/选择声音/i);
+
+      const textarea = screen.getByLabelText(/文本内容/i) as HTMLTextAreaElement;
+      const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+
+      // File A is slow
+      let resolveFileA: (buf: ArrayBuffer) => void;
+      const slowPromise = new Promise<ArrayBuffer>((res) => {
+        resolveFileA = res;
+      });
+      const fileA = createTxtFile("File A content", "fileA.txt");
+      vi.spyOn(fileA, "arrayBuffer").mockReturnValue(slowPromise);
+
+      // File B is fast
+      const fileB = createTxtFile("File B content", "fileB.txt");
+
+      // Start A, then start B
+      fireEvent.change(fileInput, { target: { files: [fileA] } });
+      fireEvent.change(fileInput, { target: { files: [fileB] } });
+
+      // B completes first
+      await waitFor(() => {
+        expect(textarea.value).toBe("File B content");
+      });
+
+      // Now A completes later
+      resolveFileA!(new TextEncoder().encode("File A content").buffer);
+      await new Promise((r) => setTimeout(r, 50));
+
+      // B must NOT be overwritten by late A
+      expect(textarea.value).toBe("File B content");
+    });
+
+    it("triggers synthesis on Ctrl+Enter and Meta+Enter in textarea, but not in other inputs", async () => {
+      let speechCalls = 0;
+      fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === "string" ? input : input.toString();
+        if (url === "/api/health") return new Response(JSON.stringify({ status: "ok" }));
+        if (url === "/api/voices") return new Response(JSON.stringify({ voices: mockVoices }));
+        if (url === "/api/speech") {
+          speechCalls++;
+          return new Promise<Response>((_res, rej) => {
+            init?.signal?.addEventListener("abort", () => {
+              const err = new Error("Aborted");
+              err.name = "AbortError";
+              rej(err);
+            });
+          });
+        }
+        return new Response(null, { status: 404 });
+      });
+
+      render(<App />);
+      await screen.findByLabelText(/选择声音/i);
+
+      const textarea = screen.getByLabelText(/文本内容/i) as HTMLTextAreaElement;
+      fireEvent.change(textarea, { target: { value: "Shortcut test" } });
+
+      // 1. Ctrl+Enter in search input does not synthesize
+      const searchInput = screen.getByLabelText(/搜索声音/i);
+      fireEvent.keyDown(searchInput, { key: "Enter", ctrlKey: true });
+      expect(speechCalls).toBe(0);
+
+      // 2. Ctrl+Enter in textarea synthesizes
+      fireEvent.keyDown(textarea, { key: "Enter", ctrlKey: true });
+      expect(speechCalls).toBe(1);
+      const cancelBtn = await screen.findByRole("button", { name: /取消合成/i });
+
+      // Cancel
+      fireEvent.click(cancelBtn);
+      await screen.findByText(/已取消生成/i);
+
+      // 3. Meta+Enter in textarea synthesizes
+      fireEvent.keyDown(textarea, { key: "Enter", metaKey: true });
+      expect(speechCalls).toBe(2);
+
+      // Cancel
+      fireEvent.click(await screen.findByRole("button", { name: /取消合成/i }));
+      await screen.findByText(/已取消生成/i);
+    });
+
+    it("Escape key cancels active synthesis once, but does nothing when idle", async () => {
+      let abortCount = 0;
+      fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === "string" ? input : input.toString();
+        if (url === "/api/health") return new Response(JSON.stringify({ status: "ok" }));
+        if (url === "/api/voices") return new Response(JSON.stringify({ voices: mockVoices }));
+        if (url === "/api/speech") {
+          return new Promise<Response>((_res, rej) => {
+            init?.signal?.addEventListener("abort", () => {
+              abortCount++;
+              const err = new Error("Aborted");
+              err.name = "AbortError";
+              rej(err);
+            });
+          });
+        }
+        return new Response(null, { status: 404 });
+      });
+
+      render(<App />);
+      await screen.findByLabelText(/选择声音/i);
+
+      // Escape while idle does nothing
+      fireEvent.keyDown(window, { key: "Escape" });
+      expect(abortCount).toBe(0);
+      expect(screen.queryByText(/已取消生成/i)).toBeNull();
+
+      // Start generation
+      const textarea = screen.getByLabelText(/文本内容/i) as HTMLTextAreaElement;
+      fireEvent.change(textarea, { target: { value: "Escape test" } });
+      fireEvent.click(screen.getByRole("button", { name: /合成语音/i }));
+      await screen.findByRole("button", { name: /取消合成/i });
+
+      // Press Escape
+      fireEvent.keyDown(window, { key: "Escape" });
+      await screen.findByText(/已取消生成/i);
+      expect(abortCount).toBe(1);
+
+      // Subsequent Escape while idle does nothing
+      fireEvent.keyDown(window, { key: "Escape" });
+      expect(abortCount).toBe(1);
+    });
+
+    it("removes Escape keyboard listener on unmount", async () => {
+      const { unmount } = render(<App />);
+      await screen.findByLabelText(/选择声音/i);
+      unmount();
+      expect(() => {
+        fireEvent.keyDown(window, { key: "Escape" });
+      }).not.toThrow();
+    });
+
+    it("safe clear text requires native confirmation, clears input on confirm, preserves on cancel, and leaves completed audio intact", async () => {
+      const confirmSpy = vi.spyOn(window, "confirm");
+      try {
+        const user = userEvent.setup();
+        render(<App />);
+        await screen.findByLabelText(/选择声音/i);
+
+        const clearBtn = screen.getByRole("button", { name: /清空当前文本/i });
+        expect(clearBtn.hasAttribute("disabled")).toBe(true);
+
+        const textarea = screen.getByLabelText(/文本内容/i) as HTMLTextAreaElement;
+        await user.type(textarea, "Text to clear");
+        expect(clearBtn.hasAttribute("disabled")).toBe(false);
+
+        // 1. User cancels confirmation
+        confirmSpy.mockReturnValueOnce(false);
+        await user.click(clearBtn);
+        expect(confirmSpy).toHaveBeenCalledWith("确定清空当前文本吗？此操作无法撤销。");
+        expect(textarea.value).toBe("Text to clear");
+
+        // 2. Generate audio to verify clear doesn't destroy completed result
+        await user.click(screen.getByRole("button", { name: /合成语音/i }));
+        await screen.findByLabelText(/语音合成播放器/i);
+
+        // 3. User confirms clear
+        confirmSpy.mockReturnValueOnce(true);
+        await user.click(clearBtn);
+        expect(textarea.value).toBe("");
+        expect(clearBtn.hasAttribute("disabled")).toBe(true);
+
+        // Audio player and metadata remain intact
+        expect(screen.getByRole("link", { name: /下载合成音频/i })).toBeDefined();
+        expect(screen.getByLabelText(/音频生成信息/i)).toBeDefined();
+      } finally {
+        confirmSpy.mockRestore();
+      }
+    });
+
+    it("privacy regression: verifies sensitive text and file details are never written to storage", async () => {
+      const user = userEvent.setup();
+      render(<App />);
+      await screen.findByLabelText(/选择声音/i);
+
+      const textarea = screen.getByLabelText(/文本内容/i) as HTMLTextAreaElement;
+      await user.type(textarea, "Super sensitive text payload");
+
+      const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+      const file = createTxtFile("Secret imported text", "confidential.txt");
+      fireEvent.change(fileInput, { target: { files: [file] } });
+
+      await waitFor(() => {
+        expect(textarea.value).toBe("Secret imported text");
+      });
+
+      // Check localStorage and sessionStorage
+      for (let i = 0; i < window.localStorage.length; i++) {
+        const key = window.localStorage.key(i)!;
+        expect([
+          "edgetts.workbench.preferences.v1",
+          "edgetts.workbench.favoriteVoices.v1",
+        ]).toContain(key);
+        const val = window.localStorage.getItem(key)!;
+        expect(val).not.toContain("Secret");
+        expect(val).not.toContain("confidential");
+        expect(val).not.toContain("sensitive");
+      }
+      expect(window.sessionStorage.length).toBe(0);
+    });
+  });
 });
