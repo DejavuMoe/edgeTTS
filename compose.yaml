@@ -3,7 +3,6 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      network: host
     cap_drop:
       - ALL
     environment:
