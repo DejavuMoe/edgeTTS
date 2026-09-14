@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import type { VoiceDto } from "@edgetts/shared";
 import { App, isValidApiKeyFormat, MIN_API_KEY_LENGTH } from "../src/App.js";
 import { WORKBENCH_PREFERENCES_KEY } from "../src/preferences.js";
+import { WORKBENCH_FAVORITES_KEY } from "../src/voice-favorites.js";
 
 const mockVoices: readonly VoiceDto[] = [
   {
@@ -195,30 +196,45 @@ describe("EdgeTTS Web Workbench", () => {
   });
 
   describe("Voice search filter", () => {
-    it("filters voices by displayName, voice id, and locale case-insensitively", async () => {
+    it("filters voices by displayName, voice id, locale, and gender case-insensitively", async () => {
       const user = userEvent.setup();
       render(<App />);
 
       await screen.findByLabelText(/选择声音/i);
       const searchInput = screen.getByLabelText(/搜索声音/i);
 
-      // Search by displayName "Jenny"
+      // Search by displayName "Jenny" (Xiaoxiao filtered out -> placeholder + Jenny = 2 options)
       await user.type(searchInput, "jenny");
       const select = screen.getByLabelText(/选择声音/i) as HTMLSelectElement;
-      expect(select.options.length).toBe(1);
-      expect(select.options[0]?.value).toBe("en-US-JennyNeural");
+      expect(select.options.length).toBe(2);
+      expect(select.options[0]?.value).toBe("");
+      expect(select.options[0]?.disabled).toBe(true);
+      expect(select.options[0]?.textContent).toBe("当前声音不在筛选结果中");
+      expect(select.options[1]?.value).toBe("en-US-JennyNeural");
 
-      // Search by locale "ja-jp"
+      // Search by locale "ja-jp" (Xiaoxiao filtered out -> placeholder + Nanami = 2 options)
       await user.clear(searchInput);
       await user.type(searchInput, "ja-jp");
-      expect(select.options.length).toBe(1);
-      expect(select.options[0]?.value).toBe("ja-JP-NanamiNeural");
+      expect(select.options.length).toBe(2);
+      expect(select.options[0]?.value).toBe("");
+      expect(select.options[0]?.textContent).toBe("当前声音不在筛选结果中");
+      expect(select.options[1]?.value).toBe("ja-JP-NanamiNeural");
 
-      // Search by partial id "xiaoxiao"
+      // Search by partial id "xiaoxiao" (Xiaoxiao matches -> no placeholder = 1 option)
       await user.clear(searchInput);
       await user.type(searchInput, "xiaoxiao");
       expect(select.options.length).toBe(1);
       expect(select.options[0]?.value).toBe("zh-CN-XiaoxiaoNeural");
+
+      // Search by gender "Female" (matches Xiaoxiao, Jenny, Nanami; Yunxi excluded)
+      await user.clear(searchInput);
+      await user.type(searchInput, "female");
+      expect(select.options.length).toBe(3);
+      expect(Array.from(select.options).map((o) => o.value)).toEqual([
+        "en-US-JennyNeural",
+        "ja-JP-NanamiNeural",
+        "zh-CN-XiaoxiaoNeural",
+      ]);
     });
   });
 
@@ -1593,6 +1609,227 @@ describe("EdgeTTS Web Workbench", () => {
       // Previous metadata is cleared and no new metadata is produced
       expect(screen.queryByLabelText(/音频生成信息/i)).toBeNull();
       expect(screen.queryByRole("link", { name: /下载合成音频/i })).toBeNull();
+    });
+  });
+
+  describe("Phase 22: Voice Catalog Discovery & Favorites", () => {
+    it("renders locale options dynamically with counts based on loaded catalog", async () => {
+      render(<App />);
+      await screen.findByLabelText(/选择声音/i);
+
+      const localeSelect = screen.getByLabelText(/地区 \/ Locale/i) as HTMLSelectElement;
+      expect(localeSelect.options.length).toBe(4);
+      expect(localeSelect.options[0]?.value).toBe("all");
+      expect(localeSelect.options[0]?.textContent).toBe("全部地区 (4)");
+      expect(localeSelect.options[1]?.value).toBe("en-US");
+      expect(localeSelect.options[1]?.textContent).toBe("en-US (1)");
+      expect(localeSelect.options[2]?.value).toBe("ja-JP");
+      expect(localeSelect.options[2]?.textContent).toBe("ja-JP (1)");
+      expect(localeSelect.options[3]?.value).toBe("zh-CN");
+      expect(localeSelect.options[3]?.textContent).toBe("zh-CN (2)");
+    });
+
+    it("filters catalog by locale while maintaining selected voice stability", async () => {
+      const user = userEvent.setup();
+      render(<App />);
+      await screen.findByLabelText(/选择声音/i);
+
+      const localeSelect = screen.getByLabelText(/地区 \/ Locale/i);
+      const voiceSelect = screen.getByLabelText(/选择声音/i) as HTMLSelectElement;
+
+      // Active voice is default Xiaoxiao (zh-CN)
+      // Switch locale to ja-JP
+      await user.selectOptions(localeSelect, "ja-JP");
+
+      // Voice options include placeholder + Nanami
+      expect(voiceSelect.options.length).toBe(2);
+      expect(voiceSelect.options[0]?.value).toBe("");
+      expect(voiceSelect.options[0]?.disabled).toBe(true);
+      expect(voiceSelect.options[0]?.textContent).toBe("当前声音不在筛选结果中");
+      expect(voiceSelect.options[1]?.value).toBe("ja-JP-NanamiNeural");
+
+      // Current voice details still display active Xiaoxiao voice
+      const voiceDetails = screen.getByLabelText(/当前声音详情/i);
+      expect(voiceDetails.textContent).toContain("Microsoft Xiaoxiao · zh-CN · Female");
+      expect(voiceDetails.textContent).toContain("zh-CN-XiaoxiaoNeural");
+
+      // Selecting the visible voice switches active voice
+      await user.selectOptions(voiceSelect, "ja-JP-NanamiNeural");
+      expect(voiceSelect.options.length).toBe(1); // placeholder gone because Nanami is now visible
+      expect(voiceDetails.textContent).toContain("Microsoft Nanami · ja-JP · Female");
+      expect(voiceDetails.textContent).toContain("ja-JP-NanamiNeural");
+
+      // Switch back to "all"
+      await user.selectOptions(localeSelect, "all");
+      expect(voiceSelect.options.length).toBe(4);
+      expect(voiceDetails.textContent).toContain("Microsoft Nanami · ja-JP · Female");
+    });
+
+    it("toggles favorite voice, persists to localStorage, and enables favorite-only filter", async () => {
+      const user = userEvent.setup();
+      render(<App />);
+      await screen.findByLabelText(/选择声音/i);
+
+      const favCheckbox = screen.getByLabelText(/只看收藏/i) as HTMLInputElement;
+      expect(favCheckbox.disabled).toBe(true);
+      expect(favCheckbox.checked).toBe(false);
+
+      const favBtn = screen.getByRole("button", { name: /收藏当前声音/i });
+      expect(favBtn.getAttribute("aria-pressed")).toBe("false");
+      expect(favBtn.textContent).toContain("☆ 收藏");
+
+      // Toggle favorite on Xiaoxiao
+      await user.click(favBtn);
+
+      expect(favBtn.getAttribute("aria-pressed")).toBe("true");
+      expect(favBtn.textContent).toContain("★ 已收藏");
+      expect(favBtn.getAttribute("aria-label")).toBe("取消收藏当前声音");
+
+      // Check localStorage persistence
+      const savedRaw = window.localStorage.getItem(WORKBENCH_FAVORITES_KEY);
+      expect(savedRaw).not.toBeNull();
+      const saved = JSON.parse(savedRaw!);
+      expect(saved.voiceIds).toEqual(["zh-CN-XiaoxiaoNeural"]);
+
+      // Favorite checkbox is now enabled
+      expect(favCheckbox.disabled).toBe(false);
+
+      // Check favorite-only filter
+      await user.click(favCheckbox);
+      expect(favCheckbox.checked).toBe(true);
+
+      const voiceSelect = screen.getByLabelText(/选择声音/i) as HTMLSelectElement;
+      // Only Xiaoxiao is visible
+      expect(voiceSelect.options.length).toBe(1);
+      expect(voiceSelect.options[0]?.value).toBe("zh-CN-XiaoxiaoNeural");
+
+      // Un-favorite Xiaoxiao while favoriteOnly is active: favoriteOnly automatically resets to false
+      await user.click(favBtn);
+      expect(favBtn.getAttribute("aria-pressed")).toBe("false");
+      expect(favCheckbox.checked).toBe(false);
+      expect(favCheckbox.disabled).toBe(true);
+
+      const updatedRaw = window.localStorage.getItem(WORKBENCH_FAVORITES_KEY);
+      expect(JSON.parse(updatedRaw!).voiceIds).toEqual([]);
+    });
+
+    it("groups favorites under optgroup 收藏 at top without duplicate entries in locale groups", async () => {
+      // Pre-seed Jenny and Yunxi as favorites in localStorage
+      window.localStorage.setItem(
+        WORKBENCH_FAVORITES_KEY,
+        JSON.stringify({ voiceIds: ["en-US-JennyNeural", "zh-CN-YunxiNeural"] }),
+      );
+
+      render(<App />);
+      await screen.findByLabelText(/选择声音/i);
+
+      const voiceSelect = screen.getByLabelText(/选择声音/i) as HTMLSelectElement;
+      const optgroups = voiceSelect.querySelectorAll("optgroup");
+
+      // Groups should be:
+      // 1. 收藏 (Jenny, Yunxi)
+      // 2. ja-JP (Nanami)
+      // 3. zh-CN (Xiaoxiao - Yunxi is in favorites, so not in zh-CN group)
+      expect(optgroups.length).toBe(3);
+      expect(optgroups[0]?.label).toBe("收藏");
+      const favOptions = Array.from(optgroups[0]?.querySelectorAll("option") ?? []).map(
+        (o) => o.value,
+      );
+      expect(favOptions).toEqual(["en-US-JennyNeural", "zh-CN-YunxiNeural"]);
+
+      expect(optgroups[1]?.label).toBe("ja-JP");
+      const jaOptions = Array.from(optgroups[1]?.querySelectorAll("option") ?? []).map(
+        (o) => o.value,
+      );
+      expect(jaOptions).toEqual(["ja-JP-NanamiNeural"]);
+
+      expect(optgroups[2]?.label).toBe("zh-CN");
+      const zhOptions = Array.from(optgroups[2]?.querySelectorAll("option") ?? []).map(
+        (o) => o.value,
+      );
+      expect(zhOptions).toEqual(["zh-CN-XiaoxiaoNeural"]);
+    });
+
+    it("displays empty state placeholder when no voices match combined filters", async () => {
+      const user = userEvent.setup();
+      render(<App />);
+      await screen.findByLabelText(/选择声音/i);
+
+      const searchInput = screen.getByLabelText(/搜索声音/i);
+      await user.type(searchInput, "nonexistent-voice-name");
+
+      const voiceSelect = screen.getByLabelText(/选择声音/i) as HTMLSelectElement;
+      expect(voiceSelect.disabled).toBe(true);
+      expect(voiceSelect.options.length).toBe(1);
+      expect(voiceSelect.options[0]?.value).toBe("");
+      expect(voiceSelect.options[0]?.textContent).toBe("没有匹配的声音");
+      expect(voiceSelect.options[0]?.disabled).toBe(true);
+    });
+
+    it("reset all parameters does not reset voice search, locale filter, or favorites", async () => {
+      const user = userEvent.setup();
+      render(<App />);
+      await screen.findByLabelText(/选择声音/i);
+
+      const searchInput = screen.getByLabelText(/搜索声音/i) as HTMLInputElement;
+      const localeSelect = screen.getByLabelText(/地区 \/ Locale/i) as HTMLSelectElement;
+      const favBtn = screen.getByRole("button", { name: /收藏当前声音/i });
+
+      // Change search and locale
+      await user.type(searchInput, "xiao");
+      await user.selectOptions(localeSelect, "zh-CN");
+      await user.click(favBtn); // Favorite Xiaoxiao
+
+      // Change synthesis parameters
+      await user.selectOptions(screen.getByLabelText(/音质/i), "high");
+      const resetBtn = screen.getByRole("button", { name: /恢复默认参数/i });
+      expect(resetBtn.hasAttribute("disabled")).toBe(false);
+
+      // Reset parameters
+      await user.click(resetBtn);
+
+      // Synthesis parameter reset
+      const qualitySelect = screen.getByLabelText(/音质/i) as HTMLSelectElement;
+      expect(qualitySelect.value).toBe("standard");
+
+      // Discovery & Favorites remain intact
+      expect(searchInput.value).toBe("xiao");
+      expect(localeSelect.value).toBe("zh-CN");
+      expect(favBtn.getAttribute("aria-pressed")).toBe("true");
+    });
+
+    it("supports discovery and favorites correctly when unlocked via API key auth flow", async () => {
+      const user = userEvent.setup();
+      fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === "string" ? input : input.toString();
+        if (url === "/api/health") return new Response(JSON.stringify({ status: "ok" }));
+        if (url === "/api/voices") {
+          const auth = (init?.headers as Record<string, string> | undefined)?.Authorization;
+          if (auth === "Bearer sk-validkey1234567890") {
+            return new Response(JSON.stringify({ voices: mockVoices }), {
+              headers: { "Content-Type": "application/json" },
+            });
+          }
+          return new Response(
+            JSON.stringify({ error: { code: "UNAUTHORIZED", message: "API key required" } }),
+            { status: 401, headers: { "Content-Type": "application/json" } },
+          );
+        }
+        return new Response(null, { status: 404 });
+      });
+
+      render(<App />);
+      await screen.findByText("API 需要认证");
+
+      // Unlock with valid key
+      const keyInput = screen.getByLabelText("API Key");
+      await user.type(keyInput, "sk-validkey1234567890");
+      await user.click(screen.getByRole("button", { name: "解锁" }));
+
+      await screen.findByLabelText(/选择声音/i);
+      const localeSelect = screen.getByLabelText(/地区 \/ Locale/i) as HTMLSelectElement;
+      expect(localeSelect.options.length).toBe(4);
+      expect(localeSelect.options[0]?.textContent).toBe("全部地区 (4)");
     });
   });
 });

@@ -30,6 +30,7 @@ Self-hosted Microsoft Edge TTS Web application and streaming speech synthesis AP
   - Simultaneous stream chunk accumulation enables instant audio download upon completion.
   - Non-sensitive voice and prosody preferences persist locally; API credentials and input text are never persisted.
   - One-click synthesis parameter reset and descriptive, sanitized MP3 download filenames.
+  - Voice discovery with locale partition filtering, search across voice name, ID, locale, and gender, favorite voice toggling, favorites-first grouping, and selected voice stability.
 - **Production Single-Origin Web Hosting**:
   - Fastify hosts built frontend assets (`apps/web/dist`) and API endpoints under a single port/domain.
   - Immutable long-term caching for hashed assets (`/assets/*`).

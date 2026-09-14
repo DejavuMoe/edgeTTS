@@ -19,6 +19,17 @@ import {
   type CompletedResultMeta,
   type GenerationSnapshot,
 } from "./result-metadata.js";
+import {
+  getLocaleOptions,
+  filterVoices,
+  getGroupedVoices,
+  isVoiceVisible,
+} from "./voice-catalog.js";
+import {
+  loadFavoriteVoiceIds,
+  saveFavoriteVoiceIds,
+  toggleFavoriteVoiceId,
+} from "./voice-favorites.js";
 import "./App.css";
 
 type ApiStatus = "loading" | "healthy" | "unavailable";
@@ -35,10 +46,17 @@ export function App() {
   const savedVoiceIdRef = useRef<string>(initialPreferences.voiceId);
   const isHydratedRef = useRef<boolean>(false);
 
+  // Favorites state
+  const [favoriteVoiceIds, setFavoriteVoiceIds] = useState<string[]>(() => loadFavoriteVoiceIds());
+
   const [apiStatus, setApiStatus] = useState<ApiStatus>("loading");
   const [voices, setVoices] = useState<readonly VoiceDto[]>([]);
   const [selectedVoiceId, setSelectedVoiceId] = useState<string>("");
+
+  // Ephemeral filter states (not persisted across reloads)
   const [voiceSearch, setVoiceSearch] = useState<string>("");
+  const [selectedLocale, setSelectedLocale] = useState<string>("all");
+  const [favoriteOnly, setFavoriteOnly] = useState<boolean>(false);
   const [voiceError, setVoiceError] = useState<string | null>(null);
 
   // In-memory authentication state (never persisted to storage)
@@ -74,6 +92,8 @@ export function App() {
   // Form element IDs for accessible labels
   const textInputId = useId();
   const voiceSearchId = useId();
+  const localeSelectId = useId();
+  const favoriteOnlyCheckboxId = useId();
   const voiceSelectId = useId();
   const qualitySelectId = useId();
   const speedSliderId = useId();
@@ -85,19 +105,60 @@ export function App() {
   const isOverLimit = codePointCount > MAX_NATIVE_INPUT_CODE_POINTS;
   const isInputEmpty = input.trim().length === 0;
 
-  // Filter voices based on search query
-  const filteredVoices = useMemo(() => {
-    const q = voiceSearch.trim().toLowerCase();
-    if (!q) {
-      return voices;
+  // Favorites fast lookup
+  const favoriteSet = useMemo(() => new Set(favoriteVoiceIds), [favoriteVoiceIds]);
+
+  // Catalog partitions and locales
+  const localeOptions = useMemo(() => getLocaleOptions(voices), [voices]);
+
+  const totalFavoritesInCatalog = useMemo(
+    () => voices.filter((v) => favoriteSet.has(v.id)).length,
+    [voices, favoriteSet],
+  );
+
+  // Filter voices based on search query, locale partition, and favoriteOnly toggle
+  const filteredVoices = useMemo(
+    () =>
+      filterVoices(voices, {
+        search: voiceSearch,
+        locale: selectedLocale,
+        favoriteOnly,
+        favoriteIds: favoriteSet,
+      }),
+    [voices, voiceSearch, selectedLocale, favoriteOnly, favoriteSet],
+  );
+
+  // Visibility of active selection in current filtered results
+  const isCurrentVoiceVisible = useMemo(
+    () => isVoiceVisible(filteredVoices, selectedVoiceId),
+    [filteredVoices, selectedVoiceId],
+  );
+
+  // Hierarchical grouped catalog: Favorites first, then Locale groups
+  const voiceGroups = useMemo(
+    () => getGroupedVoices(filteredVoices, favoriteSet),
+    [filteredVoices, favoriteSet],
+  );
+
+  // Active voice metadata
+  const activeVoice = useMemo(
+    () => voices.find((v) => v.id === selectedVoiceId),
+    [voices, selectedVoiceId],
+  );
+
+  const isCurrentVoiceFavorite = Boolean(selectedVoiceId && favoriteSet.has(selectedVoiceId));
+
+  const handleToggleFavorite = (): void => {
+    if (!selectedVoiceId) return;
+    const next = toggleFavoriteVoiceId(favoriteVoiceIds, selectedVoiceId);
+    setFavoriteVoiceIds(next);
+    saveFavoriteVoiceIds(next);
+    const nextSet = new Set(next);
+    const remainingInCatalog = voices.filter((v) => nextSet.has(v.id)).length;
+    if (remainingInCatalog === 0) {
+      setFavoriteOnly(false);
     }
-    return voices.filter(
-      (v) =>
-        v.displayName.toLowerCase().includes(q) ||
-        v.id.toLowerCase().includes(q) ||
-        v.locale.toLowerCase().includes(q),
-    );
-  }, [voices, voiceSearch]);
+  };
 
   // Parameters reset availability
   const isAllParametersDefault =
@@ -471,22 +532,58 @@ export function App() {
             </div>
           )}
 
-          {/* Voice Search & Selection */}
-          <div className="control-group">
-            <label htmlFor={voiceSearchId} className="control-label">
-              搜索声音
-            </label>
-            <input
-              id={voiceSearchId}
-              type="search"
-              className="control-input"
-              placeholder="按名称或语言过滤 (如 zh-CN, Xiaoxiao)..."
-              value={voiceSearch}
-              onChange={(e) => setVoiceSearch(e.target.value)}
-              disabled={isGenerating || voices.length === 0}
-            />
+          {/* Voice Search & Locale Filter */}
+          <div className="voice-filter-row">
+            <div className="control-group search-group">
+              <label htmlFor={voiceSearchId} className="control-label">
+                搜索声音
+              </label>
+              <input
+                id={voiceSearchId}
+                type="search"
+                className="control-input"
+                placeholder="按名称、ID、语言或性别过滤..."
+                value={voiceSearch}
+                onChange={(e) => setVoiceSearch(e.target.value)}
+                disabled={isGenerating || voices.length === 0}
+              />
+            </div>
+
+            <div className="control-group locale-group">
+              <label htmlFor={localeSelectId} className="control-label">
+                地区 / Locale
+              </label>
+              <select
+                id={localeSelectId}
+                className="control-select"
+                value={selectedLocale}
+                onChange={(e) => setSelectedLocale(e.target.value)}
+                disabled={isGenerating || voices.length === 0}
+              >
+                {localeOptions.map((opt) => (
+                  <option key={opt.locale} value={opt.locale}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
+          {/* Favorite Only Filter */}
+          <div className="favorite-filter-row">
+            <label htmlFor={favoriteOnlyCheckboxId} className="favorite-checkbox-label">
+              <input
+                id={favoriteOnlyCheckboxId}
+                type="checkbox"
+                checked={favoriteOnly}
+                onChange={(e) => setFavoriteOnly(e.target.checked)}
+                disabled={isGenerating || totalFavoritesInCatalog === 0}
+              />
+              <span>只看收藏</span>
+            </label>
+          </div>
+
+          {/* Voice Selection */}
           <div className="control-group">
             <label htmlFor={voiceSelectId} className="control-label">
               选择声音 ({filteredVoices.length})
@@ -499,20 +596,57 @@ export function App() {
               <select
                 id={voiceSelectId}
                 className="control-select"
-                value={selectedVoiceId}
+                value={isCurrentVoiceVisible ? selectedVoiceId : ""}
                 onChange={(e) => {
                   const newVoice = e.target.value;
-                  setSelectedVoiceId(newVoice);
-                  savedVoiceIdRef.current = newVoice;
+                  if (newVoice) {
+                    setSelectedVoiceId(newVoice);
+                    savedVoiceIdRef.current = newVoice;
+                  }
                 }}
                 disabled={isGenerating || filteredVoices.length === 0}
               >
-                {filteredVoices.map((v) => (
-                  <option key={v.id} value={v.id}>
-                    {v.displayName} ({v.locale} - {v.gender})
+                {filteredVoices.length === 0 ? (
+                  <option value="" disabled>
+                    没有匹配的声音
                   </option>
+                ) : !isCurrentVoiceVisible ? (
+                  <option value="" disabled>
+                    当前声音不在筛选结果中
+                  </option>
+                ) : null}
+                {voiceGroups.map((group) => (
+                  <optgroup key={group.label} label={group.label}>
+                    {group.voices.map((v) => (
+                      <option key={v.id} value={v.id}>
+                        {v.displayName} ({v.locale} - {v.gender})
+                      </option>
+                    ))}
+                  </optgroup>
                 ))}
               </select>
+            )}
+
+            {/* Current Voice Details & Favorite Action */}
+            {activeVoice && (
+              <div className="current-voice-details" aria-label="当前声音详情">
+                <div className="current-voice-meta">
+                  <span className="current-voice-title">
+                    {activeVoice.displayName} · {activeVoice.locale} · {activeVoice.gender}
+                  </span>
+                  <span className="current-voice-id">{activeVoice.id}</span>
+                </div>
+                <button
+                  type="button"
+                  className={`btn-favorite ${isCurrentVoiceFavorite ? "is-favorite" : ""}`}
+                  onClick={handleToggleFavorite}
+                  disabled={isGenerating || !selectedVoiceId}
+                  aria-pressed={isCurrentVoiceFavorite}
+                  aria-label={isCurrentVoiceFavorite ? "取消收藏当前声音" : "收藏当前声音"}
+                >
+                  {isCurrentVoiceFavorite ? "★ 已收藏" : "☆ 收藏"}
+                </button>
+              </div>
             )}
           </div>
 
