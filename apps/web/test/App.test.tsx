@@ -2324,7 +2324,7 @@ describe("EdgeTTS Web Workbench", () => {
 
       fireEvent.click(screen.getByRole("button", { name: /合成语音/i }));
 
-      const indicator = await screen.findByRole("status");
+      const indicator = await screen.findByRole("status", { name: "合成状态" });
       expect(indicator.textContent).toBe("正在等待语音服务…");
 
       // Resolve response with stream
@@ -2410,7 +2410,7 @@ describe("EdgeTTS Web Workbench", () => {
         pushChunk(new Uint8Array(32 * 1024));
 
         await waitFor(() => {
-          const indicator = screen.getByRole("status");
+          const indicator = screen.getByRole("status", { name: "合成状态" });
           expect(indicator.textContent).toContain("共 5 段");
           expect(indicator.textContent).toContain("32.0 KiB");
         });
@@ -2420,7 +2420,7 @@ describe("EdgeTTS Web Workbench", () => {
         await screen.findByLabelText(/语音合成播放器/i);
 
         // Indicator disappears upon completion
-        expect(screen.queryByRole("status")).toBeNull();
+        expect(screen.queryByRole("status", { name: "合成状态" })).toBeNull();
 
         // Completed metadata includes segment count and audio bytes
         const metadata = screen.getByLabelText(/音频生成信息/i);
@@ -2572,7 +2572,7 @@ describe("EdgeTTS Web Workbench", () => {
       fireEvent.click(screen.getByRole("button", { name: /合成语音/i }));
       await screen.findByText("语音服务暂时不可用");
 
-      expect(screen.queryByRole("status")).toBeNull();
+      expect(screen.queryByRole("status", { name: "合成状态" })).toBeNull();
     });
 
     it("cancel clears active telemetry indicator", async () => {
@@ -2599,12 +2599,230 @@ describe("EdgeTTS Web Workbench", () => {
       fireEvent.change(textarea, { target: { value: "测试文本" } });
 
       fireEvent.click(screen.getByRole("button", { name: /合成语音/i }));
-      expect(await screen.findByRole("status")).toBeDefined();
+      expect(await screen.findByRole("status", { name: "合成状态" })).toBeDefined();
 
       fireEvent.click(screen.getByRole("button", { name: /取消合成/i }));
       await screen.findByText("已取消生成");
 
-      expect(screen.queryByRole("status")).toBeNull();
+      expect(screen.queryByRole("status", { name: "合成状态" })).toBeNull();
+    });
+  });
+
+  describe("Phase 25: Workbench Accessibility & Responsive Hardening", () => {
+    it("API health state exposes polite live region and announces status transitions", async () => {
+      let resolveHealth: (res: Response) => void;
+      const delayedHealthPromise = new Promise<Response>((resolve) => {
+        resolveHealth = resolve;
+      });
+
+      fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+        const url = typeof input === "string" ? input : input.toString();
+        if (url === "/api/health") return delayedHealthPromise;
+        if (url === "/api/voices") return new Response(JSON.stringify({ voices: mockVoices }));
+        return new Response(null, { status: 404 });
+      });
+
+      render(<App />);
+
+      // Initial loading state exposes role="status", aria-live="polite", and aria-atomic="true"
+      const statusRegion = screen.getByRole("status", { name: /API 状态/i });
+      expect(statusRegion).toBeDefined();
+      expect(statusRegion.getAttribute("aria-live")).toBe("polite");
+      expect(statusRegion.getAttribute("aria-atomic")).toBe("true");
+      expect(statusRegion.textContent).toContain("连接中...");
+
+      // Resolve health
+      resolveHealth!(new Response(JSON.stringify({ status: "ok" })));
+
+      // Updates to healthy without unmounting the live region
+      await waitFor(() => {
+        expect(statusRegion.textContent).toContain("正常");
+      });
+      expect(statusRegion.getAttribute("aria-live")).toBe("polite");
+    });
+
+    it("API health failure politely announces unavailable status", async () => {
+      fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+        const url = typeof input === "string" ? input : input.toString();
+        if (url === "/api/health") return new Response(null, { status: 500 });
+        if (url === "/api/voices") return new Response(JSON.stringify({ voices: mockVoices }));
+        return new Response(null, { status: 404 });
+      });
+
+      render(<App />);
+
+      const statusRegion = await screen.findByRole("status", { name: /API 状态/i });
+      await waitFor(() => {
+        expect(statusRegion.textContent).toContain("不可用");
+      });
+      expect(statusRegion.getAttribute("aria-live")).toBe("polite");
+    });
+
+    it("hidden file input is excluded from tab navigation while visible import button is accessible", async () => {
+      const { container } = render(<App />);
+      await screen.findByLabelText(/选择声音/i);
+
+      const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement;
+      expect(fileInput).toBeDefined();
+      expect(fileInput.getAttribute("tabIndex")).toBe("-1");
+      expect(fileInput.getAttribute("aria-hidden")).toBe("true");
+
+      const importBtn = screen.getByRole("button", { name: /导入 TXT 文件/i });
+      expect(importBtn).toBeDefined();
+      expect(importBtn.hasAttribute("disabled")).toBe(false);
+      expect(importBtn.getAttribute("tabIndex")).toBeNull();
+    });
+
+    it("favorite button exposes dynamic aria-pressed semantics and descriptive labels", async () => {
+      const user = userEvent.setup();
+      render(<App />);
+      await screen.findByLabelText(/选择声音/i);
+
+      const favBtn = screen.getByRole("button", { name: /收藏当前声音/i });
+      expect(favBtn.getAttribute("aria-pressed")).toBe("false");
+      expect(favBtn.textContent).toContain("☆ 收藏");
+
+      // Click favorite
+      await user.click(favBtn);
+      expect(favBtn.getAttribute("aria-pressed")).toBe("true");
+      expect(favBtn.getAttribute("aria-label")).toBe("取消收藏当前声音");
+      expect(favBtn.textContent).toContain("★ 已收藏");
+
+      // Click again to unfavorite
+      await user.click(favBtn);
+      expect(favBtn.getAttribute("aria-pressed")).toBe("false");
+      expect(favBtn.getAttribute("aria-label")).toBe("收藏当前声音");
+      expect(favBtn.textContent).toContain("☆ 收藏");
+    });
+
+    it("validation and runtime errors expose alert semantics", async () => {
+      render(<App />);
+      await screen.findByLabelText(/选择声音/i);
+
+      const textarea = screen.getByLabelText(/文本内容/i) as HTMLTextAreaElement;
+      fireEvent.change(textarea, { target: { value: "a".repeat(20001) } });
+
+      const alert = await screen.findByRole("alert");
+      expect(alert.textContent).toContain("超出上限");
+    });
+
+    it("completed result audio player exposes native controls and accessible download link", async () => {
+      fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+        const url = typeof input === "string" ? input : input.toString();
+        if (url === "/api/health") return new Response(JSON.stringify({ status: "ok" }));
+        if (url === "/api/voices") return new Response(JSON.stringify({ voices: mockVoices }));
+        if (url === "/api/speech") {
+          const stream = new ReadableStream<Uint8Array>({
+            start(ctrl) {
+              ctrl.enqueue(new Uint8Array(4096));
+              ctrl.close();
+            },
+          });
+          return new Response(stream, {
+            status: 200,
+            headers: {
+              "Content-Type": "audio/mpeg",
+              "X-EdgeTTS-Segment-Count": "1",
+              "X-EdgeTTS-Segment-Max-Code-Points": "300",
+            },
+          });
+        }
+        return new Response(null, { status: 404 });
+      });
+
+      render(<App />);
+      await screen.findByLabelText(/选择声音/i);
+
+      const textarea = screen.getByLabelText(/文本内容/i) as HTMLTextAreaElement;
+      fireEvent.change(textarea, { target: { value: "语音测试" } });
+
+      fireEvent.click(screen.getByRole("button", { name: /合成语音/i }));
+
+      const audio = await screen.findByLabelText(/语音合成播放器/i);
+      expect(audio.tagName.toLowerCase()).toBe("audio");
+      expect(audio.hasAttribute("controls")).toBe(true);
+
+      const downloadLink = screen.getByRole("link", { name: /下载合成音频/i });
+      expect(downloadLink.getAttribute("download")).toContain(".mp3");
+      expect(downloadLink.getAttribute("href")).toContain("blob:");
+    });
+
+    it("keyboard Tab navigation reaches core interactive controls in logical sequence", async () => {
+      window.localStorage.setItem(
+        WORKBENCH_FAVORITES_KEY,
+        JSON.stringify({ voiceIds: ["zh-CN-XiaoxiaoNeural"] }),
+      );
+      const user = userEvent.setup();
+      render(<App />);
+      await screen.findByLabelText(/选择声音/i);
+
+      const textarea = screen.getByLabelText(/文本内容/i) as HTMLTextAreaElement;
+      // Enter text so clear and generate buttons become enabled
+      fireEvent.change(textarea, { target: { value: "可访问性导航测试" } });
+
+      // Tab into the page
+      await user.tab();
+      expect(document.activeElement).toBe(screen.getByRole("button", { name: /导入 TXT 文件/i }));
+
+      await user.tab();
+      expect(document.activeElement).toBe(screen.getByRole("button", { name: /清空当前文本/i }));
+
+      await user.tab();
+      expect(document.activeElement).toBe(textarea);
+
+      await user.tab();
+      expect(document.activeElement).toBe(screen.getByRole("searchbox", { name: /搜索声音/i }));
+
+      await user.tab();
+      expect(document.activeElement).toBe(
+        screen.getByRole("combobox", { name: /地区 \/ Locale/i }),
+      );
+
+      await user.tab();
+      expect(document.activeElement).toBe(screen.getByRole("checkbox", { name: /只看收藏/i }));
+
+      await user.tab();
+      expect(document.activeElement).toBe(screen.getByRole("combobox", { name: /选择声音/i }));
+
+      await user.tab();
+      expect(document.activeElement).toBe(
+        screen.getByRole("button", { name: /取消收藏当前声音/i }),
+      );
+
+      await user.tab();
+      expect(document.activeElement).toBe(screen.getByRole("combobox", { name: /音质/i }));
+
+      await user.tab();
+      expect(document.activeElement).toBe(screen.getByLabelText(/^语速/i));
+
+      await user.tab();
+      expect(document.activeElement).toBe(screen.getByLabelText(/^音调/i));
+
+      await user.tab();
+      expect(document.activeElement).toBe(screen.getByLabelText(/^音量/i));
+
+      await user.tab();
+      expect(document.activeElement).toBe(screen.getByRole("button", { name: /合成语音/i }));
+    });
+
+    it("disabled controls are natively skipped during Tab navigation", async () => {
+      const user = userEvent.setup();
+      render(<App />);
+      await screen.findByLabelText(/选择声音/i);
+
+      // Input is empty: clear button is disabled, reset all is disabled, generate is disabled
+      const clearBtn = screen.getByRole("button", { name: /清空当前文本/i }) as HTMLButtonElement;
+      expect(clearBtn.disabled).toBe(true);
+
+      const textarea = screen.getByLabelText(/文本内容/i);
+
+      // Tab 1 lands on import
+      await user.tab();
+      expect(document.activeElement).toBe(screen.getByRole("button", { name: /导入 TXT 文件/i }));
+
+      // Tab 2 skips disabled clear button and lands directly on textarea
+      await user.tab();
+      expect(document.activeElement).toBe(textarea);
     });
   });
 });

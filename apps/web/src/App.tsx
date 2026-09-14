@@ -561,13 +561,21 @@ export function App() {
         </div>
         <div className="header-status">
           <span className="status-label">API 状态:</span>
-          {apiStatus === "loading" && (
-            <span className="status-badge status-loading">连接中...</span>
-          )}
-          {apiStatus === "healthy" && <span className="status-badge status-healthy">正常</span>}
-          {apiStatus === "unavailable" && (
-            <span className="status-badge status-unavailable">不可用</span>
-          )}
+          <span
+            className="header-status-value"
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+            aria-label="API 状态"
+          >
+            {apiStatus === "loading" && (
+              <span className="status-badge status-loading">连接中...</span>
+            )}
+            {apiStatus === "healthy" && <span className="status-badge status-healthy">正常</span>}
+            {apiStatus === "unavailable" && (
+              <span className="status-badge status-unavailable">不可用</span>
+            )}
+          </span>
         </div>
       </header>
 
@@ -968,7 +976,12 @@ export function App() {
           <div className="result-header">
             <h2 className="panel-title">合成结果</h2>
             {isGenerating && telemetry && (
-              <span className="generating-indicator" role="status" aria-live="polite">
+              <span
+                className="generating-indicator"
+                role="status"
+                aria-live="polite"
+                aria-label="合成状态"
+              >
                 {formatGeneratingStatusText(telemetry)}
               </span>
             )}
