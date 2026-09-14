@@ -292,6 +292,7 @@ jobs:
       - name: Set up QEMU
         uses: docker/setup-qemu-action@1f40c72289eff860ee54a304f1438e3cff362e0a # v4.3.0
         with:
+          image: tonistiigi/binfmt:qemu-v7.0.0-28
           platforms: arm64
 
       - name: Set up Docker Buildx
@@ -425,8 +426,12 @@ jobs:
           set -euo pipefail
           DIGEST="${{ steps.build.outputs.digest }}"
 
+          echo "Inspecting binfmt registrations:"
+          ls -la /proc/sys/fs/binfmt_misc/ || true
+
           # 1. Test linux/amd64 runtime
           echo "Testing linux/amd64 runtime from registry..."
+          docker pull --platform linux/amd64 "ghcr.io/dejavumoe/edgetts@${DIGEST}"
           docker run --rm --platform linux/amd64 "ghcr.io/dejavumoe/edgetts@${DIGEST}" node -e '
             const fs = require("node:fs");
             console.log("AMD64 Process Arch:", process.arch);
@@ -452,6 +457,7 @@ jobs:
 
           # 2. Test linux/arm64 runtime under QEMU
           echo "Testing linux/arm64 runtime from registry under QEMU..."
+          docker pull --platform linux/arm64 "ghcr.io/dejavumoe/edgetts@${DIGEST}"
           docker run --rm --platform linux/arm64 "ghcr.io/dejavumoe/edgetts@${DIGEST}" node -e '
             const fs = require("node:fs");
             console.log("ARM64 Process Arch:", process.arch);
