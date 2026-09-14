@@ -1,0 +1,25 @@
+services:
+  edgetts:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      network: host
+    cap_drop:
+      - ALL
+    environment:
+      - NODE_ENV=production
+      - HOST=0.0.0.0
+      - PORT=8080
+      - WEB_DIST_DIR=/app/web-dist
+      - API_KEY
+    image: edgetts:local
+    init: true
+    ports:
+      - ${EDGETTS_BIND_ADDRESS:-127.0.0.1}:${EDGETTS_HOST_PORT:-8080}:8080
+    read_only: true
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    stop_grace_period: 30s
+    tmpfs:
+      - /tmp
