@@ -270,6 +270,73 @@ EdgeTTS enforces layered protection against abuse and upstream saturation:
    - Admitted requests proceed to the domain concurrency limiter (max 4 concurrent active syntheses, max 16 queued requests).
    - If queue capacity is exceeded, requests receive `503 Service Unavailable` (`SERVER_BUSY`).
 
+## Container Images
+
+edgeTTS publishes official multi-architecture production container images to GitHub Container Registry (GHCR):
+
+```text
+ghcr.io/dejavumoe/edgetts
+```
+
+### Supported Architectures
+
+- `linux/amd64` (x86_64)
+- `linux/arm64` (aarch64)
+
+### Tagging Strategy
+
+| Tag Format         | Example                                                                  | Description                                                                                          |
+| ------------------ | ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------- |
+| `:sha-<commit>`    | `ghcr.io/dejavumoe/edgetts:sha-fa5f08255c3308b6d5bcfe4d4c497db5a89c0a44` | **Immutable commit tag**. Pinned directly to the 40-character Git commit SHA.                        |
+| `@sha256:<digest>` | `ghcr.io/dejavumoe/edgetts@sha256:abc123...`                             | **Content-addressable digest** (recommended for production). Permanently immutable and tamper-proof. |
+| `:main`            | `ghcr.io/dejavumoe/edgetts:main`                                         | Rolling build from the latest validated commit on `main`.                                            |
+| `:X.Y.Z`           | `ghcr.io/dejavumoe/edgetts:0.1.0`                                        | SemVer release tag (published on git tags matching `v*.*.*`).                                        |
+| `:latest`          | `ghcr.io/dejavumoe/edgetts:latest`                                       | Points to the most recent SemVer release (never updated by `main` branch pushes).                    |
+
+### Digest-First Production Deployment
+
+In production environments, always prefer deploying by exact image digest (`@sha256:...`) or commit SHA tag (`:sha-<commit>`) rather than rolling tags like `:main` or `:latest`:
+
+1. **Immutability**: Image digests are cryptographic hashes of the OCI manifest index. A digest can never be overwritten, retagged, or mutated.
+2. **Deterministic Rollouts**: Every node in a cluster pulls the exact same container layers, preventing configuration drift across instances.
+3. **Supply Chain Integrity**: edgeTTS builds publish BuildKit SLSA provenance (`mode=max`) and SPDX SBOM attestations attached directly to every image index.
+
+**Example `docker run` by digest:**
+
+```bash
+docker run -d \
+  --name edgetts \
+  --read-only \
+  --cap-drop=ALL \
+  --security-opt=no-new-privileges \
+  --tmpfs /tmp \
+  -e API_KEY='replace-with-a-random-secret' \
+  -p 127.0.0.1:8080:8080 \
+  ghcr.io/dejavumoe/edgetts@sha256:<digest>
+```
+
+**Example `docker-compose.yml` image override:**
+
+```yaml
+services:
+  edgetts:
+    image: ghcr.io/dejavumoe/edgetts@sha256:<digest>
+```
+
+### Registry Authentication
+
+For public releases, pulling from GitHub Container Registry requires no login:
+
+```bash
+docker pull ghcr.io/dejavumoe/edgetts:main
+```
+
+If the package is private or when pulling in CI environments subject to GitHub rate limits, authenticate using a GitHub Personal Access Token (PAT) with `read:packages` scope:
+
+```bash
+echo "$GITHUB_TOKEN" | docker login ghcr.io -u <username> --password-stdin
+```
+
 ## Docker
 
 edgeTTS provides a hardened, multi-stage production Docker image running as a non-root user with a minimal Node 24 runtime, built-in healthcheck, and read-only container filesystem support.
@@ -374,14 +441,16 @@ pnpm --filter @edgetts/server smoke
 edgeTTS runs an automated, credential-free GitHub Actions workflow (`.github/workflows/ci.yml`) on:
 
 - Pushes to the `main` branch
+- Release tags matching `v*.*.*`
 - Pull requests
 - Manual workflow dispatches (`workflow_dispatch`)
 
-The pipeline executes three validation jobs:
+The pipeline executes up to four jobs:
 
 1. **`quality`**: Frozen-lockfile dependency installation, workspace build, TypeScript typecheck, ESLint, test suites, Prettier formatting verification, and repository cleanliness audits.
 2. **`docker`**: Multi-stage production container build, non-root user and healthcheck metadata inspection, fail-closed startup validation (`REQUIRE_API_KEY=true`), and runtime security posture checks (read-only rootfs, dropped capabilities, no-new-privileges).
 3. **`proxy-contract`**: Containerized `nginx -t` validation and deterministic proxy tests via `EDGETTS_NGINX_SKIP_LIVE=1 ./deploy/nginx/test-proxy.sh` (validating TLS termination, chunk streaming, and HTTP 400/503/429 status preservation).
+4. **`publish`** (Multi-Arch GHCR Release): Runs strictly on `main` branch pushes or `v*.*.*` release tags after all three validation gates succeed. Builds multi-arch images for `linux/amd64` and `linux/arm64`, attaches BuildKit SLSA provenance (`mode=max`) and SPDX SBOM attestations, pushes to GHCR, and verifies manifest digests, tag resolutions, non-root execution, and architecture isolation under QEMU.
 
 > [!NOTE]
 > Live speech synthesis against Microsoft Edge TTS endpoints is intentionally excluded from automated CI to eliminate external network fragility and rate limit dependencies from pull request gating. Full upstream live qualification remains available locally in controlled environments via `./deploy/nginx/test-proxy.sh` and the package smoke test scripts.
