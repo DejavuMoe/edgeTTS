@@ -476,3 +476,7 @@ The pipeline executes up to four jobs:
 
 > [!NOTE]
 > Live speech synthesis against Microsoft Edge TTS endpoints is intentionally excluded from automated CI to eliminate external network fragility and rate limit dependencies from pull request gating. Full upstream live qualification remains available locally in controlled environments via `./deploy/nginx/test-proxy.sh` and the package smoke test scripts.
+
+## License
+
+[MIT](LICENSE)
