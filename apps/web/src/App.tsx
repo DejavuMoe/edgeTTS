@@ -237,6 +237,15 @@ export function App() {
           setIsGenerating(false);
           setGenerationError("API Key 已失效或未提供，请重新验证");
           return;
+        } else if (response.status === 429) {
+          try {
+            const data = (await response.json()) as { error?: { message?: string } };
+            setGenerationError(data?.error?.message ?? "Too many speech requests");
+          } catch {
+            setGenerationError("Too many speech requests");
+          }
+          setIsGenerating(false);
+          return;
         } else if (response.status === 400) {
           setGenerationError("输入参数有误");
         } else if (response.status === 503) {

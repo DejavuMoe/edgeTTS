@@ -5,6 +5,8 @@ import {
   createApiKeyVerifier,
   extractBearerToken,
   resolveApiKey,
+  resolveAuthConfiguration,
+  resolveRequireApiKey,
   UNAUTHORIZED_ERROR,
 } from "../src/auth.js";
 import type { AppDependencies, TtsServicePort } from "../src/dependencies.js";
@@ -90,6 +92,134 @@ describe("API Key Resolution & Validation", () => {
 
   it("throws RangeError if API_KEY is below 16 characters", () => {
     expect(() => resolveApiKey("short-key-12345")).toThrow(RangeError);
+  });
+});
+
+describe("REQUIRE_API_KEY Resolution & Validation", () => {
+  const originalEnv = process.env["REQUIRE_API_KEY"];
+
+  beforeEach(() => {
+    delete process.env["REQUIRE_API_KEY"];
+  });
+
+  afterEach(() => {
+    if (originalEnv !== undefined) {
+      process.env["REQUIRE_API_KEY"] = originalEnv;
+    } else {
+      delete process.env["REQUIRE_API_KEY"];
+    }
+  });
+
+  it("defaults to false when unset and no explicit option passed", () => {
+    expect(resolveRequireApiKey()).toBe(false);
+  });
+
+  it("resolves boolean literals directly", () => {
+    expect(resolveRequireApiKey(true)).toBe(true);
+    expect(resolveRequireApiKey(false)).toBe(false);
+  });
+
+  it("resolves strict string 'true' and 'false'", () => {
+    expect(resolveRequireApiKey("true")).toBe(true);
+    expect(resolveRequireApiKey("false")).toBe(false);
+    process.env["REQUIRE_API_KEY"] = "true";
+    expect(resolveRequireApiKey()).toBe(true);
+    process.env["REQUIRE_API_KEY"] = "false";
+    expect(resolveRequireApiKey()).toBe(false);
+  });
+
+  it("throws RangeError on non-strict string values", () => {
+    for (const val of [
+      "1",
+      "0",
+      "yes",
+      "no",
+      "TRUE",
+      "FALSE",
+      "True",
+      "False",
+      "",
+      " true ",
+      "false ",
+    ]) {
+      expect(() => resolveRequireApiKey(val)).toThrow(RangeError);
+      process.env["REQUIRE_API_KEY"] = val;
+      expect(() => resolveRequireApiKey()).toThrow(RangeError);
+    }
+  });
+
+  it("throws TypeError on non-string non-boolean types", () => {
+    // @ts-expect-error testing invalid type
+    expect(() => resolveRequireApiKey(123)).toThrow(TypeError);
+    // @ts-expect-error testing invalid type
+    expect(() => resolveRequireApiKey({})).toThrow(TypeError);
+  });
+});
+
+describe("resolveAuthConfiguration", () => {
+  const originalKey = process.env["API_KEY"];
+  const originalRequire = process.env["REQUIRE_API_KEY"];
+
+  beforeEach(() => {
+    delete process.env["API_KEY"];
+    delete process.env["REQUIRE_API_KEY"];
+  });
+
+  afterEach(() => {
+    if (originalKey !== undefined) process.env["API_KEY"] = originalKey;
+    else delete process.env["API_KEY"];
+    if (originalRequire !== undefined) process.env["REQUIRE_API_KEY"] = originalRequire;
+    else delete process.env["REQUIRE_API_KEY"];
+  });
+
+  it("returns null when requireApiKey=false and apiKey is not set", () => {
+    expect(resolveAuthConfiguration({ requireApiKey: false })).toBeNull();
+    expect(resolveAuthConfiguration()).toBeNull();
+  });
+
+  it("returns key when requireApiKey=false and valid apiKey is provided", () => {
+    expect(resolveAuthConfiguration({ requireApiKey: false, apiKey: VALID_TEST_KEY })).toBe(
+      VALID_TEST_KEY,
+    );
+    process.env["API_KEY"] = VALID_TEST_KEY;
+    expect(resolveAuthConfiguration({ requireApiKey: false })).toBe(VALID_TEST_KEY);
+  });
+
+  it("throws RangeError when requireApiKey=false but provided apiKey is invalid", () => {
+    expect(() => resolveAuthConfiguration({ requireApiKey: false, apiKey: "short" })).toThrow(
+      RangeError,
+    );
+  });
+
+  it("throws RangeError when requireApiKey=true and apiKey is unset", () => {
+    expect(() => resolveAuthConfiguration({ requireApiKey: true })).toThrow(
+      "API_KEY is required when REQUIRE_API_KEY=true",
+    );
+    process.env["REQUIRE_API_KEY"] = "true";
+    expect(() => resolveAuthConfiguration()).toThrow(
+      "API_KEY is required when REQUIRE_API_KEY=true",
+    );
+  });
+
+  it("throws RangeError when requireApiKey=true and apiKey is invalid/empty/whitespace", () => {
+    expect(() => resolveAuthConfiguration({ requireApiKey: true, apiKey: "" })).toThrow(
+      "API_KEY is required when REQUIRE_API_KEY=true",
+    );
+    expect(() => resolveAuthConfiguration({ requireApiKey: true, apiKey: "short" })).toThrow(
+      "API_KEY is required when REQUIRE_API_KEY=true",
+    );
+    expect(() =>
+      resolveAuthConfiguration({ requireApiKey: true, apiKey: "spaces in key 123456" }),
+    ).toThrow("API_KEY is required when REQUIRE_API_KEY=true");
+  });
+
+  it("returns validated key when requireApiKey=true and valid key is provided", () => {
+    expect(resolveAuthConfiguration({ requireApiKey: true, apiKey: VALID_TEST_KEY })).toBe(
+      VALID_TEST_KEY,
+    );
+    process.env["REQUIRE_API_KEY"] = "true";
+    process.env["API_KEY"] = VALID_TEST_KEY;
+    expect(resolveAuthConfiguration()).toBe(VALID_TEST_KEY);
   });
 });
 
@@ -340,6 +470,58 @@ describe("Server Authentication Endpoints Integration", () => {
       });
       expect(res.statusCode).toBe(404);
       expect(res.headers["www-authenticate"]).toBeUndefined();
+    });
+  });
+
+  describe("Fail-Closed Startup Behavior", () => {
+    it("refuses to create app when requireApiKey=true and apiKey is missing", () => {
+      expect(() =>
+        createApp(dependencies, { requireApiKey: true, apiKey: undefined, serveStatic: false }),
+      ).toThrow("API_KEY is required when REQUIRE_API_KEY=true");
+    });
+
+    it("refuses to create app when requireApiKey=true and apiKey is empty or whitespace", () => {
+      expect(() =>
+        createApp(dependencies, { requireApiKey: true, apiKey: "", serveStatic: false }),
+      ).toThrow("API_KEY is required when REQUIRE_API_KEY=true");
+      expect(() =>
+        createApp(dependencies, { requireApiKey: true, apiKey: "   ", serveStatic: false }),
+      ).toThrow("API_KEY is required when REQUIRE_API_KEY=true");
+    });
+
+    it("refuses to create app when requireApiKey=true and apiKey is shorter than 16 chars", () => {
+      expect(() =>
+        createApp(dependencies, { requireApiKey: true, apiKey: "too-short", serveStatic: false }),
+      ).toThrow("API_KEY is required when REQUIRE_API_KEY=true");
+    });
+
+    it("starts up successfully and enforces auth when requireApiKey=true and valid key is provided", async () => {
+      const app = createApp(dependencies, {
+        requireApiKey: true,
+        apiKey: VALID_TEST_KEY,
+        serveStatic: false,
+      });
+
+      const resUnauth = await app.inject({ method: "GET", url: "/api/voices" });
+      expect(resUnauth.statusCode).toBe(401);
+
+      const resAuth = await app.inject({
+        method: "GET",
+        url: "/api/voices",
+        headers: { authorization: `Bearer ${VALID_TEST_KEY}` },
+      });
+      expect(resAuth.statusCode).toBe(200);
+    });
+
+    it("allows unauthenticated operation when requireApiKey=false and apiKey is omitted", async () => {
+      const app = createApp(dependencies, {
+        requireApiKey: false,
+        apiKey: undefined,
+        serveStatic: false,
+      });
+
+      const res = await app.inject({ method: "GET", url: "/api/voices" });
+      expect(res.statusCode).toBe(200);
     });
   });
 });

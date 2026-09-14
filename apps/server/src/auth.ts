@@ -39,6 +39,56 @@ export function resolveApiKey(configuredKey?: string | null): string | null {
   return rawKey;
 }
 
+export function resolveRequireApiKey(configured?: boolean | string | null): boolean {
+  if (typeof configured === "boolean") {
+    return configured;
+  }
+
+  const raw =
+    configured !== undefined && configured !== null ? configured : process.env["REQUIRE_API_KEY"];
+
+  if (raw === undefined || raw === null) {
+    return false;
+  }
+
+  if (typeof raw !== "string") {
+    throw new TypeError("REQUIRE_API_KEY must be either 'true' or 'false'");
+  }
+
+  if (raw === "true") {
+    return true;
+  }
+
+  if (raw === "false") {
+    return false;
+  }
+
+  throw new RangeError("REQUIRE_API_KEY must be either 'true' or 'false'");
+}
+
+export function resolveAuthConfiguration(options?: {
+  readonly apiKey?: string | null | undefined;
+  readonly requireApiKey?: boolean | string | undefined;
+}): string | null {
+  const requireApiKey = resolveRequireApiKey(options?.requireApiKey);
+
+  let apiKey: string | null = null;
+  try {
+    apiKey = resolveApiKey(options?.apiKey);
+  } catch (err) {
+    if (requireApiKey) {
+      throw new RangeError("API_KEY is required when REQUIRE_API_KEY=true", { cause: err });
+    }
+    throw err;
+  }
+
+  if (requireApiKey && !apiKey) {
+    throw new RangeError("API_KEY is required when REQUIRE_API_KEY=true");
+  }
+
+  return apiKey;
+}
+
 export function extractBearerToken(authHeader: string | undefined): string | null {
   if (!authHeader) {
     return null;

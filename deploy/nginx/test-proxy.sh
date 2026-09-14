@@ -212,6 +212,18 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (url.pathname === '/mock-429') {
+    res.writeHead(429, {
+      'Content-Type': 'application/json',
+      'Retry-After': '10',
+      'X-RateLimit-Limit': '12',
+      'X-RateLimit-Remaining': '0',
+      'X-RateLimit-Reset': '10',
+    });
+    res.end(JSON.stringify({ error: { code: 'RATE_LIMITED', message: 'Too many speech requests' } }));
+    return;
+  }
+
   res.writeHead(404, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify({ error: { code: 'NOT_FOUND' } }));
 });
@@ -325,6 +337,15 @@ echo "$RESP_503" | grep -q "HTTP_STATUS:503" || { echo "FAIL: 503 status not pre
 echo "$RESP_503" | grep -qi "CONTENT_TYPE:application/json" || { echo "FAIL: 503 content-type not preserved"; exit 1; }
 echo "$RESP_503" | grep -q "SERVICE_UNAVAILABLE" || { echo "FAIL: 503 error body altered"; exit 1; }
 echo "PASS: HTTP 503 status, headers, and JSON body preserved over HTTPS."
+
+# Verify status 429 and Retry-After preservation over HTTPS:
+RESP_429_HEADERS="$TMP_DIR/headers_429.txt"
+RESP_429_BODY=$(curl -k -s -D "$RESP_429_HEADERS" -w "\nHTTP_STATUS:%{http_code}\nCONTENT_TYPE:%{content_type}\n" "https://127.0.0.1:$TEST_PORT/mock-429")
+grep -q "HTTP/1.1 429" "$RESP_429_HEADERS" || { echo "FAIL: 429 status not preserved over HTTPS"; exit 1; }
+grep -qi "retry-after: 10" "$RESP_429_HEADERS" || { echo "FAIL: Retry-After header not preserved over HTTPS"; exit 1; }
+echo "$RESP_429_BODY" | grep -qi "CONTENT_TYPE:application/json" || { echo "FAIL: 429 content-type not preserved"; exit 1; }
+echo "$RESP_429_BODY" | grep -q "RATE_LIMITED" || { echo "FAIL: 429 error body altered"; exit 1; }
+echo "PASS: HTTP 429 status, Retry-After header, and RATE_LIMITED JSON body preserved over HTTPS."
 
 # Clean up mock containers
 docker rm -f "$MOCK_CONTAINER" "$MOCK_NGINX_CONTAINER" >/dev/null

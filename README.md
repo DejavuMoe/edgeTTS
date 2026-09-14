@@ -151,20 +151,23 @@ NODE_ENV=production pnpm --filter @edgetts/server start
 
 ### Environment Configuration
 
-| Variable       | Description                                                                                 | Default                                                       |
-| -------------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
-| `HOST`         | Bind address for Fastify server                                                             | `127.0.0.1`                                                   |
-| `PORT`         | Listening port for Fastify server                                                           | `8080`                                                        |
-| `NODE_ENV`     | Environment mode (`production`, `development`, `test`)                                      | Unset by default; static hosting auto-enabled in `production` |
-| `SERVE_STATIC` | Explicit toggle for static web hosting (`true` / `false`)                                   | Unset (explicit override; auto-enabled in `production`)       |
-| `WEB_DIST_DIR` | Absolute or relative path to web static assets directory                                    | `../../web/dist` relative to server                           |
-| `API_KEY`      | Optional Bearer secret protecting synthesis & voices APIs (>= 16 characters, no whitespace) | Unset (authentication disabled)                               |
+| Variable                      | Description                                                                                         | Default                                                       |
+| ----------------------------- | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| `HOST`                        | Bind address for Fastify server                                                                     | `127.0.0.1`                                                   |
+| `PORT`                        | Listening port for Fastify server                                                                   | `8080`                                                        |
+| `NODE_ENV`                    | Environment mode (`production`, `development`, `test`)                                              | Unset by default; static hosting auto-enabled in `production` |
+| `SERVE_STATIC`                | Explicit toggle for static web hosting (`true` / `false`)                                           | Unset (explicit override; auto-enabled in `production`)       |
+| `WEB_DIST_DIR`                | Absolute or relative path to web static assets directory                                            | `../../web/dist` relative to server                           |
+| `API_KEY`                     | Optional Bearer secret protecting synthesis & voices APIs (>= 16 characters, no whitespace)         | Unset (authentication disabled unless `REQUIRE_API_KEY=true`) |
+| `REQUIRE_API_KEY`             | Fail-closed authentication gate (`true` / `false`). Refuses startup if `API_KEY` is missing/invalid | `false` in bare Node, `true` in Docker Compose                |
+| `SPEECH_RATE_LIMIT_MAX`       | Max admitted speech synthesis requests per process rate limit window (1–10000)                      | `12`                                                          |
+| `SPEECH_RATE_LIMIT_WINDOW_MS` | Speech synthesis rate limit window duration in milliseconds (100–3600000)                           | `10000` (10 seconds)                                          |
 
 ## Authentication
 
 EdgeTTS provides an optional, stateless Bearer API key authentication layer:
 
-- **When `API_KEY` is unset**: Authentication is completely disabled. All endpoints retain open unauthenticated behavior.
+- **When `API_KEY` is unset**: Authentication is completely disabled (unless `REQUIRE_API_KEY=true`). All endpoints retain open unauthenticated behavior.
 - **When `API_KEY` is configured**: Protected synthesis and voice discovery APIs require a valid Bearer token in the `Authorization` header (`Authorization: Bearer <API_KEY>`).
 
 ### Endpoint Access Policy
@@ -173,10 +176,18 @@ EdgeTTS provides an optional, stateless Bearer API key authentication layer:
   - `GET /health` (Container / orchestrator uptime probe)
   - `GET /api/health`
   - Static WebUI (`/`, `/assets/*`, and client SPA routes)
-- **Protected Endpoints** (require Bearer key when `API_KEY` is configured):
+- **Protected Endpoints** (require Bearer key when authentication is enabled):
   - `GET /api/voices`
   - `POST /api/speech`
   - `POST /v1/audio/speech`
+
+### Fail-Closed Enforcement (`REQUIRE_API_KEY`)
+
+To prevent accidental open exposure in containerized or automated deployments, EdgeTTS supports a fail-closed authentication mode controlled by `REQUIRE_API_KEY`:
+
+- **Bare Node Default**: Defaults to `REQUIRE_API_KEY=false` for development simplicity.
+- **Docker Compose Default**: Defaults to `${REQUIRE_API_KEY:-true}` (`true`). If `API_KEY` is missing, empty, or less than 16 characters, the container fails fast and exits immediately during startup before binding the network listener.
+- **Explicit Unauthenticated Opt-Out**: If deploying in an intentionally open environment or behind an external auth proxy (such as Authelia or Cloudflare Access), set `REQUIRE_API_KEY=false` in `.env`.
 
 ### Security Guidance
 
@@ -233,12 +244,31 @@ curl \
 
 The built-in Web Workbench does not persist API keys in `localStorage`, `sessionStorage`, `IndexedDB`, cookies, or URL query/hash parameters. When application authentication is enabled, the key is kept only in current browser memory and must be re-entered after a page reload.
 
-### Reverse Proxy & Private Network Deployment
+## Abuse Controls & Rate Limiting
 
-If your deployment is already protected by an external reverse proxy authentication layer (e.g. Authelia, Cloudflare Access) or private network/VPN, setting `API_KEY` can be omitted. Note that when `API_KEY` is unset, application APIs are unauthenticated.
+EdgeTTS enforces layered protection against abuse and upstream saturation:
 
-> [!NOTE]
-> API key authentication provides access control but does not perform rate limiting or per-user quota management. Rate limiting remains intentionally deferred.
+1. **Admission Rate Limiter (Fastify Layer)**:
+   - Evaluated before speech synthesis starts.
+   - Enforces an in-memory global admission quota (`SPEECH_RATE_LIMIT_MAX` requests per `SPEECH_RATE_LIMIT_WINDOW_MS`, default 12 requests per 10 seconds).
+   - Shared between `POST /api/speech` and `POST /v1/audio/speech`.
+   - Independent of client IP address (`trustProxy: false` by design to prevent header spoofing); protects the server process globally.
+   - If authentication is enabled, authentication verification executes **before** rate limiting: unauthenticated requests (HTTP 401) do not consume quota.
+   - When exceeded, requests are immediately rejected with HTTP `429 Too Many Requests`, a `Retry-After: <seconds>` header, and structured JSON:
+     ```json
+     {
+       "error": {
+         "code": "RATE_LIMITED",
+         "message": "Too many speech requests"
+       }
+     }
+     ```
+   - Rate-limited requests are dropped before invoking `TtsService`, preventing upstream load.
+   - Health probes (`GET /health`, `GET /api/health`), voice discovery (`GET /api/voices`), and static assets are exempt from rate limiting.
+
+2. **Synthesis Concurrency Limiter (`TtsService` Layer)**:
+   - Admitted requests proceed to the domain concurrency limiter (max 4 concurrent active syntheses, max 16 queued requests).
+   - If queue capacity is exceeded, requests receive `503 Service Unavailable` (`SERVER_BUSY`).
 
 ## Docker
 
@@ -285,7 +315,7 @@ docker run -d \
    ```bash
    cp .env.example .env
    ```
-2. Edit `.env` to configure your API key (uncomment `API_KEY` if application-level authentication is desired).
+2. Edit `.env` to configure your API key (by default `REQUIRE_API_KEY=true` is enforced, requiring a valid `API_KEY` with at least 16 characters). To run unauthenticated, explicitly set `REQUIRE_API_KEY=false`.
 3. Start the service:
    ```bash
    docker compose up -d --build
@@ -303,7 +333,7 @@ docker run -d \
 ### Security & Deployment Notes
 
 - **Port Binding**: Compose defaults to `127.0.0.1:8080` (loopback only) so that traffic is routed through a reverse proxy (such as Nginx, Caddy, or Cloudflare Tunnel). If you change `EDGETTS_BIND_ADDRESS` to `0.0.0.0`, the port will be exposed directly to all public network interfaces.
-- **Unauthenticated Default**: If `API_KEY` is unset or commented out, application endpoints operate in unauthenticated mode.
+- **Fail-Closed Compose**: Docker Compose enforces fail-closed authentication by default (`REQUIRE_API_KEY=true`). If `API_KEY` is not set or invalid, container startup terminates with an error before opening the port. To run unauthenticated, explicitly set `REQUIRE_API_KEY=false` in `.env`.
 - **TLS Termination**: Production TLS / SSL certificates and HTTPS termination should be handled outside this container by your reverse proxy or tunnel.
 - **Container Environment**: The container environment is configured with `NODE_ENV=production`, `HOST=0.0.0.0`, `PORT=8080`, and `WEB_DIST_DIR=/app/web-dist`. Users configure `API_KEY`, `EDGETTS_BIND_ADDRESS`, and `EDGETTS_HOST_PORT` in `.env`. Do not change the container internal `HOST` to `127.0.0.1`, or external container traffic will not be reachable.
 
