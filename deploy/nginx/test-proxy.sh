@@ -22,6 +22,12 @@ if (echo > /dev/tcp/127.0.0.1/"$TEST_PORT") 2>/dev/null; then
   exit 1
 fi
 
+SKIP_LIVE="${EDGETTS_NGINX_SKIP_LIVE:-0}"
+if [ "$SKIP_LIVE" != "0" ] && [ "$SKIP_LIVE" != "1" ]; then
+  echo "FAIL: Invalid EDGETTS_NGINX_SKIP_LIVE value '$SKIP_LIVE' (must be 0 or 1)." >&2
+  exit 1
+fi
+
 NGINX_IMAGE="nginx:1.27.4-alpine-slim"
 EDGETTS_IMAGE="${EDGETTS_TEST_IMAGE:-edgetts:phase15-1}"
 TEST_API_KEY="test-nginx-api-key-1234567890"
@@ -59,10 +65,13 @@ generate_test_conf() {
 }
 
 echo "============================================================"
-echo "Phase 16.1: Production Nginx Template Integration Suite"
+echo "Phase 16.1 / 18: Production Nginx Template Integration Suite"
 echo "Nginx Image:   $NGINX_IMAGE"
-echo "EdgeTTS Image: $EDGETTS_IMAGE"
+if [ "$SKIP_LIVE" = "0" ]; then
+  echo "EdgeTTS Image: $EDGETTS_IMAGE"
+fi
 echo "Test Port:     $TEST_PORT (HTTPS)"
+echo "Skip Live:     $SKIP_LIVE"
 echo "Tmp Directory: $TMP_DIR"
 echo "============================================================"
 
@@ -349,6 +358,17 @@ echo "PASS: HTTP 429 status, Retry-After header, and RATE_LIMITED JSON body pres
 
 # Clean up mock containers
 docker rm -f "$MOCK_CONTAINER" "$MOCK_NGINX_CONTAINER" >/dev/null
+
+if [ "$SKIP_LIVE" = "1" ]; then
+  echo ""
+  echo "--- [SKIP_LIVE=1] Skipping live upstream integration tests ---"
+  echo "PASS: Deterministic Nginx reverse-proxy contract verified without live upstream calls."
+  echo ""
+  echo "============================================================"
+  echo "ALL PRODUCTION NGINX TEMPLATE ACCEPTANCE CRITERIA PASSED! (SKIP_LIVE mode)"
+  echo "============================================================"
+  exit 0
+fi
 
 # ------------------------------------------------------------
 # 4. Real EdgeTTS Container Integration (HTTPS)
