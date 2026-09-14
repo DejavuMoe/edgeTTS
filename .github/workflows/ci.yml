@@ -269,6 +269,9 @@ jobs:
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    concurrency:
+      group: edgetts-ghcr-publish
+      cancel-in-progress: false
     permissions:
       contents: read
       packages: write
@@ -355,6 +358,7 @@ jobs:
           sbom: true
 
       - name: Verify registry manifest and digest resolution
+        id: verify-registry
         run: |
           set -euo pipefail
           DIGEST="${{ steps.build.outputs.digest }}"
@@ -384,6 +388,9 @@ jobs:
             exit 1
           fi
           echo "PASS: Exactly linux/amd64 and linux/arm64 runtime platforms present."
+
+          AMD64_CHILD_DIGEST=$(echo "$RAW_INDEX" | jq -r '.manifests[] | select(.platform.os == "linux" and .platform.architecture == "amd64") | .digest')
+          ARM64_CHILD_DIGEST=$(echo "$RAW_INDEX" | jq -r '.manifests[] | select(.platform.os == "linux" and .platform.architecture == "arm64") | .digest')
 
           # 4. Verify BuildKit provenance and SBOM attestations
           echo "Verifying BuildKit provenance and SBOM attestations..."
@@ -442,6 +449,12 @@ jobs:
             fi
             echo "PASS: Tag main resolves to exact build digest $DIGEST."
           fi
+
+          # 7. Export verified outputs for publication summary
+          echo "amd64_digest=$AMD64_CHILD_DIGEST" >> "$GITHUB_OUTPUT"
+          echo "arm64_digest=$ARM64_CHILD_DIGEST" >> "$GITHUB_OUTPUT"
+          echo "provenance=true" >> "$GITHUB_OUTPUT"
+          echo "sbom=true" >> "$GITHUB_OUTPUT"
 
       - name: Verify multi-arch runtime execution and security posture
         run: |
@@ -576,6 +589,7 @@ jobs:
           echo "PASS: All published image security and supply-chain audits succeeded."
 
       - name: Promote verified release candidate to stable SemVer and latest aliases
+        id: promote-release
         if: startsWith(github.ref, 'refs/tags/v')
         run: |
           set -euo pipefail
@@ -587,7 +601,7 @@ jobs:
           echo "Promoting verified release candidate for version: $VERSION"
           echo "Candidate digest: $CANDIDATE_DIGEST"
 
-          # 1. Prevent release version overwrite:
+          # 1. Promote or verify the exact SemVer release tag (X.Y.Z)
           EXISTING_RAW=$(docker buildx imagetools inspect "${IMAGE_REPO}:${VERSION}" --raw 2>/dev/null || true)
           if [ -n "$EXISTING_RAW" ]; then
             EXISTING_DIGEST="sha256:$(printf "%s" "$EXISTING_RAW" | sha256sum | awk '{print $1}')"
@@ -599,66 +613,113 @@ jobs:
               exit 1
             fi
           else
-            echo "Release version tag ${IMAGE_REPO}:${VERSION} is absent. Proceeding with promotion."
+            echo "Release version tag ${IMAGE_REPO}:${VERSION} is absent. Promoting from candidate..."
+            docker buildx imagetools create \
+              --tag "${IMAGE_REPO}:${VERSION}" \
+              "${IMAGE_REPO}@${CANDIDATE_DIGEST}"
           fi
 
-          # 2. Promote aliases directly from the verified candidate index without rebuilding
-          echo "Promoting tags ${VERSION} and latest pointing to ${IMAGE_REPO}@${CANDIDATE_DIGEST}..."
-          docker buildx imagetools create \
-            --tag "${IMAGE_REPO}:${VERSION}" \
-            --tag "${IMAGE_REPO}:latest" \
-            "${IMAGE_REPO}@${CANDIDATE_DIGEST}"
-
-          # 3. Verify promoted tag resolutions
+          # Verify promoted version tag resolution and attestations
           echo "Verifying ${IMAGE_REPO}:${VERSION} resolution..."
           VER_RAW=$(docker buildx imagetools inspect "${IMAGE_REPO}:${VERSION}" --raw)
           VER_DIGEST="sha256:$(printf "%s" "$VER_RAW" | sha256sum | awk '{print $1}')"
           if [ "$VER_DIGEST" != "$CANDIDATE_DIGEST" ]; then
-            echo "::error::Promoted version tag ${VERSION} digest $VER_DIGEST does not match verified digest $CANDIDATE_DIGEST"
+            echo "::error::Version tag ${VERSION} digest $VER_DIGEST does not match verified digest $CANDIDATE_DIGEST"
             exit 1
           fi
           echo "PASS: Tag ${VERSION} resolves to exact verified digest $CANDIDATE_DIGEST."
 
-          echo "Verifying ${IMAGE_REPO}:latest resolution..."
-          LATEST_RAW=$(docker buildx imagetools inspect "${IMAGE_REPO}:latest" --raw)
-          LATEST_DIGEST="sha256:$(printf "%s" "$LATEST_RAW" | sha256sum | awk '{print $1}')"
-          if [ "$LATEST_DIGEST" != "$CANDIDATE_DIGEST" ]; then
-            echo "::error::Promoted latest tag digest $LATEST_DIGEST does not match verified digest $CANDIDATE_DIGEST"
-            exit 1
-          fi
-          echo "PASS: Tag latest resolves to exact verified digest $CANDIDATE_DIGEST."
-
-          # 4. Verify multi-arch index integrity and attestation preservation on promoted tags
-          echo "Verifying multi-arch platforms and attestations on promoted tag..."
           PROMOTED_INDEX=$(docker buildx imagetools inspect "${IMAGE_REPO}:${VERSION}" --raw)
           PROMOTED_ARCHS=$(echo "$PROMOTED_INDEX" | jq -r '.manifests[] | select(.platform.architecture != "unknown") | "\(.platform.os)/\(.platform.architecture)"' | sort -u)
           EXPECTED_ARCHS=$(printf "linux/amd64\nlinux/arm64")
           if [ "$PROMOTED_ARCHS" != "$EXPECTED_ARCHS" ]; then
-            echo "::error::Promoted tag platforms do not match expected linux/amd64 and linux/arm64"
+            echo "::error::Promoted version platforms do not match expected linux/amd64 and linux/arm64"
             exit 1
           fi
 
           PROMOTED_ATTESTATIONS=$(echo "$PROMOTED_INDEX" | jq -r '.manifests[] | select(.platform.architecture == "unknown") | .digest')
           if [ -z "$PROMOTED_ATTESTATIONS" ]; then
-            echo "::error::Promoted tag is missing attestation manifests"
+            echo "::error::Promoted version is missing attestation manifests"
             exit 1
           fi
-          echo "PASS: Multi-arch platforms and attestation manifests preserved on promoted tags."
+          echo "PASS: Multi-arch platforms and attestations preserved on version tag ${VERSION}."
+
+          # 2. Determine highest successfully published stable SemVer release
+          git fetch --tags origin --quiet 2>/dev/null || true
+          CANDIDATE_VERSIONS=$(git tag -l "v*" | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sed 's/^v//' | sort -V -r || true)
+          ALL_VERSIONS=$(printf "%s\n%s\n" "$VERSION" "$CANDIDATE_VERSIONS" | sed '/^$/d' | sort -u | sort -V -r)
+
+          HIGHEST_PUBLISHED_VERSION=""
+          HIGHEST_PUBLISHED_DIGEST=""
+
+          for V in $ALL_VERSIONS; do
+            V_RAW=$(docker buildx imagetools inspect "${IMAGE_REPO}:${V}" --raw 2>/dev/null || true)
+            if [ -n "$V_RAW" ]; then
+              HIGHEST_PUBLISHED_VERSION="$V"
+              HIGHEST_PUBLISHED_DIGEST="sha256:$(printf "%s" "$V_RAW" | sha256sum | awk '{print $1}')"
+              break
+            fi
+          done
+
+          if [ -z "$HIGHEST_PUBLISHED_VERSION" ]; then
+            echo "::error::Failed to determine highest published version (expected at least $VERSION)"
+            exit 1
+          fi
+
+          echo "Current release version:     $VERSION"
+          echo "Highest published version:   $HIGHEST_PUBLISHED_VERSION"
+          echo "Highest published digest:    $HIGHEST_PUBLISHED_DIGEST"
+
+          LATEST_UPDATED="false"
+          if [ "$VERSION" = "$HIGHEST_PUBLISHED_VERSION" ]; then
+            echo "Current release $VERSION is the highest published stable version. Promoting latest alias..."
+            docker buildx imagetools create \
+              --tag "${IMAGE_REPO}:latest" \
+              "${IMAGE_REPO}@${CANDIDATE_DIGEST}"
+
+            LATEST_RAW=$(docker buildx imagetools inspect "${IMAGE_REPO}:latest" --raw)
+            LATEST_DIGEST="sha256:$(printf "%s" "$LATEST_RAW" | sha256sum | awk '{print $1}')"
+            if [ "$LATEST_DIGEST" != "$CANDIDATE_DIGEST" ]; then
+              echo "::error::Promoted latest tag digest $LATEST_DIGEST does not match verified digest $CANDIDATE_DIGEST"
+              exit 1
+            fi
+            LATEST_UPDATED="true"
+            echo "PASS: Tag latest promoted to $VERSION ($CANDIDATE_DIGEST)."
+          else
+            echo "Current release $VERSION is lower than highest published version $HIGHEST_PUBLISHED_VERSION."
+            echo "latest alias will NOT be modified; it remains owned by $HIGHEST_PUBLISHED_VERSION."
+
+            LATEST_RAW=$(docker buildx imagetools inspect "${IMAGE_REPO}:latest" --raw 2>/dev/null || true)
+            if [ -n "$LATEST_RAW" ]; then
+              LATEST_DIGEST="sha256:$(printf "%s" "$LATEST_RAW" | sha256sum | awk '{print $1}')"
+              if [ "$LATEST_DIGEST" = "$CANDIDATE_DIGEST" ]; then
+                echo "::error::Governance drift: latest incorrectly resolves to lower candidate digest ($CANDIDATE_DIGEST)"
+                exit 1
+              fi
+              if [ "$LATEST_DIGEST" != "$HIGHEST_PUBLISHED_DIGEST" ]; then
+                echo "::error::Governance drift: latest digest ($LATEST_DIGEST) does not match highest published version ($HIGHEST_PUBLISHED_VERSION) digest ($HIGHEST_PUBLISHED_DIGEST)"
+                exit 1
+              fi
+              echo "PASS: latest verified to resolve to highest published version $HIGHEST_PUBLISHED_VERSION ($HIGHEST_PUBLISHED_DIGEST)."
+            else
+              echo "::warning::latest tag is absent from registry; leaving uncreated because current release is not highest."
+            fi
+          fi
+
+          echo "release_version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "highest_published_version=$HIGHEST_PUBLISHED_VERSION" >> "$GITHUB_OUTPUT"
+          echo "latest_updated=$LATEST_UPDATED" >> "$GITHUB_OUTPUT"
+          echo "latest_target=$HIGHEST_PUBLISHED_VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Generate release publication summary
         if: always() && steps.build.outcome == 'success'
         run: |
           set -euo pipefail
           DIGEST="${{ steps.build.outputs.digest }}"
-          RAW_INDEX=$(docker buildx imagetools inspect "ghcr.io/dejavumoe/edgetts@${DIGEST}" --raw 2>/dev/null || true)
-
-          AMD64_DIGEST=$(echo "$RAW_INDEX" | jq -r '.manifests[] | select(.platform.architecture == "amd64") | .digest' 2>/dev/null || echo "unknown")
-          ARM64_DIGEST=$(echo "$RAW_INDEX" | jq -r '.manifests[] | select(.platform.architecture == "arm64") | .digest' 2>/dev/null || echo "unknown")
-
-          HAS_PROV="false"
-          HAS_SBOM="false"
-          if echo "$RAW_INDEX" | grep -Eqi 'slsa|provenance'; then HAS_PROV="true"; fi
-          if echo "$RAW_INDEX" | grep -Eqi 'spdx|sbom'; then HAS_SBOM="true"; fi
+          AMD64_DIGEST="${{ steps.verify-registry.outputs.amd64_digest }}"
+          ARM64_DIGEST="${{ steps.verify-registry.outputs.arm64_digest }}"
+          HAS_PROV="${{ steps.verify-registry.outputs.provenance }}"
+          HAS_SBOM="${{ steps.verify-registry.outputs.sbom }}"
 
           {
             echo "## Publication Summary"
@@ -678,9 +739,16 @@ jobs:
             if [ "${GITHUB_REF}" = "refs/heads/main" ]; then
               echo "| **Branch Snapshot Ref** | \`ghcr.io/dejavumoe/edgetts:main\` |"
             elif echo "${GITHUB_REF}" | grep -q '^refs/tags/v'; then
-              TAG="${GITHUB_REF#refs/tags/}"
-              VERSION="${TAG#v}"
-              echo "| **Release Version Ref** | \`ghcr.io/dejavumoe/edgetts:${VERSION}\` |"
+              RELEASE_VER="${{ steps.promote-release.outputs.release_version }}"
+              HIGHEST_VER="${{ steps.promote-release.outputs.highest_published_version }}"
+              LATEST_UPD="${{ steps.promote-release.outputs.latest_updated }}"
+              LATEST_TGT="${{ steps.promote-release.outputs.latest_target }}"
+
+              echo "| **Release Version** | \`${RELEASE_VER}\` |"
+              echo "| **Highest Published Stable Version** | \`${HIGHEST_VER}\` |"
+              echo "| **latest Updated** | \`${LATEST_UPD}\` |"
+              echo "| **latest Target** | \`${LATEST_TGT}\` |"
+              echo "| **Release Version Ref** | \`ghcr.io/dejavumoe/edgetts:${RELEASE_VER}\` |"
               echo "| **Latest Release Alias** | \`ghcr.io/dejavumoe/edgetts:latest\` |"
             fi
             echo ""
