@@ -16,7 +16,7 @@ Current stable release: [v0.1.0](https://github.com/DejavuMoe/edgeTTS/releases/t
 ## Features
 
 - **Dual Speech API**:
-  - **OpenAI-Compatible TTS Subset** (`POST /v1/audio/speech`): Drop-in subset for OpenAI TTS clients supporting `tts-1` (`mp3-48k`) and `tts-1-hd` (`mp3-96k`) models, Edge voice IDs, input texts (1–4,096 characters), and speed adjustment (0.5–2.0).
+  - **OpenAI-Compatible TTS Subset** (`POST /v1/audio/speech`): OpenAI-compatible endpoint subset supporting `tts-1` (`mp3-48k`) and `tts-1-hd` (`mp3-96k`) models, Edge voice IDs, input texts (1–4,096 characters), and speed adjustment (0.5–2.0).
   - **Native Long-Text Streaming API** (`POST /api/speech`): Synthesize up to 20,000 Unicode code points in a single streaming HTTP request with standard (`mp3-48k`) or high (`mp3-96k`) quality, prosody controls (`speed`, `pitchSemitones`, `volume`), and deterministic segment plan metadata headers.
 - **Lossless Text Segmentation**:
   - Hierarchical boundary segmentation (`paragraph > line > sentence > whitespace > hard cut`) with Unicode code-point precision preserving surrogate pairs and CRLF atomicity.
@@ -35,7 +35,7 @@ Current stable release: [v0.1.0](https://github.com/DejavuMoe/edgeTTS/releases/t
   - Fastify hosts built frontend assets (`apps/web/dist`) and API endpoints under a single port/domain.
   - Immutable caching for hashed assets, revalidation caching for `index.html`, and non-interfering SPA fallback routing.
 - **Security & Privacy**:
-  - Zero input text logging and zero telemetry; inputs and credentials are never stored on disk.
+  - No input-text logging, analytics, or external telemetry collection; inputs and credentials are never persisted to disk.
   - Optional API key authentication via the `Authorization: Bearer <API_KEY>` header with constant-time verification.
   - Production container posture: non-root `node` user, read-only root filesystem, dropped Linux capabilities (`ALL`), and `no-new-privileges`.
 
@@ -317,7 +317,7 @@ The built-in workbench provides an interactive interface for synthesis:
 
 ### 1. OpenAI-Compatible TTS Endpoint (`POST /v1/audio/speech`)
 
-A drop-in subset for OpenAI TTS clients. Streams MP3 audio.
+An OpenAI-compatible endpoint subset streaming MP3 audio.
 
 #### Request Parameters
 
