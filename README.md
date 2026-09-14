@@ -283,23 +283,26 @@ ghcr.io/dejavumoe/edgetts
 - `linux/amd64` (x86_64)
 - `linux/arm64` (aarch64)
 
-### Tagging Strategy
+### Reference & Tagging Conventions
 
-| Tag Format         | Example                                                                  | Description                                                                                          |
-| ------------------ | ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------- |
-| `:sha-<commit>`    | `ghcr.io/dejavumoe/edgetts:sha-fa5f08255c3308b6d5bcfe4d4c497db5a89c0a44` | **Immutable commit tag**. Pinned directly to the 40-character Git commit SHA.                        |
-| `@sha256:<digest>` | `ghcr.io/dejavumoe/edgetts@sha256:abc123...`                             | **Content-addressable digest** (recommended for production). Permanently immutable and tamper-proof. |
-| `:main`            | `ghcr.io/dejavumoe/edgetts:main`                                         | Rolling build from the latest validated commit on `main`.                                            |
-| `:X.Y.Z`           | `ghcr.io/dejavumoe/edgetts:0.1.0`                                        | SemVer release tag (published on git tags matching `v*.*.*`).                                        |
-| `:latest`          | `ghcr.io/dejavumoe/edgetts:latest`                                       | Points to the most recent SemVer release (never updated by `main` branch pushes).                    |
+In container registries, image tags are mutable pointers that can technically be reassigned by actors with write access. An OCI digest (`@sha256:...`) is the only intrinsically immutable, content-addressed reference.
+
+| Reference Format      | Example                                            | Semantic Meaning & Mutability                                                                                                                                                                                              |
+| --------------------- | -------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@sha256:<digest>`    | `ghcr.io/dejavumoe/edgetts@sha256:<64-hex-digest>` | **Intrinsically immutable content-addressed reference** (recommended for production). Computed directly from the OCI manifest index bytes; impossible to overwrite, retag, or mutate.                                      |
+| `:sha-<full-git-sha>` | `ghcr.io/dejavumoe/edgetts:sha-<full-40-hex-sha>`  | **Commit-addressable traceability tag** generated from the full 40-character Git commit SHA. The project publishing workflow treats this as a stable traceability reference, but OCI tags are not intrinsically immutable. |
+| `:main`               | `ghcr.io/dejavumoe/edgetts:main`                   | **Moving branch alias** pointing to the latest validated build published from the `main` branch.                                                                                                                           |
+| `:X.Y.Z`              | `ghcr.io/dejavumoe/edgetts:0.1.0`                  | **Release tag** created on git tags matching `v*.*.*` by project publishing policy; remains a registry tag reference.                                                                                                      |
+| `:latest`             | `ghcr.io/dejavumoe/edgetts:latest`                 | **Moving stable-release alias** pointing to the most recent SemVer release (never updated by `main` branch pushes).                                                                                                        |
 
 ### Digest-First Production Deployment
 
-In production environments, always prefer deploying by exact image digest (`@sha256:...`) or commit SHA tag (`:sha-<commit>`) rather than rolling tags like `:main` or `:latest`:
+In production environments, always prefer deploying by exact image digest (`@sha256:<digest>`) rather than mutable tags (`:main`, `:latest`, or `:sha-<full-git-sha>`):
 
-1. **Immutability**: Image digests are cryptographic hashes of the OCI manifest index. A digest can never be overwritten, retagged, or mutated.
+1. **True Content-Addressed Immutability**: Container tags in any registry are mutable references that can be retagged. An OCI digest is a cryptographic hash of the OCI manifest index itself, guaranteeing permanent immutability.
 2. **Deterministic Rollouts**: Every node in a cluster pulls the exact same container layers, preventing configuration drift across instances.
 3. **Supply Chain Integrity**: edgeTTS builds publish BuildKit SLSA provenance (`mode=max`) and SPDX SBOM attestations attached directly to every image index.
+4. **Distinction Between Git SHA and OCI Digest**: The Git commit SHA identifies a specific source tree state in version control, whereas the OCI manifest digest cryptographically identifies the exact compiled multi-architecture container artifacts in the registry.
 
 **Example `docker run` by digest:**
 
@@ -323,7 +326,7 @@ services:
     image: ghcr.io/dejavumoe/edgetts@sha256:<digest>
 ```
 
-### Registry Authentication
+### Registry Authentication & Security by Construction
 
 For public releases, pulling from GitHub Container Registry requires no login:
 
@@ -336,6 +339,9 @@ If the package is private or when pulling in CI environments subject to GitHub r
 ```bash
 echo "$GITHUB_TOKEN" | docker login ghcr.io -u <username> --password-stdin
 ```
+
+> [!NOTE]
+> The automated CI publishing workflow authenticates to GitHub Container Registry using GitHub's ephemeral `github.token` with scoped `packages: write` permissions. The token is used strictly by `docker/login-action` for registry authentication and is never passed to the Dockerfile as an `ARG`, `ENV`, secret mount, or build input.
 
 ## Docker
 
