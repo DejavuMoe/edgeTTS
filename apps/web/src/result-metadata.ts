@@ -1,3 +1,5 @@
+import { formatAudioBytes } from "./synthesis-telemetry.js";
+
 export interface CompletedResultMeta {
   readonly voiceId: string;
   readonly voiceDisplayName: string;
@@ -7,6 +9,8 @@ export interface CompletedResultMeta {
   readonly volume: number;
   readonly completedAt: number;
   readonly filename: string;
+  readonly segmentCount?: number | null;
+  readonly audioBytes?: number | null;
 }
 
 export interface GenerationSnapshot {
@@ -16,6 +20,8 @@ export interface GenerationSnapshot {
   readonly speed: number;
   readonly pitchSemitones: number;
   readonly volume: number;
+  readonly segmentCount?: number | null;
+  readonly audioBytes?: number | null;
 }
 
 export function sanitizeVoiceSlug(voiceId: string): string {
@@ -85,6 +91,14 @@ export function formatResultMetadataDisplay(meta: CompletedResultMeta): string {
 
   if (meta.volume !== 1.0) {
     parts.push(`${Math.round(meta.volume * 100)}%音量`);
+  }
+
+  if (meta.segmentCount !== undefined && meta.segmentCount !== null && meta.segmentCount > 0) {
+    parts.push(`${meta.segmentCount} 段`);
+  }
+
+  if (meta.audioBytes !== undefined && meta.audioBytes !== null && meta.audioBytes >= 0) {
+    parts.push(formatAudioBytes(meta.audioBytes));
   }
 
   parts.push(formatCompletedAt(meta.completedAt));

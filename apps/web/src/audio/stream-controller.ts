@@ -7,11 +7,14 @@ export function isMediaSourceAudioSupported(): boolean {
   );
 }
 
+export const PROGRESS_THROTTLE_BYTES = 32 * 1024;
+
 export interface StreamPlaybackCallbacks {
   readonly onStreamReady: (mediaUrl: string) => void;
   readonly onDownloadReady: (downloadUrl: string) => void;
   readonly onError: (error: Error) => void;
   readonly onFinish: () => void;
+  readonly onProgress?: (bytesReceived: number) => void;
 }
 
 interface PlaybackSession {
@@ -217,6 +220,8 @@ export class StreamPlaybackController {
         return;
       }
 
+      callbacks.onProgress?.(blob.size);
+
       const blobUrl = URL.createObjectURL(blob);
       session.mediaUrl = blobUrl;
       session.downloadUrl = blobUrl;
@@ -341,6 +346,9 @@ export class StreamPlaybackController {
       const reader = response.body.getReader();
       session.reader = reader;
 
+      let totalBytes = 0;
+      let lastReportedBytes = 0;
+
       while (true) {
         if (!this.isCurrentSession(session) || signal.aborted) {
           break;
@@ -353,6 +361,12 @@ export class StreamPlaybackController {
 
         if (value && value.byteLength > 0) {
           chunks.push(value);
+          totalBytes += value.byteLength;
+
+          if (totalBytes - lastReportedBytes >= PROGRESS_THROTTLE_BYTES) {
+            callbacks.onProgress?.(totalBytes);
+            lastReportedBytes = totalBytes;
+          }
 
           if (sourceBuffer.updating) {
             await waitForUpdateEnd(sourceBuffer, signal);
@@ -372,6 +386,11 @@ export class StreamPlaybackController {
       if (!this.isCurrentSession(session) || signal.aborted) {
         this.cleanupSession(session);
         return;
+      }
+
+      if (totalBytes !== lastReportedBytes) {
+        callbacks.onProgress?.(totalBytes);
+        lastReportedBytes = totalBytes;
       }
 
       if (sourceBuffer.updating) {

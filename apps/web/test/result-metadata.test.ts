@@ -162,5 +162,54 @@ describe("Download & Result Metadata (apps/web/src/result-metadata.ts)", () => {
         "Microsoft Jenny · en-US-JennyNeural · 标准 · 1.00× · -4半音 · 2026-09-14 15:45",
       );
     });
+
+    it("formats telemetry metadata (segmentCount and audioBytes) correctly", () => {
+      const snapshot: GenerationSnapshot = {
+        voiceId: "zh-CN-XiaoxiaoNeural",
+        voiceDisplayName: "晓晓",
+        quality: "standard",
+        speed: 1.0,
+        pitchSemitones: 0,
+        volume: 1.0,
+        segmentCount: 12,
+        audioBytes: 1887436,
+      };
+
+      const meta = createCompletedResultMeta(snapshot, testDate);
+      const text = formatResultMetadataDisplay(meta);
+      expect(text).toBe(
+        "晓晓 · zh-CN-XiaoxiaoNeural · 标准 · 1.00× · 12 段 · 1.8 MiB · 2026-09-14 15:45",
+      );
+    });
+
+    it("formats partial telemetry metadata when only segmentCount or audioBytes is present", () => {
+      const snapshotCountOnly: GenerationSnapshot = {
+        voiceId: "zh-CN-XiaoxiaoNeural",
+        voiceDisplayName: "晓晓",
+        quality: "high",
+        speed: 1.0,
+        pitchSemitones: 0,
+        volume: 1.0,
+        segmentCount: 3,
+      };
+      const metaCount = createCompletedResultMeta(snapshotCountOnly, testDate);
+      expect(formatResultMetadataDisplay(metaCount)).toBe(
+        "晓晓 · zh-CN-XiaoxiaoNeural · 高品质 · 1.00× · 3 段 · 2026-09-14 15:45",
+      );
+
+      const snapshotBytesOnly: GenerationSnapshot = {
+        voiceId: "zh-CN-XiaoxiaoNeural",
+        voiceDisplayName: "晓晓",
+        quality: "standard",
+        speed: 1.0,
+        pitchSemitones: 0,
+        volume: 1.0,
+        audioBytes: 512,
+      };
+      const metaBytes = createCompletedResultMeta(snapshotBytesOnly, testDate);
+      expect(formatResultMetadataDisplay(metaBytes)).toBe(
+        "晓晓 · zh-CN-XiaoxiaoNeural · 标准 · 1.00× · 512 B · 2026-09-14 15:45",
+      );
+    });
   });
 });

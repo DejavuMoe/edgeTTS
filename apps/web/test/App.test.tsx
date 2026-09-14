@@ -2300,4 +2300,311 @@ describe("EdgeTTS Web Workbench", () => {
       expect(window.sessionStorage.length).toBe(0);
     });
   });
+
+  describe("Phase 24: Long-Text Synthesis Status & Streaming Telemetry", () => {
+    it("Generate click immediately shows requesting status '正在等待语音服务…'", async () => {
+      let resolveResponse: (res: Response) => void;
+      const delayedResponsePromise = new Promise<Response>((resolve) => {
+        resolveResponse = resolve;
+      });
+
+      fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+        const url = typeof input === "string" ? input : input.toString();
+        if (url === "/api/health") return new Response(JSON.stringify({ status: "ok" }));
+        if (url === "/api/voices") return new Response(JSON.stringify({ voices: mockVoices }));
+        if (url === "/api/speech") return delayedResponsePromise;
+        return new Response(null, { status: 404 });
+      });
+
+      render(<App />);
+      await screen.findByLabelText(/选择声音/i);
+
+      const textarea = screen.getByLabelText(/文本内容/i) as HTMLTextAreaElement;
+      fireEvent.change(textarea, { target: { value: "测试文本" } });
+
+      fireEvent.click(screen.getByRole("button", { name: /合成语音/i }));
+
+      const indicator = await screen.findByRole("status");
+      expect(indicator.textContent).toBe("正在等待语音服务…");
+
+      // Resolve response with stream
+      const stream = new ReadableStream({
+        start(controller) {
+          controller.enqueue(new Uint8Array([1, 2, 3, 4]));
+          controller.close();
+        },
+      });
+      resolveResponse!(
+        new Response(stream, {
+          status: 200,
+          headers: {
+            "Content-Type": "audio/mpeg",
+            "X-EdgeTTS-Segment-Count": "1",
+            "X-EdgeTTS-Segment-Max-Code-Points": "300",
+          },
+        }),
+      );
+
+      await screen.findByLabelText(/语音合成播放器/i);
+    });
+
+    it("displays long-text segment count and received bytes during streaming", async () => {
+      const originalMediaSource = window.MediaSource;
+      try {
+        class MockSourceBuffer extends EventTarget {
+          updating = false;
+          appendBuffer = vi.fn(() => {
+            queueMicrotask(() => {
+              this.dispatchEvent(new Event("updateend"));
+            });
+          });
+          abort = vi.fn();
+        }
+
+        const mockBuffer = new MockSourceBuffer();
+        class MockMediaSource extends EventTarget {
+          readyState = "open";
+          addSourceBuffer = vi.fn(() => mockBuffer as unknown as SourceBuffer);
+          endOfStream = vi.fn();
+          static isTypeSupported = vi.fn(() => true);
+        }
+
+        // @ts-expect-error Mocking MediaSource
+        window.MediaSource = MockMediaSource;
+
+        let pushChunk!: (chunk: Uint8Array) => void;
+        let closeStream!: () => void;
+        const stream = new ReadableStream<Uint8Array>({
+          start(ctrl) {
+            pushChunk = (c) => ctrl.enqueue(c);
+            closeStream = () => ctrl.close();
+          },
+        });
+
+        fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+          const url = typeof input === "string" ? input : input.toString();
+          if (url === "/api/health") return new Response(JSON.stringify({ status: "ok" }));
+          if (url === "/api/voices") return new Response(JSON.stringify({ voices: mockVoices }));
+          if (url === "/api/speech") {
+            return new Response(stream, {
+              status: 200,
+              headers: {
+                "Content-Type": "audio/mpeg",
+                "X-EdgeTTS-Segment-Count": "5",
+                "X-EdgeTTS-Segment-Max-Code-Points": "300",
+              },
+            });
+          }
+          return new Response(null, { status: 404 });
+        });
+
+        render(<App />);
+        await screen.findByLabelText(/选择声音/i);
+
+        const textarea = screen.getByLabelText(/文本内容/i) as HTMLTextAreaElement;
+        fireEvent.change(textarea, { target: { value: "长文本测试内容。".repeat(30) } }); // > 300 code points
+
+        fireEvent.click(screen.getByRole("button", { name: /合成语音/i }));
+
+        // Status indicator displays plan segment count once stream starts
+        pushChunk(new Uint8Array(32 * 1024));
+
+        await waitFor(() => {
+          const indicator = screen.getByRole("status");
+          expect(indicator.textContent).toContain("共 5 段");
+          expect(indicator.textContent).toContain("32.0 KiB");
+        });
+
+        // Finish stream
+        closeStream();
+        await screen.findByLabelText(/语音合成播放器/i);
+
+        // Indicator disappears upon completion
+        expect(screen.queryByRole("status")).toBeNull();
+
+        // Completed metadata includes segment count and audio bytes
+        const metadata = screen.getByLabelText(/音频生成信息/i);
+        expect(metadata.textContent).toContain("5 段");
+        expect(metadata.textContent).toContain("32.0 KiB");
+      } finally {
+        window.MediaSource = originalMediaSource as typeof MediaSource;
+      }
+    });
+
+    it("handles missing segment headers gracefully and still displays bytes", async () => {
+      fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+        const url = typeof input === "string" ? input : input.toString();
+        if (url === "/api/health") return new Response(JSON.stringify({ status: "ok" }));
+        if (url === "/api/voices") return new Response(JSON.stringify({ voices: mockVoices }));
+        if (url === "/api/speech") {
+          const stream = new ReadableStream<Uint8Array>({
+            start(ctrl) {
+              ctrl.enqueue(new Uint8Array(4096));
+              ctrl.close();
+            },
+          });
+          return new Response(stream, {
+            status: 200,
+            headers: { "Content-Type": "audio/mpeg" }, // No X-EdgeTTS-* headers
+          });
+        }
+        return new Response(null, { status: 404 });
+      });
+
+      render(<App />);
+      await screen.findByLabelText(/选择声音/i);
+
+      const textarea = screen.getByLabelText(/文本内容/i) as HTMLTextAreaElement;
+      fireEvent.change(textarea, { target: { value: "测试文本" } });
+
+      fireEvent.click(screen.getByRole("button", { name: /合成语音/i }));
+      await screen.findByLabelText(/语音合成播放器/i);
+
+      // Completed metadata displays audio bytes without segment count
+      const metadata = screen.getByLabelText(/音频生成信息/i);
+      expect(metadata.textContent).toContain("4.0 KiB");
+      expect(metadata.textContent).not.toContain("段");
+    });
+
+    it("handles malformed segment headers gracefully without rejecting synthesis", async () => {
+      fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+        const url = typeof input === "string" ? input : input.toString();
+        if (url === "/api/health") return new Response(JSON.stringify({ status: "ok" }));
+        if (url === "/api/voices") return new Response(JSON.stringify({ voices: mockVoices }));
+        if (url === "/api/speech") {
+          const stream = new ReadableStream<Uint8Array>({
+            start(ctrl) {
+              ctrl.enqueue(new Uint8Array(8192));
+              ctrl.close();
+            },
+          });
+          return new Response(stream, {
+            status: 200,
+            headers: {
+              "Content-Type": "audio/mpeg",
+              "X-EdgeTTS-Segment-Count": "invalid_segment_count",
+              "X-EdgeTTS-Segment-Max-Code-Points": "-50",
+            },
+          });
+        }
+        return new Response(null, { status: 404 });
+      });
+
+      render(<App />);
+      await screen.findByLabelText(/选择声音/i);
+
+      const textarea = screen.getByLabelText(/文本内容/i) as HTMLTextAreaElement;
+      fireEvent.change(textarea, { target: { value: "测试文本" } });
+
+      fireEvent.click(screen.getByRole("button", { name: /合成语音/i }));
+      await screen.findByLabelText(/语音合成播放器/i);
+
+      const metadata = screen.getByLabelText(/音频生成信息/i);
+      expect(metadata.textContent).toContain("8.0 KiB");
+      expect(metadata.textContent).not.toContain("invalid");
+      expect(metadata.textContent).not.toContain("段");
+    });
+
+    it("later control changes do not mutate completed result metadata", async () => {
+      const user = userEvent.setup();
+      fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+        const url = typeof input === "string" ? input : input.toString();
+        if (url === "/api/health") return new Response(JSON.stringify({ status: "ok" }));
+        if (url === "/api/voices") return new Response(JSON.stringify({ voices: mockVoices }));
+        if (url === "/api/speech") {
+          const stream = new ReadableStream<Uint8Array>({
+            start(ctrl) {
+              ctrl.enqueue(new Uint8Array(10240));
+              ctrl.close();
+            },
+          });
+          return new Response(stream, {
+            status: 200,
+            headers: {
+              "Content-Type": "audio/mpeg",
+              "X-EdgeTTS-Segment-Count": "2",
+              "X-EdgeTTS-Segment-Max-Code-Points": "300",
+            },
+          });
+        }
+        return new Response(null, { status: 404 });
+      });
+
+      render(<App />);
+      await screen.findByLabelText(/选择声音/i);
+
+      const textarea = screen.getByLabelText(/文本内容/i) as HTMLTextAreaElement;
+      fireEvent.change(textarea, { target: { value: "测试文本" } });
+
+      fireEvent.click(screen.getByRole("button", { name: /合成语音/i }));
+      await screen.findByLabelText(/语音合成播放器/i);
+
+      const metadataBefore = screen.getByLabelText(/音频生成信息/i).textContent;
+      expect(metadataBefore).toContain("2 段 · 10.0 KiB");
+
+      // Mutate prosody sliders
+      const speedSlider = screen.getByLabelText(/^语速/i);
+      fireEvent.change(speedSlider, { target: { value: "1.5" } });
+
+      // Change voice
+      await user.selectOptions(screen.getByLabelText(/选择声音/i), "en-US-JennyNeural");
+
+      // Completed metadata remains unchanged
+      const metadataAfter = screen.getByLabelText(/音频生成信息/i).textContent;
+      expect(metadataAfter).toBe(metadataBefore);
+    });
+
+    it("error responses clear active telemetry indicator", async () => {
+      fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+        const url = typeof input === "string" ? input : input.toString();
+        if (url === "/api/health") return new Response(JSON.stringify({ status: "ok" }));
+        if (url === "/api/voices") return new Response(JSON.stringify({ voices: mockVoices }));
+        if (url === "/api/speech") return new Response(null, { status: 502 });
+        return new Response(null, { status: 404 });
+      });
+
+      render(<App />);
+      await screen.findByLabelText(/选择声音/i);
+
+      const textarea = screen.getByLabelText(/文本内容/i) as HTMLTextAreaElement;
+      fireEvent.change(textarea, { target: { value: "测试文本" } });
+
+      fireEvent.click(screen.getByRole("button", { name: /合成语音/i }));
+      await screen.findByText("语音服务暂时不可用");
+
+      expect(screen.queryByRole("status")).toBeNull();
+    });
+
+    it("cancel clears active telemetry indicator", async () => {
+      fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === "string" ? input : input.toString();
+        if (url === "/api/health") return new Response(JSON.stringify({ status: "ok" }));
+        if (url === "/api/voices") return new Response(JSON.stringify({ voices: mockVoices }));
+        if (url === "/api/speech") {
+          return new Promise<Response>((_res, rej) => {
+            init?.signal?.addEventListener("abort", () => {
+              const err = new Error("Aborted");
+              err.name = "AbortError";
+              rej(err);
+            });
+          });
+        }
+        return new Response(null, { status: 404 });
+      });
+
+      render(<App />);
+      await screen.findByLabelText(/选择声音/i);
+
+      const textarea = screen.getByLabelText(/文本内容/i) as HTMLTextAreaElement;
+      fireEvent.change(textarea, { target: { value: "测试文本" } });
+
+      fireEvent.click(screen.getByRole("button", { name: /合成语音/i }));
+      expect(await screen.findByRole("status")).toBeDefined();
+
+      fireEvent.click(screen.getByRole("button", { name: /取消合成/i }));
+      await screen.findByText("已取消生成");
+
+      expect(screen.queryByRole("status")).toBeNull();
+    });
+  });
 });

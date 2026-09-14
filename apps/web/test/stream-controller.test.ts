@@ -550,4 +550,319 @@ describe("StreamPlaybackController Session Isolation & URL Lifecycle", () => {
     expect(revokedUrls).not.toContain("blob:mock-url-2");
     expect(revokedUrls).not.toContain("blob:mock-url-3");
   });
+
+  describe("Streaming Telemetry & Byte Accounting", () => {
+    it("accumulates bytes monotonically, ignores zero-length chunks, and reports final cumulative bytes", async () => {
+      class MockSourceBuffer extends EventTarget {
+        updating = false;
+        appendBuffer = vi.fn(() => {
+          queueMicrotask(() => {
+            this.dispatchEvent(new Event("updateend"));
+          });
+        });
+        abort = vi.fn();
+      }
+
+      const mockBuffer = new MockSourceBuffer();
+      class MockMediaSource extends EventTarget {
+        readyState = "open";
+        addSourceBuffer = vi.fn(() => mockBuffer as unknown as SourceBuffer);
+        endOfStream = vi.fn();
+        static isTypeSupported = vi.fn(() => true);
+      }
+
+      // @ts-expect-error Mocking MediaSource
+      window.MediaSource = MockMediaSource;
+
+      const controller = new StreamPlaybackController();
+      const progressReports: number[] = [];
+
+      // Chunks: 32 KiB, empty (0 bytes), 32 KiB, 10 KiB
+      const chunk1 = new Uint8Array(32 * 1024).fill(1);
+      const chunkEmpty = new Uint8Array(0);
+      const chunk2 = new Uint8Array(32 * 1024).fill(2);
+      const chunk3 = new Uint8Array(10 * 1024).fill(3);
+
+      const stream = new ReadableStream<Uint8Array>({
+        start(ctrl) {
+          ctrl.enqueue(chunk1);
+          ctrl.enqueue(chunkEmpty);
+          ctrl.enqueue(chunk2);
+          ctrl.enqueue(chunk3);
+          ctrl.close();
+        },
+      });
+
+      const mockResponse = { body: stream } as unknown as Response;
+      const callbacks = {
+        onStreamReady: vi.fn(),
+        onDownloadReady: vi.fn(),
+        onError: vi.fn(),
+        onFinish: vi.fn(),
+        onProgress: vi.fn((bytes: number) => {
+          progressReports.push(bytes);
+        }),
+      };
+
+      const ac = new AbortController();
+      await controller.startStream(mockResponse, ac.signal, callbacks);
+
+      expect(callbacks.onFinish).toHaveBeenCalledTimes(1);
+      expect(progressReports.length).toBeGreaterThanOrEqual(3);
+
+      // Chunk 1 reported 32768
+      expect(progressReports[0]).toBe(32768);
+      // Chunk 2 reported 65536
+      expect(progressReports[1]).toBe(65536);
+      // Final chunk 3 (10 KiB) emitted at stream finish even below 32 KiB threshold: 75776
+      expect(progressReports[progressReports.length - 1]).toBe(75776);
+
+      // Monotonic non-decreasing
+      for (let i = 1; i < progressReports.length; i++) {
+        expect(progressReports[i]).toBeGreaterThanOrEqual(progressReports[i - 1]!);
+      }
+    });
+
+    it("emits final byte count when total stream size is below throttle threshold (< 32 KiB)", async () => {
+      class MockSourceBuffer extends EventTarget {
+        updating = false;
+        appendBuffer = vi.fn(() => {
+          queueMicrotask(() => {
+            this.dispatchEvent(new Event("updateend"));
+          });
+        });
+        abort = vi.fn();
+      }
+
+      const mockBuffer = new MockSourceBuffer();
+      class MockMediaSource extends EventTarget {
+        readyState = "open";
+        addSourceBuffer = vi.fn(() => mockBuffer as unknown as SourceBuffer);
+        endOfStream = vi.fn();
+        static isTypeSupported = vi.fn(() => true);
+      }
+
+      // @ts-expect-error Mocking MediaSource
+      window.MediaSource = MockMediaSource;
+
+      const controller = new StreamPlaybackController();
+      const progressReports: number[] = [];
+
+      const smallChunk = new Uint8Array(4096).fill(1);
+      const stream = new ReadableStream<Uint8Array>({
+        start(ctrl) {
+          ctrl.enqueue(smallChunk);
+          ctrl.close();
+        },
+      });
+
+      const mockResponse = { body: stream } as unknown as Response;
+      const callbacks = {
+        onStreamReady: vi.fn(),
+        onDownloadReady: vi.fn(),
+        onError: vi.fn(),
+        onFinish: vi.fn(),
+        onProgress: vi.fn((bytes: number) => {
+          progressReports.push(bytes);
+        }),
+      };
+
+      const ac = new AbortController();
+      await controller.startStream(mockResponse, ac.signal, callbacks);
+
+      expect(callbacks.onFinish).toHaveBeenCalledTimes(1);
+      expect(progressReports).toEqual([4096]);
+    });
+
+    it("Blob fallback reports final blob.size via onProgress", async () => {
+      // @ts-expect-error Disable MediaSource to force fallback
+      delete window.MediaSource;
+
+      const controller = new StreamPlaybackController();
+      const mockBlob = new Blob(["test payload 12345678"], { type: "audio/mpeg" });
+      const mockResponse = {
+        blob: vi.fn(async () => mockBlob),
+      } as unknown as Response;
+
+      const progressReports: number[] = [];
+      const callbacks = {
+        onStreamReady: vi.fn(),
+        onDownloadReady: vi.fn(),
+        onError: vi.fn(),
+        onFinish: vi.fn(),
+        onProgress: vi.fn((bytes: number) => {
+          progressReports.push(bytes);
+        }),
+      };
+
+      const ac = new AbortController();
+      await controller.startStream(mockResponse, ac.signal, callbacks);
+
+      expect(callbacks.onFinish).toHaveBeenCalledTimes(1);
+      expect(progressReports).toEqual([mockBlob.size]);
+    });
+
+    it("cancel prevents subsequent onProgress invocations", async () => {
+      class MockSourceBuffer extends EventTarget {
+        updating = false;
+        appendBuffer = vi.fn(() => {
+          queueMicrotask(() => {
+            this.dispatchEvent(new Event("updateend"));
+          });
+        });
+        abort = vi.fn();
+      }
+
+      const mockBuffer = new MockSourceBuffer();
+      class MockMediaSource extends EventTarget {
+        readyState = "open";
+        addSourceBuffer = vi.fn(() => mockBuffer as unknown as SourceBuffer);
+        endOfStream = vi.fn();
+        static isTypeSupported = vi.fn(() => true);
+      }
+
+      // @ts-expect-error Mocking MediaSource
+      window.MediaSource = MockMediaSource;
+
+      const controller = new StreamPlaybackController();
+      const progressReports: number[] = [];
+
+      let pushMore: () => void;
+      const stream = new ReadableStream<Uint8Array>({
+        start(ctrl) {
+          ctrl.enqueue(new Uint8Array(32 * 1024));
+          pushMore = () => {
+            try {
+              ctrl.enqueue(new Uint8Array(32 * 1024));
+              ctrl.close();
+            } catch {
+              // Ignore cancellation of underlying stream
+            }
+          };
+        },
+      });
+
+      const mockResponse = { body: stream } as unknown as Response;
+      const callbacks = {
+        onStreamReady: vi.fn(),
+        onDownloadReady: vi.fn(),
+        onError: vi.fn(),
+        onFinish: vi.fn(),
+        onProgress: vi.fn((bytes: number) => {
+          progressReports.push(bytes);
+        }),
+      };
+
+      const ac = new AbortController();
+      const promise = controller.startStream(mockResponse, ac.signal, callbacks);
+
+      // Initial chunk reported
+      await vi.waitFor(() => {
+        expect(progressReports).toEqual([32768]);
+      });
+
+      // Cancel session
+      controller.cancel();
+
+      // Push more bytes after cancel
+      pushMore!();
+      await promise;
+
+      // Must not receive further progress callbacks
+      expect(progressReports).toEqual([32768]);
+      expect(callbacks.onFinish).not.toHaveBeenCalled();
+    });
+
+    it("stale session cannot trigger progress on new session", async () => {
+      class MockSourceBuffer extends EventTarget {
+        updating = false;
+        appendBuffer = vi.fn(() => {
+          queueMicrotask(() => {
+            this.dispatchEvent(new Event("updateend"));
+          });
+        });
+        abort = vi.fn();
+      }
+
+      const mockBuffer = new MockSourceBuffer();
+      class MockMediaSource extends EventTarget {
+        readyState = "open";
+        addSourceBuffer = vi.fn(() => mockBuffer as unknown as SourceBuffer);
+        endOfStream = vi.fn();
+        static isTypeSupported = vi.fn(() => true);
+      }
+
+      // @ts-expect-error Mocking MediaSource
+      window.MediaSource = MockMediaSource;
+
+      const controller = new StreamPlaybackController();
+
+      let pushA: () => void;
+      const streamA = new ReadableStream<Uint8Array>({
+        start(ctrl) {
+          ctrl.enqueue(new Uint8Array(32 * 1024));
+          pushA = () => {
+            try {
+              ctrl.enqueue(new Uint8Array(32 * 1024));
+              ctrl.close();
+            } catch {
+              // Ignore cancellation of underlying stream
+            }
+          };
+        },
+      });
+
+      const callbacksA = {
+        onStreamReady: vi.fn(),
+        onDownloadReady: vi.fn(),
+        onError: vi.fn(),
+        onFinish: vi.fn(),
+        onProgress: vi.fn(),
+      };
+
+      const acA = new AbortController();
+      const promiseA = controller.startStream(
+        { body: streamA } as Response,
+        acA.signal,
+        callbacksA,
+      );
+      await vi.waitFor(() => {
+        expect(callbacksA.onProgress).toHaveBeenCalledWith(32768);
+      });
+
+      // Start Session B
+      const streamB = new ReadableStream<Uint8Array>({
+        start(ctrl) {
+          ctrl.enqueue(new Uint8Array(5000));
+          ctrl.close();
+        },
+      });
+
+      const callbacksB = {
+        onStreamReady: vi.fn(),
+        onDownloadReady: vi.fn(),
+        onError: vi.fn(),
+        onFinish: vi.fn(),
+        onProgress: vi.fn(),
+      };
+
+      const acB = new AbortController();
+      const promiseB = controller.startStream(
+        { body: streamB } as Response,
+        acB.signal,
+        callbacksB,
+      );
+      await promiseB;
+
+      expect(callbacksB.onProgress).toHaveBeenCalledWith(5000);
+
+      // Push more into stale stream A
+      callbacksA.onProgress.mockClear();
+      pushA!();
+      await promiseA;
+
+      // Stale session A must not emit progress
+      expect(callbacksA.onProgress).not.toHaveBeenCalled();
+    });
+  });
 });

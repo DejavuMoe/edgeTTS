@@ -32,6 +32,11 @@ import {
 } from "./voice-favorites.js";
 import { countLines } from "./text-stats.js";
 import { readImportedTextFile } from "./text-import.js";
+import {
+  type GenerationTelemetryState,
+  parseSynthesisPlanHeaders,
+  formatGeneratingStatusText,
+} from "./synthesis-telemetry.js";
 import "./App.css";
 
 type ApiStatus = "loading" | "healthy" | "unavailable";
@@ -81,6 +86,7 @@ export function App() {
   const [audioSrc, setAudioSrc] = useState<string | null>(null);
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
   const [completedResult, setCompletedResult] = useState<CompletedResultMeta | null>(null);
+  const [telemetry, setTelemetry] = useState<GenerationTelemetryState | null>(null);
 
   // Local file import & editor state
   const [importError, setImportError] = useState<string | null>(null);
@@ -369,6 +375,12 @@ export function App() {
     setCompletedResult(null);
     setGenerationError(null);
     setIsGenerating(true);
+    setTelemetry({
+      phase: "requesting",
+      segmentCount: null,
+      maxSegmentCodePoints: null,
+      bytesReceived: 0,
+    });
 
     const controller = new AbortController();
     abortControllerRef.current = controller;
@@ -404,10 +416,11 @@ export function App() {
       }
 
       if (!response.ok) {
+        setIsGenerating(false);
+        setTelemetry(null);
         if (response.status === 401) {
           apiKeyRef.current = null;
           setAuthRequired(true);
-          setIsGenerating(false);
           setGenerationError("API Key 已失效或未提供，请重新验证");
           return;
         } else if (response.status === 429) {
@@ -417,7 +430,6 @@ export function App() {
           } catch {
             setGenerationError("Too many speech requests");
           }
-          setIsGenerating(false);
           return;
         } else if (response.status === 400) {
           setGenerationError("输入参数有误");
@@ -428,14 +440,27 @@ export function App() {
         } else {
           setGenerationError("语音服务暂时不可用");
         }
-        setIsGenerating(false);
         return;
       }
+
+      const plan = parseSynthesisPlanHeaders(response.headers);
+      setTelemetry((prev) =>
+        prev
+          ? {
+              ...prev,
+              segmentCount: plan.segmentCount,
+              maxSegmentCodePoints: plan.maxSegmentCodePoints,
+            }
+          : null,
+      );
+
+      let latestBytesReceived = 0;
 
       // Stream playback via MediaSource or Blob fallback
       await streamControllerRef.current?.startStream(response, controller.signal, {
         onStreamReady: (mediaUrl: string) => {
           if (!isCurrent()) return;
+          setTelemetry((prev) => (prev ? { ...prev, phase: "streaming" } : null));
           setAudioSrc(mediaUrl);
           // Try playing; safely catch autoplay restrictions
           if (audioRef.current) {
@@ -444,28 +469,42 @@ export function App() {
             });
           }
         },
+        onProgress: (bytesReceived: number) => {
+          if (!isCurrent()) return;
+          latestBytesReceived = bytesReceived;
+          setTelemetry((prev) => (prev ? { ...prev, bytesReceived } : null));
+        },
         onDownloadReady: (url: string) => {
           if (!isCurrent()) return;
           setDownloadUrl(url);
-          setCompletedResult(createCompletedResultMeta(snapshot));
+          setCompletedResult(
+            createCompletedResultMeta({
+              ...snapshot,
+              segmentCount: plan.segmentCount,
+              audioBytes: latestBytesReceived,
+            }),
+          );
         },
         onError: () => {
           if (!isCurrent()) return;
           setAudioSrc(null);
           setDownloadUrl(null);
           setCompletedResult(null);
+          setTelemetry(null);
           setGenerationError("语音服务暂时不可用");
           setIsGenerating(false);
         },
         onFinish: () => {
           if (!isCurrent()) return;
           setIsGenerating(false);
+          setTelemetry(null);
         },
       });
     } catch (err: unknown) {
       if (!isCurrent()) {
         return;
       }
+      setTelemetry(null);
       if (err instanceof Error && err.name === "AbortError") {
         setGenerationError("已取消生成");
       } else {
@@ -489,6 +528,7 @@ export function App() {
     setAudioSrc(null);
     setDownloadUrl(null);
     setCompletedResult(null);
+    setTelemetry(null);
     setIsGenerating(false);
     setGenerationError("已取消生成");
   }, []);
@@ -927,7 +967,11 @@ export function App() {
         <section className="panel result-panel" aria-label="合成结果播放">
           <div className="result-header">
             <h2 className="panel-title">合成结果</h2>
-            {isGenerating && <span className="generating-indicator">正在流式接收音频...</span>}
+            {isGenerating && telemetry && (
+              <span className="generating-indicator" role="status" aria-live="polite">
+                {formatGeneratingStatusText(telemetry)}
+              </span>
+            )}
           </div>
 
           {generationError && (
