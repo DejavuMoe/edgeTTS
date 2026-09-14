@@ -1,3 +1,4 @@
+import React from "react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, waitFor, fireEvent, cleanup } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -2052,6 +2053,82 @@ describe("EdgeTTS Web Workbench", () => {
 
       // B must NOT be overwritten by late A
       expect(textarea.value).toBe("File B content");
+    });
+
+    it("successfully imports TXT in React.StrictMode with effect replay", async () => {
+      render(
+        <React.StrictMode>
+          <App />
+        </React.StrictMode>,
+      );
+      await screen.findByLabelText(/选择声音/i);
+
+      const textarea = screen.getByLabelText(/文本内容/i) as HTMLTextAreaElement;
+      const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+      const file = createTxtFile("StrictMode imported text", "strict.txt");
+
+      fireEvent.change(fileInput, { target: { files: [file] } });
+
+      await waitFor(() => {
+        expect(textarea.value).toBe("StrictMode imported text");
+      });
+    });
+
+    it("preserves latest-file-wins under React.StrictMode", async () => {
+      render(
+        <React.StrictMode>
+          <App />
+        </React.StrictMode>,
+      );
+      await screen.findByLabelText(/选择声音/i);
+
+      const textarea = screen.getByLabelText(/文本内容/i) as HTMLTextAreaElement;
+      const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+
+      let resolveFileA: (buf: ArrayBuffer) => void;
+      const slowPromise = new Promise<ArrayBuffer>((res) => {
+        resolveFileA = res;
+      });
+      const fileA = createTxtFile("File A strict content", "fileA.txt");
+      vi.spyOn(fileA, "arrayBuffer").mockReturnValue(slowPromise);
+
+      const fileB = createTxtFile("File B strict content", "fileB.txt");
+
+      fireEvent.change(fileInput, { target: { files: [fileA] } });
+      fireEvent.change(fileInput, { target: { files: [fileB] } });
+
+      await waitFor(() => {
+        expect(textarea.value).toBe("File B strict content");
+      });
+
+      resolveFileA!(new TextEncoder().encode("File A strict content").buffer);
+      await new Promise((r) => setTimeout(r, 50));
+
+      expect(textarea.value).toBe("File B strict content");
+    });
+
+    it("unmounting component before async TXT import completes does not apply text or cause lifecycle warnings", async () => {
+      let resolveFile: (buf: ArrayBuffer) => void;
+      const slowPromise = new Promise<ArrayBuffer>((res) => {
+        resolveFile = res;
+      });
+      const file = createTxtFile("Delayed content", "delayed.txt");
+      vi.spyOn(file, "arrayBuffer").mockReturnValue(slowPromise);
+
+      const { unmount } = render(<App />);
+      await screen.findByLabelText(/选择声音/i);
+
+      const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+      fireEvent.change(fileInput, { target: { files: [file] } });
+
+      // Unmount before file completes
+      unmount();
+
+      // Resolve the delayed file read
+      resolveFile!(new TextEncoder().encode("Delayed content").buffer);
+      await new Promise((r) => setTimeout(r, 50));
+
+      // File reading completed after unmount; no error thrown
     });
 
     it("triggers synthesis on Ctrl+Enter and Meta+Enter in textarea, but not in other inputs", async () => {

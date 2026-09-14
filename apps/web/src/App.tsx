@@ -86,11 +86,13 @@ export function App() {
   const [importError, setImportError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const importGenerationIdRef = useRef<number>(0);
-  const isMountedRef = useRef<boolean>(true);
+  const isMountedRef = useRef<boolean>(false);
 
   useEffect(() => {
+    isMountedRef.current = true;
     return () => {
       isMountedRef.current = false;
+      ++importGenerationIdRef.current;
     };
   }, []);
 
