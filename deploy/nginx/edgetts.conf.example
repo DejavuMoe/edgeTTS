@@ -1,0 +1,96 @@
+# Production Nginx reverse-proxy configuration for EdgeTTS.
+#
+# Topology:
+#   Client ---> HTTPS:443 (Nginx) ---> HTTP:127.0.0.1:8080 (Docker edgeTTS)
+#
+# Deployment Instructions:
+#   1. Copy this file to /etc/nginx/sites-available/edgetts.conf (or /etc/nginx/conf.d/edgetts.conf).
+#   2. Replace 'edgetts.example.com' with your actual domain name.
+#   3. Replace '/path/to/fullchain.pem' and '/path/to/privkey.pem' with your actual TLS certificates.
+#   4. Validate configuration syntax with: nginx -t
+#   5. Reload Nginx: systemctl reload nginx
+
+upstream edgetts_backend {
+    server 127.0.0.1:8080;
+    keepalive 16;
+}
+
+# HTTP to HTTPS redirect
+server {
+    listen 80;
+    listen [::]:80;
+    server_name edgetts.example.com;
+
+    server_tokens off;
+
+    return 301 https://$host$request_uri;
+}
+
+# Production HTTPS virtual host
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    server_name edgetts.example.com;
+
+    server_tokens off;
+    client_max_body_size 1m;
+
+    # TLS certificate configuration (placeholders - replace with valid paths)
+    ssl_certificate /path/to/fullchain.pem;
+    ssl_certificate_key /path/to/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!aNULL:!MD5;
+    ssl_prefer_server_ciphers on;
+
+    # Low-risk security headers
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header Referrer-Policy "same-origin" always;
+
+    # Native segmented streaming speech endpoint
+    # Response buffering and caching MUST be disabled so audio chunks stream immediately to clients.
+    location = /api/speech {
+        proxy_pass http://edgetts_backend;
+        proxy_http_version 1.1;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        proxy_buffering off;
+        proxy_cache off;
+
+        proxy_read_timeout 300s;
+        proxy_send_timeout 60s;
+    }
+
+    # OpenAI-compatible streaming speech endpoint
+    # Response buffering and caching MUST be disabled so audio chunks stream immediately to clients.
+    location = /v1/audio/speech {
+        proxy_pass http://edgetts_backend;
+        proxy_http_version 1.1;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        proxy_buffering off;
+        proxy_cache off;
+
+        proxy_read_timeout 300s;
+        proxy_send_timeout 60s;
+    }
+
+    # General application routing (WebUI, static assets, health probes, voices discovery)
+    # Standard buffering is retained for efficiency and optimal throughput.
+    location / {
+        proxy_pass http://edgetts_backend;
+        proxy_http_version 1.1;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
