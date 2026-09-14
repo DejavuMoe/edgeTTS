@@ -368,3 +368,20 @@ pnpm --filter @edgetts/tts-service smoke
 # Fastify server HTTP API & static hosting smoke test
 pnpm --filter @edgetts/server smoke
 ```
+
+## Continuous Integration
+
+edgeTTS runs an automated, credential-free GitHub Actions workflow (`.github/workflows/ci.yml`) on:
+
+- Pushes to the `main` branch
+- Pull requests
+- Manual workflow dispatches (`workflow_dispatch`)
+
+The pipeline executes three validation jobs:
+
+1. **`quality`**: Frozen-lockfile dependency installation, workspace build, TypeScript typecheck, ESLint, test suites, Prettier formatting verification, and repository cleanliness audits.
+2. **`docker`**: Multi-stage production container build, non-root user and healthcheck metadata inspection, fail-closed startup validation (`REQUIRE_API_KEY=true`), and runtime security posture checks (read-only rootfs, dropped capabilities, no-new-privileges).
+3. **`proxy-contract`**: Containerized `nginx -t` validation and deterministic proxy tests via `EDGETTS_NGINX_SKIP_LIVE=1 ./deploy/nginx/test-proxy.sh` (validating TLS termination, chunk streaming, and HTTP 400/503/429 status preservation).
+
+> [!NOTE]
+> Live speech synthesis against Microsoft Edge TTS endpoints is intentionally excluded from automated CI to eliminate external network fragility and rate limit dependencies from pull request gating. Full upstream live qualification remains available locally in controlled environments via `./deploy/nginx/test-proxy.sh` and the package smoke test scripts.

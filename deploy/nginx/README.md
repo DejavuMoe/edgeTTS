@@ -123,10 +123,32 @@ The integration test script requires the following host tools:
 
 ### Running the Test Suite
 
-```bash
-# Run with local EdgeTTS image
-EDGETTS_TEST_IMAGE=edgetts:local ./deploy/nginx/test-proxy.sh
+#### Full Local Qualification (Live Upstream)
 
+Runs static audit, containerized `nginx -t`, deterministic streaming, error preservation, real container startup, authentication, live voice discovery, and exactly one real Microsoft Edge TTS speech synthesis:
+
+```bash
+# Full local qualification, includes one real Edge TTS synthesis
+EDGETTS_TEST_IMAGE=edgetts:local \
+  ./deploy/nginx/test-proxy.sh
+```
+
+#### Deterministic Proxy Mode (Offline / CI)
+
+Runs all static audits, `nginx -t`, deterministic streaming, HTTP 400/503/429 error preservation, and header checks using an ephemeral mock upstream. Skips real EdgeTTS container execution and Microsoft upstream synthesis:
+
+```bash
+# Deterministic proxy-only mode used by CI
+EDGETTS_NGINX_SKIP_LIVE=1 \
+  ./deploy/nginx/test-proxy.sh
+```
+
+> [!NOTE]
+> `SKIP_LIVE=1` mode validates the complete Nginx proxy contract, streaming mechanics, and error handling, but does not validate Microsoft upstream availability or network egress.
+
+#### Custom Test Port
+
+```bash
 # Optional: configure custom test port (default: 18082)
 EDGETTS_NGINX_TEST_PORT=18085 ./deploy/nginx/test-proxy.sh
 ```

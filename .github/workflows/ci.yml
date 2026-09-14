@@ -1,0 +1,259 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Code Quality & Tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js 24.21.0
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.21.0
+          package-manager-cache: false
+
+      - name: Install exact pnpm 12.3.4
+        run: |
+          npm install --global pnpm@12.3.4
+          node --version
+          pnpm --version
+
+      - name: Install workspace dependencies (frozen lockfile)
+        run: pnpm install --frozen-lockfile
+
+      - name: Build workspace packages & apps
+        run: pnpm build
+
+      - name: TypeScript typecheck
+        run: pnpm typecheck
+
+      - name: ESLint check
+        run: pnpm lint
+
+      - name: Run unit & integration test suites
+        run: pnpm test
+
+      - name: Prettier formatting check
+        run: pnpm format:check
+
+      - name: Git diff & tree cleanliness check
+        run: |
+          git diff --check
+          git diff --exit-code
+
+  docker:
+    name: Docker Production Image Contract
+    needs: quality
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Verify Docker daemon availability
+        run: docker version
+
+      - name: Build production Docker image
+        run: docker build --tag edgetts:ci .
+
+      - name: Audit Docker image metadata
+        run: |
+          set -euo pipefail
+          echo "Auditing image configuration..."
+          USER_CFG=$(docker image inspect edgetts:ci --format '{{.Config.User}}')
+          CMD_CFG=$(docker image inspect edgetts:ci --format '{{json .Config.Cmd}}')
+          HEALTH_CFG=$(docker image inspect edgetts:ci --format '{{if .Config.Healthcheck}}present{{else}}missing{{end}}')
+          ENV_CFG=$(docker image inspect edgetts:ci --format '{{json .Config.Env}}')
+
+          echo "User:        $USER_CFG"
+          echo "Cmd:         $CMD_CFG"
+          echo "Healthcheck: $HEALTH_CFG"
+
+          if [ "$USER_CFG" != "node" ]; then
+            echo "FAIL: Expected Config.User to be 'node', got '$USER_CFG'" >&2
+            exit 1
+          fi
+
+          if [ "$CMD_CFG" != '["node","dist/server.js"]' ]; then
+            echo "FAIL: Expected Config.Cmd to be '[\"node\",\"dist/server.js\"]', got '$CMD_CFG'" >&2
+            exit 1
+          fi
+
+          if [ "$HEALTH_CFG" != "present" ]; then
+            echo "FAIL: Docker healthcheck is missing from image" >&2
+            exit 1
+          fi
+
+          if echo "$ENV_CFG" | grep -q "API_KEY="; then
+            echo "FAIL: Image contains embedded API_KEY secret in environment" >&2
+            exit 1
+          fi
+
+          echo "PASS: Image metadata audit succeeded."
+
+      - name: Test fail-closed container startup without API key
+        run: |
+          set -euo pipefail
+          echo "Testing fail-closed execution..."
+          set +e
+          OUTPUT=$(docker run --rm -e REQUIRE_API_KEY=true edgetts:ci 2>&1)
+          EXIT_CODE=$?
+          set -e
+
+          echo "Exit code: $EXIT_CODE"
+          echo "Output: $OUTPUT"
+
+          if [ "$EXIT_CODE" -eq 0 ]; then
+            echo "FAIL: Expected non-zero exit code when REQUIRE_API_KEY=true and API_KEY is missing, got 0" >&2
+            exit 1
+          fi
+
+          if ! echo "$OUTPUT" | grep -q "API_KEY is required when REQUIRE_API_KEY=true"; then
+            echo "FAIL: Expected output to contain 'API_KEY is required when REQUIRE_API_KEY=true'" >&2
+            exit 1
+          fi
+
+          echo "PASS: Container failed closed with expected message and non-zero exit code."
+
+      - name: Test protected container runtime security and health
+        run: |
+          set -euo pipefail
+          CONTAINER_NAME="edgetts-ci-smoke"
+          TEST_PORT=18080
+          TEST_KEY="ci-test-api-key-1234567890"
+
+          cleanup() {
+            docker rm -f "$CONTAINER_NAME" 2>/dev/null || true
+          }
+          trap cleanup EXIT INT TERM
+
+          if (echo > /dev/tcp/127.0.0.1/"$TEST_PORT") 2>/dev/null; then
+            echo "FAIL: Port $TEST_PORT is already in use on 127.0.0.1" >&2
+            exit 1
+          fi
+
+          docker run -d \
+            --name "$CONTAINER_NAME" \
+            --read-only \
+            --cap-drop=ALL \
+            --security-opt=no-new-privileges \
+            --tmpfs /tmp \
+            -e REQUIRE_API_KEY=true \
+            -e "API_KEY=$TEST_KEY" \
+            -p "127.0.0.1:$TEST_PORT:8080" \
+            edgetts:ci
+
+          echo "Verifying runtime security posture..."
+          READ_ONLY=$(docker inspect "$CONTAINER_NAME" --format '{{.HostConfig.ReadonlyRootfs}}')
+          CAP_DROP=$(docker inspect "$CONTAINER_NAME" --format '{{json .HostConfig.CapDrop}}')
+          SEC_OPT=$(docker inspect "$CONTAINER_NAME" --format '{{json .HostConfig.SecurityOpt}}')
+          CONTAINER_USER=$(docker inspect "$CONTAINER_NAME" --format '{{.Config.User}}')
+          DOCKER_SOCK=$(docker inspect "$CONTAINER_NAME" --format '{{json .Mounts}}' | grep -q "docker.sock" && echo "present" || echo "absent")
+
+          if [ "$READ_ONLY" != "true" ]; then
+            echo "FAIL: Container rootfs is not read-only" >&2
+            exit 1
+          fi
+
+          if ! echo "$CAP_DROP" | grep -q "ALL"; then
+            echo "FAIL: CapDrop does not contain ALL" >&2
+            exit 1
+          fi
+
+          if ! echo "$SEC_OPT" | grep -q "no-new-privileges"; then
+            echo "FAIL: SecurityOpt does not contain no-new-privileges" >&2
+            exit 1
+          fi
+
+          if [ "$CONTAINER_USER" != "node" ]; then
+            echo "FAIL: Expected container user 'node', got '$CONTAINER_USER'" >&2
+            exit 1
+          fi
+
+          if [ "$DOCKER_SOCK" != "absent" ]; then
+            echo "FAIL: docker.sock mounted inside container" >&2
+            exit 1
+          fi
+          echo "PASS: Runtime security posture verified."
+
+          echo "Polling container health status..."
+          HEALTHY=false
+          for i in $(seq 1 40); do
+            STATUS=$(docker inspect "$CONTAINER_NAME" --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}')
+            if [ "$STATUS" = "healthy" ]; then
+              HEALTHY=true
+              echo "Container is healthy after attempt $i."
+              break
+            fi
+            sleep 0.5
+          done
+
+          if [ "$HEALTHY" != "true" ]; then
+            echo "FAIL: Container failed to reach healthy state (last status: $STATUS)" >&2
+            docker logs "$CONTAINER_NAME"
+            exit 1
+          fi
+
+          echo "Verifying HTTP endpoints..."
+          HTTP_HEALTH=$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:$TEST_PORT/health")
+          if [ "$HTTP_HEALTH" != "200" ]; then
+            echo "FAIL: GET /health returned $HTTP_HEALTH (expected 200)" >&2
+            exit 1
+          fi
+
+          HTTP_API_HEALTH=$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:$TEST_PORT/api/health")
+          if [ "$HTTP_API_HEALTH" != "200" ]; then
+            echo "FAIL: GET /api/health returned $HTTP_API_HEALTH (expected 200)" >&2
+            exit 1
+          fi
+
+          RESP_UNAUTH=$(curl -s -i "http://127.0.0.1:$TEST_PORT/api/voices")
+          if ! echo "$RESP_UNAUTH" | grep -q "HTTP/1.1 401"; then
+            echo "FAIL: Unauthenticated GET /api/voices did not return 401" >&2
+            exit 1
+          fi
+          if ! echo "$RESP_UNAUTH" | grep -q '"UNAUTHORIZED"'; then
+            echo "FAIL: Error code UNAUTHORIZED missing in 401 response" >&2
+            exit 1
+          fi
+
+          echo "PASS: Health probes (200) and unauthenticated voice access (401) verified."
+
+  proxy-contract:
+    name: Deterministic Nginx Reverse Proxy Contract
+    needs: quality
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Verify Docker daemon availability
+        run: docker version
+
+      - name: Run deterministic Nginx proxy test suite
+        run: |
+          EDGETTS_NGINX_SKIP_LIVE=1 ./deploy/nginx/test-proxy.sh
