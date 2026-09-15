@@ -10,12 +10,17 @@ class FakeEdgeClient implements EdgeClient {
   public setMetadataCalls: Array<{ voiceName: string; outputFormat: OUTPUT_FORMAT }> = [];
   public toStreamCalls: Array<{ input: string; options?: ProsodyOptions | undefined }> = [];
   public streamToReturn: Readable;
+  public getVoicesHandler?: () => Promise<readonly Voice[]>;
+  public setMetadataHandler?: (voiceName: string, outputFormat: OUTPUT_FORMAT) => Promise<void>;
 
   constructor(streamToReturn?: Readable) {
     this.streamToReturn = streamToReturn ?? Readable.from([]);
   }
 
   async getVoices(): Promise<readonly Voice[]> {
+    if (this.getVoicesHandler) {
+      return this.getVoicesHandler();
+    }
     return [
       {
         ShortName: "zh-CN-XiaoxiaoNeural",
@@ -31,6 +36,9 @@ class FakeEdgeClient implements EdgeClient {
 
   async setMetadata(voiceName: string, outputFormat: OUTPUT_FORMAT): Promise<void> {
     this.setMetadataCalls.push({ voiceName, outputFormat });
+    if (this.setMetadataHandler) {
+      return this.setMetadataHandler(voiceName, outputFormat);
+    }
   }
 
   toStream(input: string, options?: ProsodyOptions): { audioStream: Readable } {
@@ -437,6 +445,116 @@ describe("EdgeTtsProvider", () => {
       ).rejects.toThrowError(RangeError);
 
       expect(createdClient).toBeUndefined();
+    });
+
+    it("rejects invalid voice identifier with RangeError without creating client", async () => {
+      let createdClient: FakeEdgeClient | undefined;
+      const provider = new EdgeTtsProvider(() => {
+        createdClient = new FakeEdgeClient();
+        return createdClient;
+      });
+
+      const ac = new AbortController();
+      const invalidVoices = [
+        'zh-CN-XiaoxiaoNeural"><voice',
+        "en-US-Jenny'sVoice",
+        "voice with spaces",
+        "voice/with/slashes",
+        "voice;drop table",
+        "a".repeat(129),
+      ];
+
+      for (const invalidVoice of invalidVoices) {
+        await expect(
+          provider.synthesize({ text: "hello", voice: invalidVoice }, ac.signal),
+        ).rejects.toThrowError(RangeError);
+      }
+
+      expect(createdClient).toBeUndefined();
+    });
+
+    it("accepts valid voice identifiers", async () => {
+      const provider = new EdgeTtsProvider(() => new FakeEdgeClient());
+      const ac = new AbortController();
+
+      const validVoices = [
+        "zh-CN-XiaoxiaoNeural",
+        "en-US-AvaMultilingualNeural",
+        "a_b-1",
+        "voice-123_ABC",
+        "a".repeat(128),
+      ];
+
+      for (const voice of validVoices) {
+        await expect(
+          provider.synthesize({ text: "hello", voice }, ac.signal),
+        ).resolves.toBeDefined();
+      }
+    });
+  });
+
+  describe("timeouts and aborts during handshake", () => {
+    it("listVoices times out after configured timeout and closes client", async () => {
+      let createdClient: FakeEdgeClient | undefined;
+      const provider = new EdgeTtsProvider({
+        clientFactory: () => {
+          createdClient = new FakeEdgeClient();
+          createdClient.getVoicesHandler = () => new Promise(() => {}); // never resolves
+          return createdClient;
+        },
+        listVoicesTimeoutMs: 50,
+      });
+
+      await expect(provider.listVoices()).rejects.toThrow("Voice discovery timed out after 50ms");
+      expect(createdClient?.closeCallCount).toBe(1);
+    });
+
+    it("setMetadata times out after configured timeout and closes client", async () => {
+      let createdClient: FakeEdgeClient | undefined;
+      const provider = new EdgeTtsProvider({
+        clientFactory: () => {
+          createdClient = new FakeEdgeClient();
+          createdClient.setMetadataHandler = () => new Promise(() => {}); // never resolves
+          return createdClient;
+        },
+        setupTimeoutMs: 50,
+      });
+
+      const ac = new AbortController();
+      await expect(
+        provider.synthesize({ text: "hello", voice: "zh-CN-XiaoxiaoNeural" }, ac.signal),
+      ).rejects.toThrow("Speech synthesis setup timed out after 50ms");
+
+      expect(createdClient?.closeCallCount).toBe(1);
+    });
+
+    it("setMetadata aborts immediately if signal triggers during setup and closes client", async () => {
+      let createdClient: FakeEdgeClient | undefined;
+      const ac = new AbortController();
+
+      const provider = new EdgeTtsProvider({
+        clientFactory: () => {
+          createdClient = new FakeEdgeClient();
+          createdClient.setMetadataHandler = () =>
+            new Promise((resolve) => {
+              // Trigger abort after a short delay
+              setTimeout(() => {
+                ac.abort();
+                resolve();
+              }, 20);
+            });
+          return createdClient;
+        },
+        setupTimeoutMs: 5000,
+      });
+
+      await expect(
+        provider.synthesize({ text: "hello", voice: "zh-CN-XiaoxiaoNeural" }, ac.signal),
+      ).rejects.toSatisfy((err: unknown) => {
+        return err instanceof Error && err.name === "AbortError";
+      });
+
+      expect(createdClient?.closeCallCount).toBe(1);
     });
   });
 });

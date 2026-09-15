@@ -1,5 +1,5 @@
 import type { SynthesisRequest, SynthesisResult, TtsVoice } from "@edgetts/tts-core";
-import type { SegmentedSynthesisOptions } from "@edgetts/tts-service";
+import type { SegmentedSynthesisOptions, SegmentedSynthesisResult } from "@edgetts/tts-service";
 
 export interface TtsServicePort {
   listVoices(): Promise<readonly TtsVoice[]>;
@@ -8,7 +8,7 @@ export interface TtsServicePort {
     request: SynthesisRequest,
     signal: AbortSignal,
     options: SegmentedSynthesisOptions,
-  ): Promise<SynthesisResult>;
+  ): Promise<SegmentedSynthesisResult>;
 }
 
 export interface AppDependencies {

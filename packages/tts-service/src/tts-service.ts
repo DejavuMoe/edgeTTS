@@ -8,6 +8,7 @@ export const DEFAULT_MAX_QUEUED_SYNTHESES = 16;
 
 export interface TtsServiceOptions {
   readonly voiceCacheTtlMs?: number;
+  readonly voiceCacheErrorBackoffMs?: number;
   readonly now?: () => number;
   readonly maxConcurrentSyntheses?: number;
   readonly maxQueuedSyntheses?: number;
@@ -19,6 +20,10 @@ export interface ListVoicesOptions {
 
 export interface SegmentedSynthesisOptions {
   readonly maxSegmentCodePoints: number;
+}
+
+export interface SegmentedSynthesisResult extends SynthesisResult {
+  readonly segmentCount: number;
 }
 
 class ManagedAudioStream implements AsyncIterableIterator<Uint8Array> {
@@ -107,46 +112,61 @@ class ManagedAudioStream implements AsyncIterableIterator<Uint8Array> {
 }
 
 class SegmentedAudioStream implements AsyncIterableIterator<Uint8Array> {
-  private readonly service: TtsService;
+  private readonly provider: TtsProvider;
   private readonly segments: readonly string[];
   private readonly request: SynthesisRequest;
   private readonly signal: AbortSignal;
+  private readonly permit: Permit;
   private readonly expectedFormat: string;
   private readonly expectedContentType: string;
   private currentSegmentIndex = 0;
   private currentIterator: AsyncIterator<Uint8Array> | null;
   private closed = false;
+  private released = false;
   private readonly onAbort: () => void;
 
   constructor(
-    service: TtsService,
+    provider: TtsProvider,
     firstResult: SynthesisResult,
     segments: readonly string[],
     request: SynthesisRequest,
     signal: AbortSignal,
+    permit: Permit,
   ) {
-    this.service = service;
+    this.provider = provider;
     this.segments = segments;
     this.request = request;
     this.signal = signal;
+    this.permit = permit;
     this.expectedFormat = firstResult.format;
     this.expectedContentType = firstResult.contentType;
     this.currentIterator = firstResult.audio[Symbol.asyncIterator]();
 
     this.onAbort = () => {
+      this.closed = true;
+      this.releaseOnce();
       void this.cleanupCurrent();
     };
 
     if (signal.aborted) {
       this.closed = true;
+      this.releaseOnce();
       void this.cleanupCurrent();
     } else {
       signal.addEventListener("abort", this.onAbort, { once: true });
     }
   }
 
-  private async cleanupCurrent(): Promise<void> {
+  private releaseOnce(): void {
+    if (this.released) {
+      return;
+    }
+    this.released = true;
     this.signal.removeEventListener("abort", this.onAbort);
+    this.permit.release();
+  }
+
+  private async cleanupCurrent(): Promise<void> {
     const iter = this.currentIterator;
     this.currentIterator = null;
     if (iter?.return) {
@@ -172,6 +192,7 @@ class SegmentedAudioStream implements AsyncIterableIterator<Uint8Array> {
 
     if (this.signal.aborted) {
       this.closed = true;
+      this.releaseOnce();
       await this.cleanupCurrent();
       throw createAbortError(this.signal.reason);
     }
@@ -180,22 +201,32 @@ class SegmentedAudioStream implements AsyncIterableIterator<Uint8Array> {
       if (!this.currentIterator) {
         if (this.signal.aborted) {
           this.closed = true;
+          this.releaseOnce();
           throw createAbortError(this.signal.reason);
         }
 
-        const nextResult = await this.service.synthesize(
-          {
-            ...this.request,
-            text: this.segments[this.currentSegmentIndex]!,
-          },
-          this.signal,
-        );
+        let nextResult: SynthesisResult;
+        try {
+          nextResult = await this.provider.synthesize(
+            {
+              ...this.request,
+              text: this.segments[this.currentSegmentIndex]!,
+            },
+            this.signal,
+          );
+        } catch (error) {
+          this.closed = true;
+          this.releaseOnce();
+          await this.cleanupCurrent();
+          throw error;
+        }
 
         if (
           nextResult.format !== this.expectedFormat ||
           nextResult.contentType !== this.expectedContentType
         ) {
           this.closed = true;
+          this.releaseOnce();
           const iter = nextResult.audio[Symbol.asyncIterator]();
           await iter.return?.();
           throw new Error(
@@ -209,6 +240,7 @@ class SegmentedAudioStream implements AsyncIterableIterator<Uint8Array> {
       try {
         if (this.signal.aborted) {
           this.closed = true;
+          this.releaseOnce();
           await this.cleanupCurrent();
           throw createAbortError(this.signal.reason);
         }
@@ -223,24 +255,28 @@ class SegmentedAudioStream implements AsyncIterableIterator<Uint8Array> {
         this.currentSegmentIndex++;
       } catch (error) {
         this.closed = true;
+        this.releaseOnce();
         await this.cleanupCurrent();
         throw error;
       }
     }
 
     this.closed = true;
+    this.releaseOnce();
     await this.cleanupCurrent();
     return { done: true, value: undefined };
   }
 
   async return(value?: unknown): Promise<IteratorResult<Uint8Array>> {
     this.closed = true;
+    this.releaseOnce();
     await this.cleanupCurrent();
     return { done: true, value: value as undefined };
   }
 
   async throw(error?: unknown): Promise<IteratorResult<Uint8Array>> {
     this.closed = true;
+    this.releaseOnce();
     await this.cleanupCurrent();
     throw error;
   }
@@ -255,6 +291,9 @@ export class TtsService {
     this.provider = provider;
     this.voiceCache = new VoiceCache(provider, {
       ...(options?.voiceCacheTtlMs !== undefined ? { ttlMs: options.voiceCacheTtlMs } : {}),
+      ...(options?.voiceCacheErrorBackoffMs !== undefined
+        ? { errorBackoffMs: options.voiceCacheErrorBackoffMs }
+        : {}),
       ...(options?.now !== undefined ? { now: options.now } : {}),
     });
     this.limiter = new SynthesisLimiter({
@@ -290,7 +329,11 @@ export class TtsService {
     request: SynthesisRequest,
     signal: AbortSignal,
     options: SegmentedSynthesisOptions,
-  ): Promise<SynthesisResult> {
+  ): Promise<SegmentedSynthesisResult> {
+    if (request.format === "webm-opus") {
+      throw new RangeError("Segmented synthesis does not support webm-opus format");
+    }
+
     if (
       options === null ||
       typeof options !== "object" ||
@@ -311,18 +354,39 @@ export class TtsService {
         : segmentText(request.text, { maxCodePoints: options.maxSegmentCodePoints });
     const segmentsToSynthesize = segments.length === 0 ? [request.text] : segments;
 
-    const firstResult = await this.synthesize(
-      {
-        ...request,
-        text: segmentsToSynthesize[0]!,
-      },
-      signal,
-    );
+    const permit = await this.limiter.acquire(signal);
+
+    if (signal.aborted) {
+      permit.release();
+      throw createAbortError(signal.reason);
+    }
+
+    let firstResult: SynthesisResult;
+    try {
+      firstResult = await this.provider.synthesize(
+        {
+          ...request,
+          text: segmentsToSynthesize[0]!,
+        },
+        signal,
+      );
+    } catch (error) {
+      permit.release();
+      throw error;
+    }
 
     return {
       format: firstResult.format,
       contentType: firstResult.contentType,
-      audio: new SegmentedAudioStream(this, firstResult, segmentsToSynthesize, request, signal),
+      segmentCount: segmentsToSynthesize.length,
+      audio: new SegmentedAudioStream(
+        this.provider,
+        firstResult,
+        segmentsToSynthesize,
+        request,
+        signal,
+        permit,
+      ),
     };
   }
 

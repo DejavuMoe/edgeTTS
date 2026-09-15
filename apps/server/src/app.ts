@@ -29,6 +29,10 @@ export function createApp(dependencies: AppDependencies, options?: AppOptions): 
   const authPreHandler = validatedKey ? createAuthPreHandler(validatedKey) : null;
   const rateLimitConfig = resolveSpeechRateLimitConfig(options?.speechRateLimit);
 
+  app.addHook("onSend", async (_request, reply) => {
+    reply.header("X-Frame-Options", "SAMEORIGIN");
+  });
+
   void app.register(fastifyRateLimit, { global: false });
 
   app.setErrorHandler((error, request, reply) => {

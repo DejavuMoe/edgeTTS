@@ -302,24 +302,40 @@ describe("TtsService", () => {
       expect(provider.listVoicesCallCount).toBe(2);
     });
 
-    it("propagates error and does not return stale cache when expired cache refresh fails", async () => {
+    it("returns stale cache and backs off when expired cache refresh fails", async () => {
       let currentTime = 1000;
       const provider = new FakeTtsProvider();
       const service = new TtsService(provider, {
         voiceCacheTtlMs: 1000,
+        voiceCacheErrorBackoffMs: 5000,
         now: () => currentTime,
       });
 
       // Initial load at t=1000
-      await service.listVoices();
+      const initial = await service.listVoices();
       expect(provider.listVoicesCallCount).toBe(1);
 
       // Advance time past TTL (expired)
       currentTime = 2500;
       provider.voicesError = new Error("Upstream outage");
 
-      await expect(service.listVoices()).rejects.toThrow("Upstream outage");
+      // Returns stale cache instead of throwing
+      const stale = await service.listVoices();
+      expect(stale).toEqual(initial);
       expect(provider.listVoicesCallCount).toBe(2);
+
+      // Subsequent call within backoff window (t=3000) uses backoff and doesn't call provider
+      currentTime = 3000;
+      const backedOff = await service.listVoices();
+      expect(backedOff).toEqual(initial);
+      expect(provider.listVoicesCallCount).toBe(2);
+
+      // Advance past backoff window (t=8000 >= 2500+5000) and provider recovers
+      currentTime = 8000;
+      provider.voicesError = undefined;
+      const refreshed = await service.listVoices();
+      expect(refreshed).toEqual(initial);
+      expect(provider.listVoicesCallCount).toBe(3);
     });
 
     it("isolates internal cache from caller mutations and provider mutations", async () => {
@@ -1571,7 +1587,7 @@ describe("TtsService", () => {
       expect(callCount).toBe(1);
     });
 
-    it("allows queued normal request to run between segmented chunks (fairness)", async () => {
+    it("holds permit across segments so queued requests wait until entire segmented session finishes (ARCH-01)", async () => {
       const provider = new FakeTtsProvider();
       const callLog: string[] = [];
       const service = new TtsService(provider, {
@@ -1614,29 +1630,37 @@ describe("TtsService", () => {
       // Wait until segment 1 yields chunk
       await segment1Yielded.promise;
 
-      // While segment 1 is still holding the permit, queue a normal request
-      const normalPromise = service.synthesize({ text: "Normal", voice: "v" }, ac.signal);
+      // While segment 1 is active, queue a normal request
+      let normalCompleted = false;
+      const normalPromise = service
+        .synthesize({ text: "Normal", voice: "v" }, ac.signal)
+        .then(async (normalResult) => {
+          await consumeStream(normalResult.audio);
+          normalCompleted = true;
+          return normalResult;
+        });
 
       // Now complete segment 1 audio consumption
       segment1Done.resolve();
-      await firstChunkPromise;
+      const firstChunk = await firstChunkPromise;
+      expect(firstChunk.value).toEqual(new Uint8Array([1]));
 
-      // Request next chunk from segIterator, which exhausts segment 1 (releasing its permit)
-      // and queues segment 2 for a permit.
-      // Because normalPromise was queued while segment 1 was active,
-      // the limiter schedules normalPromise ahead of segment 2 (FIFO queue fairness).
-      const secondChunkPromise = segIterator.next();
-
-      // Normal request now acquires the permit, synthesizes, and streams to completion.
-      const normalResult = await normalPromise;
-      await consumeStream(normalResult.audio);
-
-      // Once normal request finishes and releases permit, segment 2 acquires permit and yields.
-      const secondChunk = await secondChunkPromise;
+      // Request next chunk from segIterator: segment 2 synthesizes immediately under the held permit.
+      // The queued normal request does NOT interrupt or preempt segment 2!
+      const secondChunk = await segIterator.next();
       expect(secondChunk.value).toEqual(new Uint8Array([3]));
+      expect(normalCompleted).toBe(false);
 
-      // Verify execution order: Seg1 started, then Normal started, then Seg2 started
-      expect(callLog).toEqual(["start:Seg1.\n\n", "start:Normal", "start:Seg2."]);
+      // Finish the segmented iterator
+      const doneResult = await segIterator.next();
+      expect(doneResult.done).toBe(true);
+
+      // Now that segmented synthesis has finished and released the permit, the normal request completes.
+      await normalPromise;
+      expect(normalCompleted).toBe(true);
+
+      // Verify execution order: Seg1 started, then Seg2 started, then Normal started
+      expect(callLog).toEqual(["start:Seg1.\n\n", "start:Seg2.", "start:Normal"]);
     });
 
     it("rejects if a subsequent segment returns an inconsistent format or contentType", async () => {
@@ -1880,6 +1904,114 @@ describe("TtsService", () => {
       );
       expect(resB).toBeDefined();
       await consumeStream(resB.audio);
+    });
+
+    it("rejects webm-opus format with RangeError without acquiring permit or calling provider (ARCH-03)", async () => {
+      const provider = new FakeTtsProvider();
+      const service = new TtsService(provider, {
+        maxConcurrentSyntheses: 1,
+        maxQueuedSyntheses: 1,
+      });
+
+      const ac = new AbortController();
+      await expect(
+        service.synthesizeSegmented(
+          { text: "Hello world", voice: "v", format: "webm-opus" },
+          ac.signal,
+          { maxSegmentCodePoints: 5 },
+        ),
+      ).rejects.toThrowError(RangeError);
+
+      expect(provider.synthesizeCallCount).toBe(0);
+
+      // Verify that no permit was consumed by successfully running a subsequent request
+      const res = await service.synthesize({ text: "test", voice: "v" }, ac.signal);
+      expect(res).toBeDefined();
+      await consumeStream(res.audio);
+    });
+
+    it("returns segmentCount in SegmentedSynthesisResult (ARCH-02)", async () => {
+      const provider = new FakeTtsProvider();
+      const service = new TtsService(provider);
+      const ac = new AbortController();
+
+      const result1 = await service.synthesizeSegmented(
+        { text: "Short text", voice: "v" },
+        ac.signal,
+        { maxSegmentCodePoints: 50 },
+      );
+      expect(result1.segmentCount).toBe(1);
+      await consumeStream(result1.audio);
+
+      const result2 = await service.synthesizeSegmented(
+        { text: "Part 1\n\nPart 2\n\nPart 3", voice: "v" },
+        ac.signal,
+        { maxSegmentCodePoints: 8 },
+      );
+      expect(result2.segmentCount).toBe(3);
+      await consumeStream(result2.audio);
+    });
+
+    it("holds a single permit across all segments without releasing between segments (ARCH-01)", async () => {
+      const provider = new FakeTtsProvider();
+      const synthesizedTexts: string[] = [];
+
+      provider.customSynthesize = async (req) => {
+        synthesizedTexts.push(req.text);
+        return {
+          format: "mp3-48k",
+          contentType: "audio/mpeg",
+          audio: (async function* () {
+            yield new Uint8Array([1, 2]);
+          })(),
+        };
+      };
+
+      const service = new TtsService(provider, {
+        maxConcurrentSyntheses: 1,
+        maxQueuedSyntheses: 1,
+      });
+
+      const acSeg = new AbortController();
+      const segResult = await service.synthesizeSegmented(
+        { text: "P1\n\nP2\n\nP3", voice: "v" },
+        acSeg.signal,
+        { maxSegmentCodePoints: 4 },
+      );
+      expect(segResult.segmentCount).toBe(3);
+
+      // Queue request B while segmented stream is active
+      const acB = new AbortController();
+      let reqBStarted = false;
+      const reqBPromise = service
+        .synthesize({ text: "QueueB", voice: "v" }, acB.signal)
+        .then(async (res) => {
+          reqBStarted = true;
+          await consumeStream(res.audio);
+          return res;
+        });
+
+      // Request C must fail with queue full because slot is held and queue has B
+      const acC = new AbortController();
+      await expect(
+        service.synthesize({ text: "QueueC", voice: "v" }, acC.signal),
+      ).rejects.toThrowError(SynthesisQueueFullError);
+
+      // Consume the entire segmented stream
+      const chunks: Uint8Array[] = [];
+      for await (const chunk of segResult.audio) {
+        // While consuming segments, Request B must NOT have started because slot is still held!
+        expect(reqBStarted).toBe(false);
+        chunks.push(chunk);
+      }
+
+      expect(chunks).toHaveLength(3);
+
+      // Now that segmented stream is finished, Request B obtains permit and completes
+      const resB = await reqBPromise;
+      expect(resB).toBeDefined();
+      expect(reqBStarted).toBe(true);
+      expect(synthesizedTexts).toEqual(["P1\n\n", "P2\n\n", "P3", "QueueB"]);
     });
   });
 });

@@ -35,6 +35,7 @@ function createMockTtsService(): TtsServicePort {
     synthesizeSegmented: vi.fn(async () => ({
       format: "mp3-48k" as const,
       contentType: "audio/mpeg" as const,
+      segmentCount: 1,
       audio: dummyAudio(),
     })),
   };

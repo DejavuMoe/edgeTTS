@@ -63,6 +63,7 @@ export function registerStaticHosting(
     prefix: "/",
     wildcard: true,
     setHeaders(reply: FastifyReply, filePath: string): void {
+      reply.header("X-Frame-Options", "SAMEORIGIN");
       const normalized = filePath.replace(/\\/g, "/");
       if (normalized.includes("/assets/")) {
         reply.header("Cache-Control", "public, max-age=31536000, immutable");
@@ -85,6 +86,7 @@ export function registerStaticHosting(
 
     if (!isApi && !hasExtension && (request.method === "GET" || request.method === "HEAD")) {
       reply.header("Cache-Control", "no-cache");
+      reply.header("X-Frame-Options", "SAMEORIGIN");
       return reply.sendFile("index.html");
     }
 

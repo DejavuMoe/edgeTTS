@@ -32,12 +32,28 @@ export const ApiErrorSchema = z.object({
 
 export type ApiError = z.infer<typeof ApiErrorSchema>;
 
+export const MAX_VOICE_ID_LENGTH = 128;
+export const VOICE_ID_REGEX = /^[A-Za-z0-9_-]+$/;
+
+export function isValidVoiceId(voice: unknown): voice is string {
+  return (
+    typeof voice === "string" &&
+    voice.length > 0 &&
+    voice.length <= MAX_VOICE_ID_LENGTH &&
+    VOICE_ID_REGEX.test(voice)
+  );
+}
+
+export const VoiceIdSchema = z
+  .string()
+  .min(1, "Voice must not be empty")
+  .max(MAX_VOICE_ID_LENGTH, `Voice must not exceed ${MAX_VOICE_ID_LENGTH} characters`)
+  .regex(VOICE_ID_REGEX, "Voice identifier contains invalid characters");
+
 export const SpeechRequestSchema = z
   .object({
     model: z.enum(["tts-1", "tts-1-hd"]),
-    voice: z.string().refine((val) => val.trim().length > 0, {
-      message: "Voice must not be empty",
-    }),
+    voice: VoiceIdSchema,
     input: z
       .string()
       .min(1)
@@ -82,9 +98,7 @@ export const NativeSpeechRequestSchema = z
       .refine((val) => countCodePoints(val) <= MAX_NATIVE_INPUT_CODE_POINTS, {
         message: `Input must not exceed ${MAX_NATIVE_INPUT_CODE_POINTS} code points`,
       }),
-    voice: z.string().refine((val) => val.trim().length > 0, {
-      message: "Voice must not be empty",
-    }),
+    voice: VoiceIdSchema,
     quality: z.enum(["standard", "high"]).optional(),
     speed: z
       .number()
