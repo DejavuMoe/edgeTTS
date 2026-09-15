@@ -9,7 +9,7 @@ It provides an interactive web workbench, a native segmented speech API for long
 > [!NOTE]
 > edgeTTS relies on Microsoft's Edge TTS upstream service. Upstream availability, voices, and behavior are outside this project's control. edgeTTS is an independent open-source project and is not affiliated with or endorsed by Microsoft.
 
-Current stable release: [v0.2.0](https://github.com/DejavuMoe/edgeTTS/releases/tag/v0.2.0)
+Current stable release: [v0.3.0](https://github.com/DejavuMoe/edgeTTS/releases/tag/v0.3.0)
 
 ---
 
@@ -68,7 +68,7 @@ docker run -d \
   -e API_KEY="$EDGETTS_API_KEY" \
   -e REQUIRE_API_KEY=true \
   -p 127.0.0.1:8080:8080 \
-  ghcr.io/dejavumoe/edgetts:0.2.0
+  ghcr.io/dejavumoe/edgetts:0.3.0
 ```
 
 ### 3. Verify Deployment
@@ -92,7 +92,7 @@ Open `http://127.0.0.1:8080` in your browser to access the Web Workbench.
 
 | Reference                                           | Purpose                                               | Mutability                    |
 | --------------------------------------------------- | ----------------------------------------------------- | ----------------------------- |
-| `ghcr.io/dejavumoe/edgetts:0.2.0`                   | Recommended for normal stable production deployments  | Release tag                   |
+| `ghcr.io/dejavumoe/edgetts:0.3.0`                   | Recommended for normal stable production deployments  | Release tag                   |
 | `ghcr.io/dejavumoe/edgetts@sha256:<release-digest>` | Strict immutable content-addressed production pinning | Content-addressed (immutable) |
 | `ghcr.io/dejavumoe/edgetts:latest`                  | Tracks the highest published stable SemVer release    | Movable tag                   |
 | `ghcr.io/dejavumoe/edgetts:main`                    | Latest development build verified from `main`         | Floating snapshot             |
@@ -463,7 +463,7 @@ EdgeTtsProvider (packages/edge-provider)
 
 - [Nginx Reverse Proxy Deployment Guide](deploy/nginx/README.md)
 - [Release Governance & Rollback Procedure](docs/releasing.md)
-- [GitHub Release v0.2.0](https://github.com/DejavuMoe/edgeTTS/releases/tag/v0.2.0)
+- [GitHub Release v0.3.0](https://github.com/DejavuMoe/edgeTTS/releases/tag/v0.3.0)
 - [MIT License](LICENSE)
 
 ---
