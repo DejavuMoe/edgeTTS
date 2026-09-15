@@ -11,7 +11,7 @@
   --focus-ring-offset: #fbfaf7;
   --text-primary: #20242a;
   --text-secondary: #5c626d;
-  --text-muted: #787f8c;
+  --text-muted: #626976;
 
   --accent-primary: #275fce;
   --accent-primary-hover: #1d4eb8;
@@ -53,7 +53,7 @@
     --focus-ring-offset: #1e2227;
     --text-primary: #e6e9ee;
     --text-secondary: #a0a6b2;
-    --text-muted: #707784;
+    --text-muted: #a0a6b2;
 
     --accent-primary: #3b82f6;
     --accent-primary-hover: #2563eb;

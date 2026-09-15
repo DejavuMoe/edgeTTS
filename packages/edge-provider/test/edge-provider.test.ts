@@ -293,6 +293,51 @@ describe("EdgeTtsProvider", () => {
     });
   });
 
+  describe("audio resource lifecycle", () => {
+    it("closes and destroys an unstarted stream when the consumer returns immediately", async () => {
+      const stream = Readable.from([Buffer.from("data")]);
+      const client = new FakeEdgeClient(stream);
+      const provider = new EdgeTtsProvider(() => client);
+      const result = await provider.synthesize(
+        { text: "hello", voice: "zh-CN-XiaoxiaoNeural" },
+        new AbortController().signal,
+      );
+
+      await result.audio[Symbol.asyncIterator]().return?.();
+
+      expect(client.closeCallCount).toBe(1);
+      expect(stream.destroyed).toBe(true);
+    });
+
+    it("destroys and closes a silent stream after the configured idle timeout", async () => {
+      vi.useFakeTimers();
+      try {
+        const stream = new Readable({ read() {} });
+        const client = new FakeEdgeClient(stream);
+        const provider = new EdgeTtsProvider({
+          clientFactory: () => client,
+          audioIdleTimeoutMs: 10,
+        });
+        const result = await provider.synthesize(
+          { text: "hello", voice: "zh-CN-XiaoxiaoNeural" },
+          new AbortController().signal,
+        );
+        const next = result.audio[Symbol.asyncIterator]().next();
+        const rejection = expect(next).rejects.toThrow(
+          "Speech synthesis audio timed out after 10ms",
+        );
+
+        await vi.advanceTimersByTimeAsync(10);
+
+        await rejection;
+        expect(client.closeCallCount).toBe(1);
+        expect(stream.destroyed).toBe(true);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
+
   describe("cancellation", () => {
     it("rejects immediately with AbortError before starting without creating client", async () => {
       let clientCreated = false;

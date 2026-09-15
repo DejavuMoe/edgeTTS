@@ -107,6 +107,35 @@ describe("Graceful Shutdown", () => {
     expect(exitMock).toHaveBeenCalledWith(0);
   });
 
+  it("exits with failure when close exceeds the shutdown deadline", async () => {
+    vi.useFakeTimers();
+    try {
+      const target = createMockTarget(() => new Promise<void>(() => {}));
+      const exitMock = vi.fn();
+      const setExitCodeMock = vi.fn();
+      const controller = registerGracefulShutdown(target, {
+        signals: ["SIGTERM"],
+        timeoutMs: 10,
+        exit: exitMock,
+        setExitCode: setExitCodeMock,
+      });
+      activeControllers.push(controller);
+
+      const shutdown = controller.handleSignal("SIGTERM");
+      await vi.advanceTimersByTimeAsync(10);
+      await shutdown;
+
+      expect(target.errorMock).toHaveBeenCalledWith(
+        expect.objectContaining({ message: "Shutdown timed out after 10ms" }),
+        "Error during server shutdown",
+      );
+      expect(setExitCodeMock).toHaveBeenCalledWith(1);
+      expect(exitMock).toHaveBeenCalledWith(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("close failure logs error and produces failure outcome (exit code 1)", async () => {
     const shutdownError = new Error("Fastify close failed");
     const target = createMockTarget(async () => {

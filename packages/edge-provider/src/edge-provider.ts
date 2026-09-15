@@ -55,28 +55,125 @@ export function isValidVoiceId(voice: unknown): voice is string {
 
 export const DEFAULT_LIST_VOICES_TIMEOUT_MS = 10_000;
 export const DEFAULT_SETUP_TIMEOUT_MS = 10_000;
+export const DEFAULT_AUDIO_IDLE_TIMEOUT_MS = 120_000;
+
+function assertPositiveTimeout(value: number, name: string): void {
+  if (!Number.isSafeInteger(value) || value < 1) {
+    throw new RangeError(`${name} must be a positive integer`);
+  }
+}
+
+class ManagedEdgeAudioStream implements AsyncIterableIterator<Uint8Array> {
+  private readonly iterator: AsyncIterator<Uint8Array>;
+  private readonly onAbort: () => void;
+  private timer: NodeJS.Timeout | undefined;
+  private closed = false;
+  private started = false;
+
+  constructor(
+    private readonly stream: Readable,
+    private readonly client: EdgeClient,
+    private readonly signal: AbortSignal,
+    private readonly timeoutMs: number,
+  ) {
+    this.iterator = stream[Symbol.asyncIterator]();
+    this.onAbort = () => this.close(createAbortError(signal.reason));
+    signal.addEventListener("abort", this.onAbort, { once: true });
+    this.resetTimeout();
+  }
+
+  [Symbol.asyncIterator](): AsyncIterableIterator<Uint8Array> {
+    return this;
+  }
+
+  private resetTimeout(): void {
+    if (this.timer !== undefined) clearTimeout(this.timer);
+    this.timer = setTimeout(
+      () => this.close(new Error(`Speech synthesis audio timed out after ${this.timeoutMs}ms`)),
+      this.timeoutMs,
+    );
+  }
+
+  private close(error?: Error): void {
+    if (this.closed) return;
+    this.closed = true;
+    if (this.timer !== undefined) clearTimeout(this.timer);
+    this.signal.removeEventListener("abort", this.onAbort);
+    this.stream.destroy(this.started ? error : undefined);
+    this.client.close();
+  }
+
+  async next(): Promise<IteratorResult<Uint8Array>> {
+    if (this.signal.aborted) {
+      this.close(createAbortError(this.signal.reason));
+      throw createAbortError(this.signal.reason);
+    }
+    if (this.closed) return { done: true, value: undefined };
+
+    this.started = true;
+    try {
+      const item = await this.iterator.next();
+      if (item.done) {
+        this.close();
+        return { done: true, value: undefined };
+      }
+      this.resetTimeout();
+      if (item.value instanceof Uint8Array) {
+        return {
+          done: false,
+          value: new Uint8Array(item.value.buffer, item.value.byteOffset, item.value.byteLength),
+        };
+      }
+      if (typeof item.value === "string") {
+        return { done: false, value: new TextEncoder().encode(item.value) };
+      }
+      throw new TypeError("Unsupported chunk type received from stream");
+    } catch (error) {
+      this.close();
+      throw error;
+    }
+  }
+
+  async return(value?: unknown): Promise<IteratorResult<Uint8Array>> {
+    this.close();
+    await this.iterator.return?.();
+    return { done: true, value: value as undefined };
+  }
+
+  async throw(error?: unknown): Promise<IteratorResult<Uint8Array>> {
+    this.close(error instanceof Error ? error : undefined);
+    throw error;
+  }
+}
 
 export interface EdgeTtsProviderOptions {
   readonly clientFactory?: EdgeClientFactory;
   readonly listVoicesTimeoutMs?: number;
   readonly setupTimeoutMs?: number;
+  readonly audioIdleTimeoutMs?: number;
 }
 
 export class EdgeTtsProvider implements TtsProvider {
   private readonly clientFactory: EdgeClientFactory;
   private readonly listVoicesTimeoutMs: number;
   private readonly setupTimeoutMs: number;
+  private readonly audioIdleTimeoutMs: number;
 
   constructor(options?: EdgeClientFactory | EdgeTtsProviderOptions) {
     if (typeof options === "function") {
       this.clientFactory = options;
       this.listVoicesTimeoutMs = DEFAULT_LIST_VOICES_TIMEOUT_MS;
       this.setupTimeoutMs = DEFAULT_SETUP_TIMEOUT_MS;
+      this.audioIdleTimeoutMs = DEFAULT_AUDIO_IDLE_TIMEOUT_MS;
     } else {
       this.clientFactory = options?.clientFactory ?? defaultEdgeClientFactory;
       this.listVoicesTimeoutMs = options?.listVoicesTimeoutMs ?? DEFAULT_LIST_VOICES_TIMEOUT_MS;
       this.setupTimeoutMs = options?.setupTimeoutMs ?? DEFAULT_SETUP_TIMEOUT_MS;
+      this.audioIdleTimeoutMs = options?.audioIdleTimeoutMs ?? DEFAULT_AUDIO_IDLE_TIMEOUT_MS;
     }
+    assertPositiveTimeout(this.listVoicesTimeoutMs, "listVoicesTimeoutMs");
+    assertPositiveTimeout(this.setupTimeoutMs, "setupTimeoutMs");
+    assertPositiveTimeout(this.audioIdleTimeoutMs, "audioIdleTimeoutMs");
   }
 
   async listVoices(): Promise<readonly TtsVoice[]> {
@@ -169,7 +266,7 @@ export class EdgeTtsProvider implements TtsProvider {
       return {
         format,
         contentType: formatDetails.contentType,
-        audio: this.createAudioIterable(audioStream, client, signal),
+        audio: new ManagedEdgeAudioStream(audioStream, client, signal, this.audioIdleTimeoutMs),
       };
     } catch (error) {
       if (!setupAbandoned) client.close();
@@ -233,50 +330,5 @@ export class EdgeTtsProvider implements TtsProvider {
         },
       );
     });
-  }
-
-  private async *createAudioIterable(
-    stream: Readable,
-    client: EdgeClient,
-    signal: AbortSignal,
-  ): AsyncIterable<Uint8Array> {
-    let closed = false;
-    const closeClientOnce = () => {
-      if (!closed) {
-        closed = true;
-        client.close();
-      }
-    };
-
-    if (signal.aborted) {
-      stream.destroy();
-      closeClientOnce();
-      throw createAbortError(signal.reason);
-    }
-
-    const onAbort = () => {
-      stream.destroy(createAbortError(signal.reason));
-      closeClientOnce();
-    };
-    signal.addEventListener("abort", onAbort, { once: true });
-
-    try {
-      for await (const chunk of stream) {
-        if (signal.aborted) {
-          throw createAbortError(signal.reason);
-        }
-        if (chunk instanceof Uint8Array) {
-          yield new Uint8Array(chunk.buffer, chunk.byteOffset, chunk.byteLength);
-        } else if (typeof chunk === "string") {
-          yield new TextEncoder().encode(chunk);
-        } else {
-          throw new TypeError("Unsupported chunk type received from stream");
-        }
-      }
-    } finally {
-      signal.removeEventListener("abort", onAbort);
-      stream.destroy();
-      closeClientOnce();
-    }
   }
 }

@@ -352,7 +352,12 @@ export class TtsService {
       request.text.length === 0
         ? [request.text]
         : segmentText(request.text, { maxCodePoints: options.maxSegmentCodePoints });
-    const segmentsToSynthesize = segments.length === 0 ? [request.text] : segments;
+    const segmentsToSynthesize = (segments.length === 0 ? [request.text] : segments).filter(
+      (segment) => segment.trim().length > 0,
+    );
+    if (segmentsToSynthesize.length === 0) {
+      throw new Error("Text must not be empty");
+    }
 
     const permit = await this.limiter.acquire(signal);
 

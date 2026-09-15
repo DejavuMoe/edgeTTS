@@ -64,7 +64,7 @@ echo "======================================================================"
 echo "--- Suite 1: Strict Stable SemVer Validation ---"
 
 is_valid_semver() {
-  echo "$1" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'
+  echo "$1" | grep -Eq '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'
 }
 
 assert_exit_code "Valid: v0.1.0" 0 is_valid_semver "v0.1.0"
@@ -79,6 +79,9 @@ assert_exit_code "Reject prerelease alpha: v1.0.0-alpha" 1 is_valid_semver "v1.0
 assert_exit_code "Reject prerelease rc: v1.2.3-rc.1" 1 is_valid_semver "v1.2.3-rc.1"
 assert_exit_code "Reject build metadata: v1.2.3+build" 1 is_valid_semver "v1.2.3+build"
 assert_exit_code "Reject four segments: v1.2.3.4" 1 is_valid_semver "v1.2.3.4"
+assert_exit_code "Reject leading-zero major: v01.2.3" 1 is_valid_semver "v01.2.3"
+assert_exit_code "Reject leading-zero minor: v1.02.3" 1 is_valid_semver "v1.02.3"
+assert_exit_code "Reject leading-zero patch: v1.2.03" 1 is_valid_semver "v1.2.03"
 assert_exit_code "Reject arbitrary text: vnext" 1 is_valid_semver "vnext"
 
 # ------------------------------------------------------------------------------
@@ -233,6 +236,10 @@ git -C "$MOCK_REPO" tag v1.0.0
 assert_exit_code "release-check.sh rejects already existing local tag" 1 \
   "$MOCK_REPO/scripts/release-check.sh" "v1.0.0" --skip-tests
 
+git -C "$MOCK_REPO" tag -d v1.0.0 >/dev/null
+assert_exit_code "release-check.sh fails closed when origin fetch fails" 1 \
+  "$MOCK_REPO/scripts/release-check.sh" "v1.0.0" --skip-tests
+
 # ------------------------------------------------------------------------------
 # Test Suite 6: Strict SemVer Version Ordering (sort -V)
 # ------------------------------------------------------------------------------
@@ -287,7 +294,7 @@ simulate_promotion() {
 
   # 2. Determine highest published version among all known git tags
   local candidate_versions
-  candidate_versions=$(ls "$STATE_DIR/git_tags" 2>/dev/null | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sed 's/^v//' | sort -V -r || true)
+  candidate_versions=$(ls "$STATE_DIR/git_tags" 2>/dev/null | grep -E '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$' | sed 's/^v//' | sort -V -r || true)
   local all_versions
   all_versions=$(printf "%s\n%s\n" "$version" "$candidate_versions" | sed '/^$/d' | sort -u | sort -V -r)
 

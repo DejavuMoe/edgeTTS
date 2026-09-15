@@ -383,6 +383,25 @@ describe("POST /v1/audio/speech", () => {
     expect(parsed.error.code).toBe("INVALID_REQUEST");
   });
 
+  it("rejects XML-invalid control characters without calling synthesis", async () => {
+    const fakeService = new FakeSpeechTtsService();
+    app = createApp({ ttsService: fakeService });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/audio/speech",
+      headers: { "content-type": "application/json" },
+      payload: {
+        model: "tts-1",
+        voice: "zh-CN-XiaoxiaoNeural",
+        input: "hello\u0000world",
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(fakeService.synthesizeCalls).toBe(0);
+  });
+
   it("rejects missing, empty, or whitespace-only voice with HTTP 400", async () => {
     const fakeService = new FakeSpeechTtsService();
     app = createApp({ ttsService: fakeService });

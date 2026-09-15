@@ -17,7 +17,7 @@ ghcr.io/dejavumoe/edgetts
 edgeTTS enforces strict Semantic Versioning for all production release tags:
 
 ```text
-^v[0-9]+\.[0-9]+\.[0-9]+$
+^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$
 ```
 
 - **Supported Formats**: `v0.1.0`, `v1.0.0`, `v1.2.3`

@@ -1906,6 +1906,31 @@ describe("TtsService", () => {
       await consumeStream(resB.audio);
     });
 
+    it("skips whitespace-only segments so a valid long request completes", async () => {
+      const provider = new FakeTtsProvider();
+      const requests: SynthesisRequest[] = [];
+      provider.customSynthesize = async (request) => {
+        requests.push(request);
+        return {
+          format: "mp3-48k",
+          contentType: "audio/mpeg",
+          audio: (async function* () {
+            yield new Uint8Array([1]);
+          })(),
+        };
+      };
+      const service = new TtsService(provider);
+      const text = `${"A".repeat(300)}${" ".repeat(301)}B`;
+
+      const result = await service.synthesizeSegmented(
+        { text, voice: "test-voice" },
+        new AbortController().signal,
+        { maxSegmentCodePoints: 300 },
+      );
+      expect(await consumeStream(result.audio)).toBeGreaterThan(0);
+      expect(requests.every((request) => request.text.trim().length > 0)).toBe(true);
+    });
+
     it("rejects webm-opus format with RangeError without acquiring permit or calling provider (ARCH-03)", async () => {
       const provider = new FakeTtsProvider();
       const service = new TtsService(provider, {
