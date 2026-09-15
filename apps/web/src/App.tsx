@@ -37,6 +37,7 @@ import {
   parseSynthesisPlanHeaders,
   formatGeneratingStatusText,
 } from "./synthesis-telemetry.js";
+import { Select, Checkbox, Slider, AudioPlayer } from "./ui/index.js";
 import "./App.css";
 
 type ApiStatus = "loading" | "healthy" | "unavailable";
@@ -161,6 +162,40 @@ export function App() {
   const voiceGroups = useMemo(
     () => getGroupedVoices(filteredVoices, favoriteSet),
     [filteredVoices, favoriteSet],
+  );
+
+  const selectLocaleOptions = useMemo(
+    () => localeOptions.map((opt) => ({ value: opt.locale, label: opt.label })),
+    [localeOptions],
+  );
+
+  const selectVoiceGroups = useMemo(() => {
+    return voiceGroups.map((group) => ({
+      label: group.label,
+      options: group.voices.map((v) => ({
+        value: v.id,
+        label: v.displayName,
+        secondaryLabel: `${v.locale} · ${v.gender}`,
+      })),
+    }));
+  }, [voiceGroups]);
+
+  const selectVoicePlaceholderOptions = useMemo(() => {
+    if (filteredVoices.length === 0) {
+      return [{ value: "", label: "没有匹配的声音", disabled: true }];
+    }
+    if (!isCurrentVoiceVisible) {
+      return [{ value: "", label: "当前声音不在筛选结果中", disabled: true }];
+    }
+    return undefined;
+  }, [filteredVoices.length, isCurrentVoiceVisible]);
+
+  const qualityOptions = useMemo(
+    () => [
+      { value: "standard", label: "标准 (48 kbps MP3)" },
+      { value: "high", label: "高品质 (96 kbps MP3)" },
+    ],
+    [],
   );
 
   // Active voice metadata
@@ -726,34 +761,26 @@ export function App() {
               <label htmlFor={localeSelectId} className="control-label">
                 地区 / Locale
               </label>
-              <select
+              <Select
                 id={localeSelectId}
-                className="control-select"
                 value={selectedLocale}
-                onChange={(e) => setSelectedLocale(e.target.value)}
+                onChange={setSelectedLocale}
+                options={selectLocaleOptions}
                 disabled={isGenerating || voices.length === 0}
-              >
-                {localeOptions.map((opt) => (
-                  <option key={opt.locale} value={opt.locale}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
+                aria-label="地区 / Locale"
+              />
             </div>
           </div>
 
           {/* Favorite Only Filter */}
           <div className="favorite-filter-row">
-            <label htmlFor={favoriteOnlyCheckboxId} className="favorite-checkbox-label">
-              <input
-                id={favoriteOnlyCheckboxId}
-                type="checkbox"
-                checked={favoriteOnly}
-                onChange={(e) => setFavoriteOnly(e.target.checked)}
-                disabled={isGenerating || totalFavoritesInCatalog === 0}
-              />
-              <span>只看收藏</span>
-            </label>
+            <Checkbox
+              id={favoriteOnlyCheckboxId}
+              checked={favoriteOnly}
+              onChange={setFavoriteOnly}
+              disabled={isGenerating || totalFavoritesInCatalog === 0}
+              label="只看收藏"
+            />
           </div>
 
           {/* Voice Selection */}
@@ -766,38 +793,20 @@ export function App() {
                 {voiceError}
               </div>
             ) : (
-              <select
+              <Select
                 id={voiceSelectId}
-                className="control-select"
                 value={isCurrentVoiceVisible ? selectedVoiceId : ""}
-                onChange={(e) => {
-                  const newVoice = e.target.value;
+                onChange={(newVoice) => {
                   if (newVoice) {
                     setSelectedVoiceId(newVoice);
                     savedVoiceIdRef.current = newVoice;
                   }
                 }}
+                options={selectVoicePlaceholderOptions}
+                groups={filteredVoices.length > 0 ? selectVoiceGroups : undefined}
                 disabled={isGenerating || filteredVoices.length === 0}
-              >
-                {filteredVoices.length === 0 ? (
-                  <option value="" disabled>
-                    没有匹配的声音
-                  </option>
-                ) : !isCurrentVoiceVisible ? (
-                  <option value="" disabled>
-                    当前声音不在筛选结果中
-                  </option>
-                ) : null}
-                {voiceGroups.map((group) => (
-                  <optgroup key={group.label} label={group.label}>
-                    {group.voices.map((v) => (
-                      <option key={v.id} value={v.id}>
-                        {v.displayName} ({v.locale} - {v.gender})
-                      </option>
-                    ))}
-                  </optgroup>
-                ))}
-              </select>
+                aria-label={`选择声音 (${filteredVoices.length})`}
+              />
             )}
 
             {/* Current Voice Details & Favorite Action */}
@@ -828,109 +837,65 @@ export function App() {
             <label htmlFor={qualitySelectId} className="control-label">
               音质 (Quality)
             </label>
-            <select
+            <Select
               id={qualitySelectId}
-              className="control-select"
               value={quality}
-              onChange={(e) => setQuality(e.target.value as "standard" | "high")}
+              onChange={(val) => setQuality(val as "standard" | "high")}
+              options={qualityOptions}
               disabled={isGenerating}
-            >
-              <option value="standard">标准 (48 kbps MP3)</option>
-              <option value="high">高品质 (96 kbps MP3)</option>
-            </select>
+              aria-label="音质 (Quality)"
+            />
           </div>
 
           {/* Speed */}
-          <div className="control-group">
-            <div className="control-header">
-              <label htmlFor={speedSliderId} className="control-label">
-                语速 (Speed)
-              </label>
-              <span className="control-value">{speed.toFixed(2)}x</span>
-              <button
-                type="button"
-                className="btn-reset"
-                onClick={() => setSpeed(1.0)}
-                disabled={isGenerating || speed === 1.0}
-                aria-label="重置语速"
-              >
-                重置
-              </button>
-            </div>
-            <input
-              id={speedSliderId}
-              type="range"
-              className="control-slider"
-              min="0.5"
-              max="2.0"
-              step="0.05"
-              value={speed}
-              onChange={(e) => setSpeed(parseFloat(e.target.value))}
-              disabled={isGenerating}
-            />
-          </div>
+          <Slider
+            id={speedSliderId}
+            label="语速 (Speed)"
+            value={speed}
+            formattedValue={`${speed.toFixed(2)}x`}
+            min={0.5}
+            max={2.0}
+            step={0.05}
+            onChange={setSpeed}
+            onReset={() => setSpeed(1.0)}
+            isDefault={speed === 1.0}
+            resetAriaLabel="重置语速"
+            disabled={isGenerating}
+          />
 
           {/* Pitch */}
-          <div className="control-group">
-            <div className="control-header">
-              <label htmlFor={pitchSliderId} className="control-label">
-                音调 (Pitch)
-              </label>
-              <span className="control-value">
-                {pitchSemitones > 0 ? `+${pitchSemitones}` : pitchSemitones} 半音
-              </span>
-              <button
-                type="button"
-                className="btn-reset"
-                onClick={() => setPitchSemitones(0)}
-                disabled={isGenerating || pitchSemitones === 0}
-                aria-label="重置音调"
-              >
-                重置
-              </button>
-            </div>
-            <input
-              id={pitchSliderId}
-              type="range"
-              className="control-slider"
-              min="-12"
-              max="12"
-              step="1"
-              value={pitchSemitones}
-              onChange={(e) => setPitchSemitones(parseInt(e.target.value, 10))}
-              disabled={isGenerating}
-            />
-          </div>
+          <Slider
+            id={pitchSliderId}
+            label="音调 (Pitch)"
+            value={pitchSemitones}
+            formattedValue={
+              pitchSemitones > 0 ? `+${pitchSemitones} 半音` : `${pitchSemitones} 半音`
+            }
+            min={-12}
+            max={12}
+            step={1}
+            onChange={setPitchSemitones}
+            onReset={() => setPitchSemitones(0)}
+            isDefault={pitchSemitones === 0}
+            resetAriaLabel="重置音调"
+            disabled={isGenerating}
+          />
 
           {/* Volume */}
-          <div className="control-group">
-            <div className="control-header">
-              <label htmlFor={volumeSliderId} className="control-label">
-                音量 (Volume)
-              </label>
-              <span className="control-value">{Math.round(volume * 100)}%</span>
-              <button
-                type="button"
-                className="btn-reset"
-                onClick={() => setVolume(1.0)}
-                disabled={isGenerating || volume === 1.0}
-                aria-label="重置音量"
-              >
-                重置
-              </button>
-            </div>
-            <input
-              id={volumeSliderId}
-              type="range"
-              className="control-slider"
-              min="0.0"
-              max="1.0"
-              step="0.05"
-              value={volume}
-              onChange={(e) => setVolume(parseFloat(e.target.value))}
-              disabled={isGenerating}
-            />
-          </div>
+          <Slider
+            id={volumeSliderId}
+            label="音量 (Volume)"
+            value={volume}
+            formattedValue={`${Math.round(volume * 100)}%`}
+            min={0.0}
+            max={1.0}
+            step={0.05}
+            onChange={setVolume}
+            onReset={() => setVolume(1.0)}
+            isDefault={volume === 1.0}
+            resetAriaLabel="重置音量"
+            disabled={isGenerating}
+          />
 
           {/* Reset All Synthesis Parameters */}
           <div className="reset-params-group">
@@ -994,27 +959,13 @@ export function App() {
           )}
 
           {audioSrc && (
-            <div className="player-wrapper">
-              <audio
-                ref={audioRef}
-                controls
-                src={audioSrc}
-                className="audio-player"
-                aria-label="语音合成播放器"
-              >
-                您的浏览器不支持音频播放。
-              </audio>
-              {downloadUrl && completedResult && (
-                <a
-                  href={downloadUrl}
-                  download={completedResult.filename}
-                  className="btn btn-download"
-                  aria-label="下载合成音频"
-                >
-                  下载 MP3
-                </a>
-              )}
-            </div>
+            <AudioPlayer
+              ref={audioRef}
+              src={audioSrc}
+              downloadUrl={downloadUrl}
+              downloadFilename={completedResult?.filename}
+              aria-label="语音合成播放器"
+            />
           )}
 
           {audioSrc && completedResult && (
