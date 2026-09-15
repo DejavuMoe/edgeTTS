@@ -9,7 +9,7 @@ edgeTTS は、Microsoft Edge TTS（Edge 音声読み上げ機能）を基盤と�
 > [!NOTE]
 > edgeTTS は Microsoft Edge TTS アップストリームサービスに依存しています。アップストリームの可用性、利用可能なボイス、動作仕様は本プロジェクトの管理対象外です。edgeTTS は独立したオープンソースプロジェクトであり、Microsoft による承認や後援を受けたものではありません。
 
-現在の安定版リリース：[v0.1.0](https://github.com/DejavuMoe/edgeTTS/releases/tag/v0.1.0)
+現在の安定版リリース：[v0.2.0](https://github.com/DejavuMoe/edgeTTS/releases/tag/v0.2.0)
 
 ---
 
@@ -68,7 +68,7 @@ docker run -d \
   -e API_KEY="$EDGETTS_API_KEY" \
   -e REQUIRE_API_KEY=true \
   -p 127.0.0.1:8080:8080 \
-  ghcr.io/dejavumoe/edgetts:0.1.0
+  ghcr.io/dejavumoe/edgetts:0.2.0
 ```
 
 ### 3. 動作確認
@@ -90,12 +90,14 @@ curl http://127.0.0.1:8080/health
 
 ### コンテナイメージのタグとダイジェスト
 
-| 参照形式                                                                                            | 用途                                                  | 変更可能性                         |
-| --------------------------------------------------------------------------------------------------- | ----------------------------------------------------- | ---------------------------------- |
-| `ghcr.io/dejavumoe/edgetts:0.1.0`                                                                   | 通常の安定版本番デプロイに推奨                        | リリースタグ                       |
-| `ghcr.io/dejavumoe/edgetts@sha256:4dca280e9a2dfdaa3ef4b30e1f5d136ad32975ee1ef1763fc8f869e159502034` | 厳格な再現性を保証するイミュータブル指定              | コンテンツアドレス指定（完全不変） |
-| `ghcr.io/dejavumoe/edgetts:latest`                                                                  | 公開済みの最も新しい安定版 SemVer を追跡              | 移動可能タグ                       |
-| `ghcr.io/dejavumoe/edgetts:main`                                                                    | `main` ブランチから検証済みの最新開発スナップショット | フローティング                     |
+| 参照形式                                            | 用途                                                  | 変更可能性                         |
+| --------------------------------------------------- | ----------------------------------------------------- | ---------------------------------- |
+| `ghcr.io/dejavumoe/edgetts:0.2.0`                   | 通常の安定版本番デプロイに推奨                        | リリースタグ                       |
+| `ghcr.io/dejavumoe/edgetts@sha256:<release-digest>` | 厳格な再現性を保証するイミュータブル指定              | コンテンツアドレス指定（完全不変） |
+| `ghcr.io/dejavumoe/edgetts:latest`                  | 公開済みの最も新しい安定版 SemVer を追跡              | 移動可能タグ                       |
+| `ghcr.io/dejavumoe/edgetts:main`                    | `main` ブランチから検証済みの最新開発スナップショット | フローティング                     |
+
+イミュータブルな本番デプロイの固定には `ghcr.io/dejavumoe/edgetts@sha256:<release-digest>` を使用してください。各安定版の検証済みダイジェストは [GitHub Release ノート](https://github.com/DejavuMoe/edgeTTS/releases)に記録されます。
 
 ---
 
@@ -461,7 +463,7 @@ EdgeTtsProvider (packages/edge-provider)
 
 - [Nginx 本番リバースプロキシデプロイガイド](deploy/nginx/README.md)
 - [リリースガバナンスとロールバック手順](docs/releasing.md)
-- [GitHub Release v0.1.0](https://github.com/DejavuMoe/edgeTTS/releases/tag/v0.1.0)
+- [GitHub Release v0.2.0](https://github.com/DejavuMoe/edgeTTS/releases/tag/v0.2.0)
 - [MIT ライセンス](LICENSE)
 
 ---
