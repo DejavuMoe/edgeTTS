@@ -134,12 +134,29 @@ export class EdgeTtsProvider implements TtsProvider {
     }
 
     const client = this.clientFactory();
+    let setupAbandoned = false;
+    const setMetadataPromise = client.setMetadata(request.voice, formatDetails.outputFormat);
+    void setMetadataPromise
+      .then(
+        () => {
+          if (setupAbandoned) client.close();
+        },
+        () => {
+          if (setupAbandoned) client.close();
+        },
+      )
+      .catch(() => {});
+
     try {
       await this.awaitWithAbortAndTimeout(
-        client.setMetadata(request.voice, formatDetails.outputFormat),
+        setMetadataPromise,
         signal,
         this.setupTimeoutMs,
         `Speech synthesis setup timed out after ${this.setupTimeoutMs}ms`,
+        () => {
+          setupAbandoned = true;
+          client.close();
+        },
       );
 
       if (signal.aborted) {
@@ -155,7 +172,7 @@ export class EdgeTtsProvider implements TtsProvider {
         audio: this.createAudioIterable(audioStream, client, signal),
       };
     } catch (error) {
-      client.close();
+      if (!setupAbandoned) client.close();
       throw error;
     }
   }
@@ -165,8 +182,10 @@ export class EdgeTtsProvider implements TtsProvider {
     signal: AbortSignal,
     timeoutMs: number,
     timeoutMessage: string,
+    onAbandon: () => void,
   ): Promise<T> {
     if (signal.aborted) {
+      onAbandon();
       throw createAbortError(signal.reason);
     }
 
@@ -188,6 +207,7 @@ export class EdgeTtsProvider implements TtsProvider {
       const onAbort = () => {
         if (settled) return;
         cleanup();
+        onAbandon();
         reject(createAbortError(signal.reason));
       };
 
@@ -196,6 +216,7 @@ export class EdgeTtsProvider implements TtsProvider {
       timer = setTimeout(() => {
         if (settled) return;
         cleanup();
+        onAbandon();
         reject(new Error(timeoutMessage));
       }, timeoutMs);
 

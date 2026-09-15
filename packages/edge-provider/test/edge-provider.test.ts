@@ -1,9 +1,25 @@
 import { Readable } from "node:stream";
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { OUTPUT_FORMAT, type Voice, type ProsodyOptions } from "msedge-tts";
 import type { TtsAudioFormat } from "@edgetts/tts-core";
 import { EdgeTtsProvider } from "../src/edge-provider.js";
 import type { EdgeClient } from "../src/client.js";
+
+function createDeferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
+
+async function flushMicrotasks(): Promise<void> {
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
+}
 
 class FakeEdgeClient implements EdgeClient {
   public closeCallCount = 0;
@@ -509,52 +525,121 @@ describe("EdgeTtsProvider", () => {
       expect(createdClient?.closeCallCount).toBe(1);
     });
 
-    it("setMetadata times out after configured timeout and closes client", async () => {
-      let createdClient: FakeEdgeClient | undefined;
-      const provider = new EdgeTtsProvider({
-        clientFactory: () => {
-          createdClient = new FakeEdgeClient();
-          createdClient.setMetadataHandler = () => new Promise(() => {}); // never resolves
-          return createdClient;
-        },
-        setupTimeoutMs: 50,
-      });
-
+    it("closes again when aborted setMetadata resolves late", async () => {
+      const setMetadata = createDeferred<void>();
+      const client = new FakeEdgeClient();
+      client.setMetadataHandler = () => setMetadata.promise;
+      const provider = new EdgeTtsProvider({ clientFactory: () => client, setupTimeoutMs: 5000 });
       const ac = new AbortController();
-      await expect(
-        provider.synthesize({ text: "hello", voice: "zh-CN-XiaoxiaoNeural" }, ac.signal),
-      ).rejects.toThrow("Speech synthesis setup timed out after 50ms");
+      const synthesis = provider.synthesize(
+        { text: "hello", voice: "zh-CN-XiaoxiaoNeural" },
+        ac.signal,
+      );
 
-      expect(createdClient?.closeCallCount).toBe(1);
-    });
+      ac.abort();
 
-    it("setMetadata aborts immediately if signal triggers during setup and closes client", async () => {
-      let createdClient: FakeEdgeClient | undefined;
-      const ac = new AbortController();
-
-      const provider = new EdgeTtsProvider({
-        clientFactory: () => {
-          createdClient = new FakeEdgeClient();
-          createdClient.setMetadataHandler = () =>
-            new Promise((resolve) => {
-              // Trigger abort after a short delay
-              setTimeout(() => {
-                ac.abort();
-                resolve();
-              }, 20);
-            });
-          return createdClient;
-        },
-        setupTimeoutMs: 5000,
-      });
-
-      await expect(
-        provider.synthesize({ text: "hello", voice: "zh-CN-XiaoxiaoNeural" }, ac.signal),
-      ).rejects.toSatisfy((err: unknown) => {
+      await expect(synthesis).rejects.toSatisfy((err: unknown) => {
         return err instanceof Error && err.name === "AbortError";
       });
+      expect(client.closeCallCount).toBe(1);
 
-      expect(createdClient?.closeCallCount).toBe(1);
+      setMetadata.resolve();
+      await flushMicrotasks();
+
+      expect(client.closeCallCount).toBe(2);
+      expect(client.toStreamCalls).toHaveLength(0);
+    });
+
+    it("closes again when timed-out setMetadata resolves late", async () => {
+      vi.useFakeTimers();
+      try {
+        const setMetadata = createDeferred<void>();
+        const client = new FakeEdgeClient();
+        client.setMetadataHandler = () => setMetadata.promise;
+        const provider = new EdgeTtsProvider({ clientFactory: () => client, setupTimeoutMs: 10 });
+        const synthesis = provider.synthesize(
+          { text: "hello", voice: "zh-CN-XiaoxiaoNeural" },
+          new AbortController().signal,
+        );
+        const synthesisAssertion = expect(synthesis).rejects.toThrow(
+          "Speech synthesis setup timed out after 10ms",
+        );
+
+        await vi.advanceTimersByTimeAsync(10);
+
+        await synthesisAssertion;
+        expect(client.closeCallCount).toBe(1);
+
+        setMetadata.resolve();
+        await flushMicrotasks();
+
+        expect(client.closeCallCount).toBe(2);
+        expect(client.toStreamCalls).toHaveLength(0);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it.each(["abort", "timeout"] as const)(
+      "closes again without unhandled rejection when %s abandons setMetadata",
+      async (abandonment) => {
+        vi.useFakeTimers();
+        try {
+          const setMetadata = createDeferred<void>();
+          const client = new FakeEdgeClient();
+          client.setMetadataHandler = () => setMetadata.promise;
+          const provider = new EdgeTtsProvider({
+            clientFactory: () => client,
+            setupTimeoutMs: 10,
+          });
+          const ac = new AbortController();
+          const synthesis = provider.synthesize(
+            { text: "hello", voice: "zh-CN-XiaoxiaoNeural" },
+            ac.signal,
+          );
+          const synthesisAssertion = expect(synthesis).rejects.toThrow();
+
+          if (abandonment === "abort") {
+            ac.abort();
+          } else {
+            await vi.advanceTimersByTimeAsync(10);
+          }
+
+          await synthesisAssertion;
+          expect(client.closeCallCount).toBe(1);
+
+          setMetadata.reject(new Error("late setup failure"));
+          await flushMicrotasks();
+
+          expect(client.closeCallCount).toBe(2);
+          expect(client.toStreamCalls).toHaveLength(0);
+        } finally {
+          vi.useRealTimers();
+        }
+      },
+    );
+
+    it("keeps an in-time setup connection usable until its stream completes", async () => {
+      const setMetadata = createDeferred<void>();
+      const client = new FakeEdgeClient(Readable.from([Buffer.from("data")]));
+      client.setMetadataHandler = () => setMetadata.promise;
+      const provider = new EdgeTtsProvider({ clientFactory: () => client, setupTimeoutMs: 5000 });
+      const synthesis = provider.synthesize(
+        { text: "hello", voice: "zh-CN-XiaoxiaoNeural" },
+        new AbortController().signal,
+      );
+
+      setMetadata.resolve();
+      const result = await synthesis;
+
+      expect(client.toStreamCalls).toHaveLength(1);
+      expect(client.closeCallCount).toBe(0);
+
+      for await (const chunk of result.audio) {
+        void chunk;
+      }
+
+      expect(client.closeCallCount).toBe(1);
     });
   });
 });
