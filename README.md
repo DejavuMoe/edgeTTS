@@ -23,12 +23,12 @@ Current stable release: [v0.2.0](https://github.com/DejavuMoe/edgeTTS/releases/t
   - Rejoining chunks reproduces the original input text without mutation or trimming.
 - **Fair Concurrency Control**:
   - Built-in in-memory FIFO limiter (4 active synthesis streams, 16 queue slots).
-  - Segmented synthesis acquires and releases concurrency permits per segment, preventing single long requests from monopolizing capacity.
+  - Segmented synthesis holds one concurrency permit for its complete ordered stream, preventing mid-stream queue starvation while bounding concurrent upstream sessions.
   - Client disconnections abort queued requests and active upstream streams immediately.
 - **Web Workbench**:
   - React single-page application with dual-mode playback: progressive `MediaSource` streaming playback with automatic Blob fallback.
   - Voice discovery with locale filtering, search, and favorites pinning.
-  - Local UTF-8 `.txt` file import (client-side reading up to 256 KiB / 20,000 code points; contents are never uploaded or stored).
+  - Local UTF-8 `.txt` file import (client-side reading up to 256 KiB / 20,000 code points; importing does not upload or store the file. Synthesized text is subsequently sent to the configured service and its Microsoft Edge TTS upstream).
   - Keyboard shortcuts: `Ctrl+Enter` / `Cmd+Enter` to synthesize, `Escape` to cancel.
   - Real-time text statistics and streaming telemetry (request/streaming status, planned segment count, and actual received audio byte size).
 - **Single-Origin Production Hosting**:
@@ -416,7 +416,7 @@ These variables configure host-side container port binding in `compose.yaml`:
 ### Built-in Limits (In-Memory, Per-Process)
 
 - **Speech Admission Rate Limit**: Default 12 requests per 10 seconds across `/v1/audio/speech` and `/api/speech`. Exceeding limits returns HTTP 429.
-- **TtsService Concurrency Limiter**: Default 4 active synthesis streams and 16 queued requests. Long-text segmented synthesis acquires limiter permits per segment. Full queue returns HTTP 503.
+- **TtsService Concurrency Limiter**: Default 4 active synthesis streams and 16 queued requests. A long-text segmented session holds one limiter permit until its stream completes or is cancelled. Full queue returns HTTP 503.
 
 ---
 

@@ -292,8 +292,8 @@ jobs:
           echo "Validating release tag governance for tag: $TAG"
 
           # 1. Strict stable SemVer format validation
-          if ! echo "$TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
-            echo "::error::Release tag '$TAG' does not match strict stable SemVer format '^v[0-9]+\.[0-9]+\.[0-9]+$'"
+          if ! echo "$TAG" | grep -Eq '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'; then
+            echo "::error::Release tag '$TAG' does not match strict stable SemVer"
             exit 1
           fi
           echo "PASS: Tag '$TAG' matches strict stable SemVer format."
@@ -598,11 +598,23 @@ jobs:
           CANDIDATE_DIGEST="${{ steps.build.outputs.digest }}"
           IMAGE_REPO="ghcr.io/dejavumoe/edgetts"
 
+          inspect_optional() {
+            local image="$1" output
+            if output=$(docker buildx imagetools inspect "$image" --raw 2>&1); then
+              printf '%s' "$output"
+              return 0
+            fi
+            case "$output" in
+              *"manifest unknown"*|*"not found"*|*"404"*) return 0 ;;
+              *) echo "$output" >&2; return 1 ;;
+            esac
+          }
+
           echo "Promoting verified release candidate for version: $VERSION"
           echo "Candidate digest: $CANDIDATE_DIGEST"
 
           # 1. Promote or verify the exact SemVer release tag (X.Y.Z)
-          EXISTING_RAW=$(docker buildx imagetools inspect "${IMAGE_REPO}:${VERSION}" --raw 2>/dev/null || true)
+          EXISTING_RAW=$(inspect_optional "${IMAGE_REPO}:${VERSION}")
           if [ -n "$EXISTING_RAW" ]; then
             EXISTING_DIGEST="sha256:$(printf "%s" "$EXISTING_RAW" | sha256sum | awk '{print $1}')"
             echo "Existing tag ${IMAGE_REPO}:${VERSION} resolves to: $EXISTING_DIGEST"
@@ -645,15 +657,15 @@ jobs:
           echo "PASS: Multi-arch platforms and attestations preserved on version tag ${VERSION}."
 
           # 2. Determine highest successfully published stable SemVer release
-          git fetch --tags origin --quiet 2>/dev/null || true
-          CANDIDATE_VERSIONS=$(git tag -l "v*" | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sed 's/^v//' | sort -V -r || true)
+          git fetch --tags origin --quiet
+          CANDIDATE_VERSIONS=$(git tag -l "v*" | grep -E '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$' | sed 's/^v//' | sort -V -r || true)
           ALL_VERSIONS=$(printf "%s\n%s\n" "$VERSION" "$CANDIDATE_VERSIONS" | sed '/^$/d' | sort -u | sort -V -r)
 
           HIGHEST_PUBLISHED_VERSION=""
           HIGHEST_PUBLISHED_DIGEST=""
 
           for V in $ALL_VERSIONS; do
-            V_RAW=$(docker buildx imagetools inspect "${IMAGE_REPO}:${V}" --raw 2>/dev/null || true)
+            V_RAW=$(inspect_optional "${IMAGE_REPO}:${V}")
             if [ -n "$V_RAW" ]; then
               HIGHEST_PUBLISHED_VERSION="$V"
               HIGHEST_PUBLISHED_DIGEST="sha256:$(printf "%s" "$V_RAW" | sha256sum | awk '{print $1}')"
@@ -689,7 +701,7 @@ jobs:
             echo "Current release $VERSION is lower than highest published version $HIGHEST_PUBLISHED_VERSION."
             echo "latest alias will NOT be modified; it remains owned by $HIGHEST_PUBLISHED_VERSION."
 
-            LATEST_RAW=$(docker buildx imagetools inspect "${IMAGE_REPO}:latest" --raw 2>/dev/null || true)
+            LATEST_RAW=$(inspect_optional "${IMAGE_REPO}:latest")
             if [ -n "$LATEST_RAW" ]; then
               LATEST_DIGEST="sha256:$(printf "%s" "$LATEST_RAW" | sha256sum | awk '{print $1}')"
               if [ "$LATEST_DIGEST" = "$CANDIDATE_DIGEST" ]; then

@@ -259,6 +259,7 @@ export function App() {
     }
     const confirmed = window.confirm("确定清空当前文本吗？此操作无法撤销。");
     if (confirmed) {
+      ++importGenerationIdRef.current;
       setInput("");
       setImportError(null);
     }
@@ -289,24 +290,21 @@ export function App() {
     });
   }, [selectedVoiceId, quality, speed, pitchSemitones, volume]);
 
-  // Initial load: health & voices
+  // Initial load: health and voices are independent so a slow health probe cannot block unlocking.
   useEffect(() => {
     let active = true;
+    const controller = new AbortController();
 
-    async function init(): Promise<void> {
-      try {
-        const health = await fetchHealth();
-        if (active) {
-          setApiStatus(health.status === "ok" ? "healthy" : "unavailable");
-        }
-      } catch {
-        if (active) {
-          setApiStatus("unavailable");
-        }
-      }
+    void fetchHealth(controller.signal)
+      .then((health) => {
+        if (active) setApiStatus(health.status === "ok" ? "healthy" : "unavailable");
+      })
+      .catch(() => {
+        if (active) setApiStatus("unavailable");
+      });
 
-      try {
-        const voiceList = await fetchVoices();
+    void fetchVoices(undefined, controller.signal)
+      .then((voiceList) => {
         if (!active) return;
         setVoices(voiceList);
         setVoiceError(null);
@@ -317,7 +315,8 @@ export function App() {
           setSelectedVoiceId(targetId);
           savedVoiceIdRef.current = targetId;
         }
-      } catch (err: unknown) {
+      })
+      .catch((err: unknown) => {
         if (!active) return;
         if (err instanceof ApiHttpError && err.status === 401) {
           setAuthRequired(true);
@@ -325,13 +324,11 @@ export function App() {
         } else {
           setVoiceError("无法加载语音列表");
         }
-      }
-    }
-
-    void init();
+      });
 
     return () => {
       active = false;
+      controller.abort();
     };
   }, []);
 
@@ -497,12 +494,6 @@ export function App() {
           if (!isCurrent()) return;
           setTelemetry((prev) => (prev ? { ...prev, phase: "streaming" } : null));
           setAudioSrc(mediaUrl);
-          // Try playing; safely catch autoplay restrictions
-          if (audioRef.current) {
-            audioRef.current.play().catch(() => {
-              // Autoplay policy prevented playback; user will click controls manually
-            });
-          }
         },
         onProgress: (bytesReceived: number) => {
           if (!isCurrent()) return;
@@ -552,6 +543,14 @@ export function App() {
       }
     }
   };
+
+  useEffect(() => {
+    if (audioSrc) {
+      audioRef.current?.play().catch(() => {
+        // Autoplay policy prevented playback; user can use the visible controls.
+      });
+    }
+  }, [audioSrc]);
 
   const handleCancel = useCallback((): void => {
     ++generationIdRef.current;
@@ -664,6 +663,7 @@ export function App() {
             placeholder="在此输入需要合成为语音的文本内容..."
             value={input}
             onChange={(e) => {
+              ++importGenerationIdRef.current;
               setInput(e.target.value);
               if (importError) {
                 setImportError(null);

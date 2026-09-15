@@ -8,8 +8,11 @@ export interface ShutdownTarget {
   log: ShutdownLogger;
 }
 
+export const DEFAULT_SHUTDOWN_TIMEOUT_MS = 30_000;
+
 export interface GracefulShutdownOptions {
   readonly signals?: readonly NodeJS.Signals[];
+  readonly timeoutMs?: number;
   readonly setExitCode?: (code: number) => void;
   readonly exit?: (code: number) => void;
 }
@@ -25,6 +28,10 @@ export function registerGracefulShutdown(
 ): GracefulShutdownController {
   let shuttingDown = false;
   const signals: readonly NodeJS.Signals[] = options?.signals ?? ["SIGTERM", "SIGINT"];
+  const timeoutMs = options?.timeoutMs ?? DEFAULT_SHUTDOWN_TIMEOUT_MS;
+  if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1) {
+    throw new RangeError("shutdown timeout must be a positive integer");
+  }
   const setExitCode =
     options?.setExitCode ??
     ((code: number) => {
@@ -43,14 +50,25 @@ export function registerGracefulShutdown(
     shuttingDown = true;
     target.log.info(`Received ${signal}, shutting down gracefully`);
 
+    let timer: NodeJS.Timeout | undefined;
     try {
-      await target.close();
+      await Promise.race([
+        target.close(),
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(
+            () => reject(new Error(`Shutdown timed out after ${timeoutMs}ms`)),
+            timeoutMs,
+          );
+        }),
+      ]);
       setExitCode(0);
       exit(0);
     } catch (error) {
       target.log.error(error, "Error during server shutdown");
       setExitCode(1);
       exit(1);
+    } finally {
+      if (timer !== undefined) clearTimeout(timer);
     }
   }
 

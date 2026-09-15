@@ -86,8 +86,8 @@ echo " edgeTTS Release Preflight: $TAG_NAME (version: $SEMVER_NUM)"
 echo "======================================================================"
 
 # 1. Validate strict stable SemVer format
-if ! echo "$TAG_NAME" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
-  echo "ERROR: Version '$TAG_NAME' does not match strict stable SemVer format '^v[0-9]+\.[0-9]+\.[0-9]+$'." >&2
+if ! echo "$TAG_NAME" | grep -Eq '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'; then
+  echo "ERROR: Version '$TAG_NAME' does not match strict stable SemVer." >&2
   echo "Prereleases (-alpha, -rc1) and build metadata (+build) are not supported." >&2
   exit 1
 fi
@@ -111,7 +111,10 @@ echo "[PASS] Current branch is 'main'."
 
 # 4. Check local 'main' is synchronized with 'origin/main'
 echo "Fetching origin/main to verify synchronization..."
-git fetch origin main:refs/remotes/origin/main --quiet 2>/dev/null || git fetch origin main --quiet 2>/dev/null || true
+if ! git fetch origin main:refs/remotes/origin/main --quiet; then
+  echo "ERROR: Failed to fetch origin/main; refusing to verify stale remote state." >&2
+  exit 1
+fi
 
 LOCAL_HEAD="$(git rev-parse HEAD)"
 REMOTE_HEAD="$(git rev-parse origin/main)"
@@ -131,7 +134,10 @@ fi
 echo "[PASS] Local tag '$TAG_NAME' is absent."
 
 # 6. Check remote tag does not already exist
-REMOTE_TAG_CHECK="$(git ls-remote --tags origin "refs/tags/$TAG_NAME" 2>/dev/null || true)"
+if ! REMOTE_TAG_CHECK="$(git ls-remote --tags origin "refs/tags/$TAG_NAME")"; then
+  echo "ERROR: Failed to query remote tag '$TAG_NAME'; refusing to assume it is absent." >&2
+  exit 1
+fi
 if [ -n "$REMOTE_TAG_CHECK" ]; then
   echo "ERROR: Remote git tag '$TAG_NAME' already exists on origin:" >&2
   echo "$REMOTE_TAG_CHECK" >&2
