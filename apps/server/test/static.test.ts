@@ -4,6 +4,7 @@ import path from "node:path";
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import type { FastifyInstance } from "fastify";
 import type { SynthesisResult, TtsVoice } from "@edgetts/tts-core";
+import type { SegmentedSynthesisResult } from "@edgetts/tts-service";
 import { createApp } from "../src/app.js";
 import type { TtsServicePort } from "../src/dependencies.js";
 import { shouldEnableStaticHosting } from "../src/static.js";
@@ -19,10 +20,11 @@ class DummyTtsService implements TtsServicePort {
       audio: (async function* () {})(),
     };
   }
-  async synthesizeSegmented(): Promise<SynthesisResult> {
+  async synthesizeSegmented(): Promise<SegmentedSynthesisResult> {
     return {
       format: "mp3-48k",
       contentType: "audio/mpeg",
+      segmentCount: 1,
       audio: (async function* () {})(),
     };
   }
@@ -442,5 +444,55 @@ describe("Deterministic static hosting enablement contract matrix", () => {
     });
     expect(healthRes.statusCode).toBe(200);
     expect(healthRes.json()).toEqual({ status: "ok" });
+  });
+});
+
+describe("Clickjacking protection (SEC-04)", () => {
+  let tempDir: string;
+  let app: FastifyInstance | undefined;
+  const dummyService = new DummyTtsService();
+
+  beforeEach(() => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "edgetts-clickjack-test-"));
+    fs.writeFileSync(
+      path.join(tempDir, "index.html"),
+      "<!doctype html><html><body>Root</body></html>",
+    );
+    fs.mkdirSync(path.join(tempDir, "assets"));
+    fs.writeFileSync(path.join(tempDir, "assets", "app.css"), "body { color: red; }");
+  });
+
+  afterEach(async () => {
+    if (app) {
+      await app.close();
+      app = undefined;
+    }
+    if (fs.existsSync(tempDir)) {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("delivers X-Frame-Options: SAMEORIGIN on static files, SPA fallback, assets, and API responses", async () => {
+    app = createApp({ ttsService: dummyService }, { serveStatic: true, webDistDir: tempDir });
+
+    // Root static file
+    const rootRes = await app.inject({ method: "GET", url: "/" });
+    expect(rootRes.statusCode).toBe(200);
+    expect(rootRes.headers["x-frame-options"]).toBe("SAMEORIGIN");
+
+    // Static asset
+    const assetRes = await app.inject({ method: "GET", url: "/assets/app.css" });
+    expect(assetRes.statusCode).toBe(200);
+    expect(assetRes.headers["x-frame-options"]).toBe("SAMEORIGIN");
+
+    // SPA fallback route
+    const spaRes = await app.inject({ method: "GET", url: "/workbench" });
+    expect(spaRes.statusCode).toBe(200);
+    expect(spaRes.headers["x-frame-options"]).toBe("SAMEORIGIN");
+
+    // API route
+    const apiRes = await app.inject({ method: "GET", url: "/api/health" });
+    expect(apiRes.statusCode).toBe(200);
+    expect(apiRes.headers["x-frame-options"]).toBe("SAMEORIGIN");
   });
 });

@@ -1,6 +1,7 @@
 import { describe, it, expect, afterEach } from "vitest";
 import type { FastifyInstance } from "fastify";
 import type { SynthesisResult, TtsVoice } from "@edgetts/tts-core";
+import type { SegmentedSynthesisResult } from "@edgetts/tts-service";
 import { ApiErrorSchema, VoicesResponseSchema } from "@edgetts/shared";
 import { createApp } from "../src/app.js";
 import type { TtsServicePort } from "../src/dependencies.js";
@@ -41,10 +42,11 @@ class FakeTtsService implements TtsServicePort {
     };
   }
 
-  async synthesizeSegmented(): Promise<SynthesisResult> {
+  async synthesizeSegmented(): Promise<SegmentedSynthesisResult> {
     return {
       format: "mp3-48k",
       contentType: "audio/mpeg",
+      segmentCount: 1,
       audio: (async function* () {})(),
     };
   }

@@ -6,7 +6,7 @@ import type {
 } from "fastify";
 import { type ApiError, NativeSpeechRequestSchema, SpeechRequestSchema } from "@edgetts/shared";
 import type { SynthesisRequest, TtsAudioFormat, TtsProsody } from "@edgetts/tts-core";
-import { segmentText, SynthesisQueueFullError } from "@edgetts/tts-service";
+import { SynthesisQueueFullError } from "@edgetts/tts-service";
 import type { TtsServicePort } from "../dependencies.js";
 
 export const NATIVE_SEGMENT_CODE_POINTS = 300;
@@ -212,10 +212,6 @@ export function createSpeechRoutes(
         };
 
         try {
-          const segments = segmentText(validatedBody.input, {
-            maxCodePoints: NATIVE_SEGMENT_CODE_POINTS,
-          });
-
           const result = await ttsService.synthesizeSegmented(domainRequest, controller.signal, {
             maxSegmentCodePoints: NATIVE_SEGMENT_CODE_POINTS,
           });
@@ -233,7 +229,7 @@ export function createSpeechRoutes(
             .code(200)
             .header("Content-Type", "audio/mpeg")
             .header("Cache-Control", "no-store")
-            .header("X-EdgeTTS-Segment-Count", String(segments.length))
+            .header("X-EdgeTTS-Segment-Count", String(result.segmentCount))
             .header("X-EdgeTTS-Segment-Max-Code-Points", String(NATIVE_SEGMENT_CODE_POINTS))
             .send(audioStream);
         } catch (error) {

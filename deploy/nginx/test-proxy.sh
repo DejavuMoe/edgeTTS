@@ -92,6 +92,8 @@ grep -q "client_max_body_size 1m;" "$CONF_EXAMPLE" || { echo "FAIL: missing clie
 grep -q "server_tokens off;" "$CONF_EXAMPLE" || { echo "FAIL: missing server_tokens off"; exit 1; }
 grep -q 'X-Content-Type-Options "nosniff"' "$CONF_EXAMPLE" || { echo "FAIL: missing X-Content-Type-Options header"; exit 1; }
 grep -q 'Referrer-Policy "same-origin"' "$CONF_EXAMPLE" || { echo "FAIL: missing Referrer-Policy header"; exit 1; }
+grep -q 'proxy_hide_header X-Frame-Options;' "$CONF_EXAMPLE" || { echo "FAIL: missing proxy_hide_header X-Frame-Options"; exit 1; }
+grep -q 'X-Frame-Options "SAMEORIGIN"' "$CONF_EXAMPLE" || { echo "FAIL: missing X-Frame-Options header"; exit 1; }
 
 # Disallowed configurations
 if grep -q "proxy_ignore_client_abort" "$CONF_EXAMPLE"; then
@@ -354,7 +356,8 @@ grep -q "HTTP/1.1 429" "$RESP_429_HEADERS" || { echo "FAIL: 429 status not prese
 grep -qi "retry-after: 10" "$RESP_429_HEADERS" || { echo "FAIL: Retry-After header not preserved over HTTPS"; exit 1; }
 echo "$RESP_429_BODY" | grep -qi "CONTENT_TYPE:application/json" || { echo "FAIL: 429 content-type not preserved"; exit 1; }
 echo "$RESP_429_BODY" | grep -q "RATE_LIMITED" || { echo "FAIL: 429 error body altered"; exit 1; }
-echo "PASS: HTTP 429 status, Retry-After header, and RATE_LIMITED JSON body preserved over HTTPS."
+grep -qi "x-frame-options: SAMEORIGIN" "$RESP_429_HEADERS" || { echo "FAIL: X-Frame-Options header not delivered over HTTPS"; exit 1; }
+echo "PASS: HTTP 429 status, Retry-After, X-Frame-Options: SAMEORIGIN, and RATE_LIMITED JSON body preserved over HTTPS."
 
 # Clean up mock containers
 docker rm -f "$MOCK_CONTAINER" "$MOCK_NGINX_CONTAINER" >/dev/null

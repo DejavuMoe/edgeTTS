@@ -7,6 +7,7 @@ import {
   SynthesisQueueFullError,
   TtsService,
   type SegmentedSynthesisOptions,
+  type SegmentedSynthesisResult,
 } from "@edgetts/tts-service";
 import { createApp } from "../src/app.js";
 import type { TtsServicePort } from "../src/dependencies.js";
@@ -31,7 +32,7 @@ class FakeSpeechTtsService implements TtsServicePort {
         request: SynthesisRequest,
         signal: AbortSignal,
         options: SegmentedSynthesisOptions,
-      ) => Promise<SynthesisResult>)
+      ) => Promise<SegmentedSynthesisResult>)
     | undefined;
 
   async listVoices(): Promise<readonly TtsVoice[]> {
@@ -70,7 +71,7 @@ class FakeSpeechTtsService implements TtsServicePort {
     request: SynthesisRequest,
     signal: AbortSignal,
     options: SegmentedSynthesisOptions,
-  ): Promise<SynthesisResult> {
+  ): Promise<SegmentedSynthesisResult> {
     this.synthesizeSegmentedCalls++;
     this.lastSegmentedRequest = request;
     this.lastSegmentedOptions = options;
@@ -91,9 +92,12 @@ class FakeSpeechTtsService implements TtsServicePort {
       }
     }
 
+    const segments = segmentText(request.text, { maxCodePoints: options.maxSegmentCodePoints });
+
     return {
       format: request.format ?? "mp3-48k",
       contentType: "audio/mpeg",
+      segmentCount: segments.length === 0 ? 1 : segments.length,
       audio: generateChunks(),
     };
   }
@@ -399,6 +403,39 @@ describe("POST /v1/audio/speech", () => {
         url: "/v1/audio/speech",
         headers: { "content-type": "application/json" },
         payload,
+      });
+
+      expect(response.statusCode).toBe(400);
+      const parsed = ApiErrorSchema.parse(response.json());
+      expect(parsed.error.code).toBe("INVALID_REQUEST");
+    }
+
+    expect(fakeService.synthesizeCalls).toBe(0);
+  });
+
+  it("rejects invalid voice format and SSML injection in /v1/audio/speech with HTTP 400 (SEC-01)", async () => {
+    const fakeService = new FakeSpeechTtsService();
+    app = createApp({ ttsService: fakeService });
+
+    const invalidVoices = [
+      'zh-CN-XiaoxiaoNeural"><voice',
+      "en-US-Jenny'sVoice",
+      "voice with spaces",
+      "voice/with/slashes",
+      "voice;drop table",
+      "a".repeat(129),
+    ];
+
+    for (const voice of invalidVoices) {
+      const response = await app.inject({
+        method: "POST",
+        url: "/v1/audio/speech",
+        headers: { "content-type": "application/json" },
+        payload: {
+          model: "tts-1",
+          voice,
+          input: "测试语音",
+        },
       });
 
       expect(response.statusCode).toBe(400);
@@ -1060,6 +1097,67 @@ describe("POST /api/speech", () => {
       const errorJson = JSON.parse(res.payload);
       expect(errorJson.error.code).toBe("INVALID_REQUEST");
     }
+  });
+
+  it("rejects invalid voice format and SSML injection in /api/speech with HTTP 400 (SEC-01)", async () => {
+    const fakeService = new FakeSpeechTtsService();
+    app = createApp({ ttsService: fakeService });
+
+    const invalidVoices = [
+      'zh-CN-XiaoxiaoNeural"><voice',
+      "en-US-Jenny'sVoice",
+      "voice with spaces",
+      "voice/with/slashes",
+      "voice;drop table",
+      "a".repeat(129),
+    ];
+
+    for (const voice of invalidVoices) {
+      const res = await app.inject({
+        method: "POST",
+        url: "/api/speech",
+        headers: { "content-type": "application/json" },
+        payload: {
+          voice,
+          input: "hello",
+        },
+      });
+
+      expect(res.statusCode).toBe(400);
+      const errorJson = JSON.parse(res.payload);
+      expect(errorJson.error.code).toBe("INVALID_REQUEST");
+    }
+
+    expect(fakeService.synthesizeSegmentedCalls).toBe(0);
+  });
+
+  it("passes result.segmentCount directly from service into X-EdgeTTS-Segment-Count (ARCH-02)", async () => {
+    const fakeService = new FakeSpeechTtsService();
+    fakeService.customSynthesizeSegmented = async () => {
+      return {
+        format: "mp3-48k",
+        contentType: "audio/mpeg",
+        segmentCount: 42,
+        audio: (async function* () {
+          yield new Uint8Array([1, 2, 3]);
+        })(),
+      };
+    };
+    app = createApp({ ttsService: fakeService });
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/speech",
+      headers: { "content-type": "application/json" },
+      payload: {
+        voice: "zh-CN-XiaoxiaoNeural",
+        input: "hello world",
+      },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.headers["x-edgetts-segment-count"]).toBe("42");
+    expect(fakeService.synthesizeSegmentedCalls).toBe(1);
   });
 
   it("rejects unknown fields via strict schema validation", async () => {
