@@ -9,7 +9,7 @@ edgeTTS 是一个基于微软 Edge TTS / Edge 大声朗读能力构建的自托�
 > [!NOTE]
 > edgeTTS 依赖微软 Edge TTS 上游服务。上游服务的可用性、音色支持与运行表现不在本项目控制范围内。edgeTTS 是独立的开源项目，未获得微软公司的赞助或官方背书。
 
-当前稳定发布版本：[v0.1.0](https://github.com/DejavuMoe/edgeTTS/releases/tag/v0.1.0)
+当前稳定发布版本：[v0.2.0](https://github.com/DejavuMoe/edgeTTS/releases/tag/v0.2.0)
 
 ---
 
@@ -68,7 +68,7 @@ docker run -d \
   -e API_KEY="$EDGETTS_API_KEY" \
   -e REQUIRE_API_KEY=true \
   -p 127.0.0.1:8080:8080 \
-  ghcr.io/dejavumoe/edgetts:0.1.0
+  ghcr.io/dejavumoe/edgetts:0.2.0
 ```
 
 ### 3. 验证部署状态
@@ -90,12 +90,14 @@ curl http://127.0.0.1:8080/health
 
 ### 容器镜像标签与摘要说明
 
-| 引用形式                                                                                            | 用途说明                               | 可变性                     |
-| --------------------------------------------------------------------------------------------------- | -------------------------------------- | -------------------------- |
-| `ghcr.io/dejavumoe/edgetts:0.1.0`                                                                   | 推荐用于常规生产部署的稳定版本         | 发布标签                   |
-| `ghcr.io/dejavumoe/edgetts@sha256:4dca280e9a2dfdaa3ef4b30e1f5d136ad32975ee1ef1763fc8f869e159502034` | 严格可复现的不可变生产环境锁定         | 内容寻址摘要（绝对不可变） |
-| `ghcr.io/dejavumoe/edgetts:latest`                                                                  | 始终指向已发布的最高稳定 SemVer 版本   | 可移动别名                 |
-| `ghcr.io/dejavumoe/edgetts:main`                                                                    | 源自 `main` 分支最新验证通过的开发快照 | 浮动快照                   |
+| 引用形式                                            | 用途说明                               | 可变性                     |
+| --------------------------------------------------- | -------------------------------------- | -------------------------- |
+| `ghcr.io/dejavumoe/edgetts:0.2.0`                   | 推荐用于常规生产部署的稳定版本         | 发布标签                   |
+| `ghcr.io/dejavumoe/edgetts@sha256:<release-digest>` | 严格可复现的不可变生产环境锁定         | 内容寻址摘要（绝对不可变） |
+| `ghcr.io/dejavumoe/edgetts:latest`                  | 始终指向已发布的最高稳定 SemVer 版本   | 可移动别名                 |
+| `ghcr.io/dejavumoe/edgetts:main`                    | 源自 `main` 分支最新验证通过的开发快照 | 浮动快照                   |
+
+如需不可变的生产部署锁定，请使用 `ghcr.io/dejavumoe/edgetts@sha256:<release-digest>`；每个稳定版本的已验证摘要均记录在其 [GitHub Release 说明](https://github.com/DejavuMoe/edgeTTS/releases)中。
 
 ---
 
@@ -461,7 +463,7 @@ EdgeTtsProvider (packages/edge-provider)
 
 - [Nginx 生产反向代理部署指南](deploy/nginx/README.md)
 - [版本发布治理与回滚流程](docs/releasing.md)
-- [GitHub Release v0.1.0](https://github.com/DejavuMoe/edgeTTS/releases/tag/v0.1.0)
+- [GitHub Release v0.2.0](https://github.com/DejavuMoe/edgeTTS/releases/tag/v0.2.0)
 - [MIT 许可证](LICENSE)
 
 ---
