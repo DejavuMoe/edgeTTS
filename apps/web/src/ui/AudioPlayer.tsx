@@ -1,3 +1,4 @@
+import { useI18n } from "../i18n.js";
 import React, {
   forwardRef,
   useCallback,
@@ -16,15 +17,10 @@ export interface AudioPlayerProps {
 }
 
 export const AudioPlayer = forwardRef<HTMLAudioElement, AudioPlayerProps>(function AudioPlayer(
-  {
-    src,
-    downloadUrl,
-    downloadFilename,
-    className = "",
-    "aria-label": ariaLabel = "语音合成播放器",
-  },
+  { src, downloadUrl, downloadFilename, className = "", "aria-label": ariaLabel },
   ref,
 ) {
+  const { t } = useI18n();
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   // Forward ref to internal audio element
@@ -115,9 +111,13 @@ export const AudioPlayer = forwardRef<HTMLAudioElement, AudioPlayerProps>(functi
 
   return (
     <div className={`player-wrapper ${className}`}>
-      <div className="audio-player ui-audio-player" role="region" aria-label={ariaLabel}>
+      <div
+        className="audio-player ui-audio-player"
+        role="region"
+        aria-label={ariaLabel ?? t("语音合成播放器")}
+      >
         <audio ref={audioRef} src={src} preload="metadata">
-          您的浏览器不支持音频播放。
+          {t("您的浏览器不支持音频播放。")}
         </audio>
 
         {/* Play / Pause button */}
@@ -125,7 +125,7 @@ export const AudioPlayer = forwardRef<HTMLAudioElement, AudioPlayerProps>(functi
           type="button"
           className="ui-audio-btn ui-audio-play-btn"
           onClick={togglePlay}
-          aria-label={isPlaying ? "暂停" : "播放"}
+          aria-label={isPlaying ? t("暂停") : t("播放")}
         >
           {isPlaying ? (
             <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16" aria-hidden="true">
@@ -140,7 +140,7 @@ export const AudioPlayer = forwardRef<HTMLAudioElement, AudioPlayerProps>(functi
         </button>
 
         {/* Time display */}
-        <span className="ui-audio-time" aria-label="播放时间">
+        <span className="ui-audio-time" aria-label={t("播放时间")}>
           {formatTime(currentTime)} / {formatTime(duration)}
         </span>
 
@@ -155,7 +155,7 @@ export const AudioPlayer = forwardRef<HTMLAudioElement, AudioPlayerProps>(functi
             value={isDurationFinite ? currentTime : 0}
             onChange={handleSeek}
             disabled={!isDurationFinite}
-            aria-label="音频时间进度条"
+            aria-label={t("音频时间进度条")}
             style={
               {
                 "--slider-progress": `${progressPercent}%`,
@@ -169,7 +169,7 @@ export const AudioPlayer = forwardRef<HTMLAudioElement, AudioPlayerProps>(functi
           type="button"
           className="ui-audio-btn ui-audio-mute-btn"
           onClick={toggleMute}
-          aria-label={isMuted ? "取消静音" : "静音"}
+          aria-label={isMuted ? t("取消静音") : t("静音")}
         >
           {isMuted ? (
             <svg
@@ -212,9 +212,9 @@ export const AudioPlayer = forwardRef<HTMLAudioElement, AudioPlayerProps>(functi
           href={downloadUrl}
           download={downloadFilename}
           className="btn btn-download"
-          aria-label="下载合成音频"
+          aria-label={t("下载合成音频")}
         >
-          下载 MP3
+          {t("下载 MP3")}
         </a>
       )}
     </div>

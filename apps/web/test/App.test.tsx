@@ -1700,7 +1700,7 @@ describe("EdgeTTS Web Workbench", () => {
 
       // Current voice details still display active Xiaoxiao voice
       const voiceDetails = screen.getByLabelText(/当前声音详情/i);
-      expect(voiceDetails.textContent).toContain("Microsoft Xiaoxiao · zh-CN · Female");
+      expect(voiceDetails.textContent).toContain("Microsoft Xiaoxiao · zh-CN · 女性");
       expect(voiceDetails.textContent).toContain("zh-CN-XiaoxiaoNeural");
 
       // Selecting the visible voice switches active voice
@@ -1708,7 +1708,7 @@ describe("EdgeTTS Web Workbench", () => {
       options = await getComboboxOptions(user, voiceSelect);
       expect(options.length).toBe(1); // placeholder gone because Nanami is now visible
       await closeCombobox(user, voiceSelect);
-      expect(voiceDetails.textContent).toContain("Microsoft Nanami · ja-JP · Female");
+      expect(voiceDetails.textContent).toContain("Microsoft Nanami · ja-JP · 女性");
       expect(voiceDetails.textContent).toContain("ja-JP-NanamiNeural");
 
       // Switch back to "all"
@@ -1716,7 +1716,7 @@ describe("EdgeTTS Web Workbench", () => {
       options = await getComboboxOptions(user, voiceSelect);
       expect(options.length).toBe(4);
       await closeCombobox(user, voiceSelect);
-      expect(voiceDetails.textContent).toContain("Microsoft Nanami · ja-JP · Female");
+      expect(voiceDetails.textContent).toContain("Microsoft Nanami · ja-JP · 女性");
     });
 
     it("toggles favorite voice, persists to localStorage, and enables favorite-only filter", async () => {
@@ -2288,7 +2288,7 @@ describe("EdgeTTS Web Workbench", () => {
       }).not.toThrow();
     });
 
-    it("safe clear text requires native confirmation, clears input on confirm, preserves on cancel, and leaves completed audio intact", async () => {
+    it("safe clear text requires themed confirmation, clears input on confirm, preserves on cancel, and leaves completed audio intact", async () => {
       const confirmSpy = vi.spyOn(window, "confirm");
       try {
         const user = userEvent.setup();
@@ -2302,10 +2302,22 @@ describe("EdgeTTS Web Workbench", () => {
         await user.type(textarea, "Text to clear");
         expect(clearBtn.hasAttribute("disabled")).toBe(false);
 
+        // jsdom does not implement dialog's modal methods; browser QA covers focus and Escape.
+        const dialog = document.querySelector("dialog")!;
+        dialog.showModal = () => {
+          dialog.open = true;
+        };
+        dialog.close = () => {
+          dialog.open = false;
+        };
+
         // 1. User cancels confirmation
-        confirmSpy.mockReturnValueOnce(false);
         await user.click(clearBtn);
-        expect(confirmSpy).toHaveBeenCalledWith("确定清空当前文本吗？此操作无法撤销。");
+        expect(screen.getByRole("dialog", { name: "清空当前文本" })).toBeDefined();
+        expect(screen.getByText("确定清空当前文本吗？此操作无法撤销。")).toBeDefined();
+        await user.click(screen.getByRole("button", { name: "取消", exact: true }));
+        expect(dialog.open).toBe(false);
+        expect(confirmSpy).not.toHaveBeenCalled();
         expect(textarea.value).toBe("Text to clear");
 
         // 2. Generate audio to verify clear doesn't destroy completed result
@@ -2313,8 +2325,9 @@ describe("EdgeTTS Web Workbench", () => {
         await screen.findByLabelText(/语音合成播放器/i);
 
         // 3. User confirms clear
-        confirmSpy.mockReturnValueOnce(true);
         await user.click(clearBtn);
+        await user.click(screen.getByRole("button", { name: "确认清空" }));
+        expect(dialog.open).toBe(false);
         expect(textarea.value).toBe("");
         expect(clearBtn.hasAttribute("disabled")).toBe(true);
 
@@ -2348,6 +2361,7 @@ describe("EdgeTTS Web Workbench", () => {
         expect([
           "edgetts.workbench.preferences.v1",
           "edgetts.workbench.favoriteVoices.v1",
+          "edgetts.ui-locale.v1",
         ]).toContain(key);
         const val = window.localStorage.getItem(key)!;
         expect(val).not.toContain("Secret");
@@ -2819,7 +2833,9 @@ describe("EdgeTTS Web Workbench", () => {
       // Enter text so clear and generate buttons become enabled
       fireEvent.change(textarea, { target: { value: "可访问性导航测试" } });
 
-      // Tab into the page
+      // Language switch is the first control in the page header.
+      await user.tab();
+      expect(document.activeElement).toBe(screen.getByRole("combobox", { name: "界面语言" }));
       await user.tab();
       expect(document.activeElement).toBe(screen.getByRole("button", { name: /导入 TXT 文件/i }));
 
@@ -2875,7 +2891,9 @@ describe("EdgeTTS Web Workbench", () => {
 
       const textarea = screen.getByLabelText(/文本内容/i);
 
-      // Tab 1 lands on import
+      // Header language switch precedes the editor controls.
+      await user.tab();
+      expect(document.activeElement).toBe(screen.getByRole("combobox", { name: "界面语言" }));
       await user.tab();
       expect(document.activeElement).toBe(screen.getByRole("button", { name: /导入 TXT 文件/i }));
 

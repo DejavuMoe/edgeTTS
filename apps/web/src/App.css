@@ -419,7 +419,7 @@ body {
 .control-select {
   width: 100%;
   min-width: 0;
-  height: 38px;
+  min-height: 38px;
   padding: 0.5rem 0.75rem;
   font-size: 0.875rem;
   color: var(--text-primary);
@@ -677,6 +677,7 @@ body {
 
 .ui-audio-player {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.75rem;
   flex: 1 1 280px;
@@ -870,7 +871,7 @@ body {
 /* Voice Catalog Discovery & Favorites */
 .voice-filter-row {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr);
   gap: 0.75rem;
   align-items: end;
 }
@@ -897,7 +898,7 @@ body {
   gap: 0.5rem;
   width: 100%;
   min-width: 0;
-  height: 38px;
+  min-height: 38px;
   cursor: pointer;
   text-align: left;
   user-select: none;
@@ -910,9 +911,8 @@ body {
 .ui-select-trigger-label {
   flex: 1;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .ui-select-chevron {
@@ -996,17 +996,15 @@ body {
 .ui-select-option-main {
   font-size: 0.85rem;
   color: var(--text-primary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .ui-select-option-sub {
   font-size: 0.75rem;
   color: var(--text-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .ui-select-check {
@@ -1088,6 +1086,7 @@ body {
 
 .current-voice-details {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
   gap: 0.75rem;
@@ -1104,17 +1103,15 @@ body {
   flex-direction: column;
   gap: 0.15rem;
   min-width: 0;
-  flex: 1 1 auto;
-  overflow: hidden;
+  flex: 1 1 12rem;
 }
 
 .current-voice-title {
   font-size: 0.8rem;
   font-weight: 500;
   color: var(--text-primary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  overflow-wrap: anywhere;
   min-width: 0;
 }
 
@@ -1122,9 +1119,8 @@ body {
   font-size: 0.75rem;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   color: var(--text-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  overflow-wrap: anywhere;
   min-width: 0;
 }
 
@@ -1213,6 +1209,7 @@ body {
   }
 
   .audio-player {
+    flex: 0 1 auto;
     width: 100%;
     min-width: 0;
     max-width: 100%;
@@ -1243,4 +1240,86 @@ body {
   .ui-audio-btn {
     transition: none;
   }
+}
+
+/* Shared controls inherit the same typography and theme in every language. */
+button,
+input,
+textarea {
+  font-family: inherit;
+  line-height: 1.5;
+}
+
+button,
+input[type="search"],
+input[type="password"],
+textarea {
+  appearance: none;
+}
+
+input[type="search"]::-webkit-search-cancel-button,
+input[type="search"]::-webkit-search-decoration {
+  appearance: none;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--text-muted);
+  opacity: 1;
+}
+
+.header-tools {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.language-control {
+  width: 10rem;
+  max-width: 100%;
+}
+
+.control-hint {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  overflow-wrap: anywhere;
+}
+
+.ui-select-menu {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-color) var(--bg-card);
+}
+
+.confirm-dialog {
+  width: min(28rem, calc(100% - 2rem));
+  max-height: calc(100% - 2rem);
+  padding: 1.5rem;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  background: var(--bg-card);
+  color: var(--text-primary);
+  box-shadow: 0 12px 40px rgb(0 0 0 / 20%);
+  overflow-wrap: anywhere;
+}
+
+.confirm-dialog::backdrop {
+  background: rgb(0 0 0 / 45%);
+}
+
+.confirm-dialog p {
+  color: var(--text-secondary);
+}
+
+.dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  justify-content: flex-end;
+}
+
+.dialog-actions .btn {
+  flex: 0 1 auto;
 }
