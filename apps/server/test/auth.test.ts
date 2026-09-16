@@ -321,7 +321,8 @@ describe("Server Authentication Endpoints Integration", () => {
         payload: { model: "tts-1", input: "Hello world", voice: "zh-CN-XiaoxiaoNeural" },
       });
       expect(resOpenAi.statusCode).toBe(200);
-      expect(mockTtsService.synthesize).toHaveBeenCalledTimes(1);
+      expect(mockTtsService.synthesizeSegmented).toHaveBeenCalledTimes(2);
+      expect(mockTtsService.synthesize).not.toHaveBeenCalled();
     });
   });
 
@@ -371,6 +372,7 @@ describe("Server Authentication Endpoints Integration", () => {
       expect(resOpenAi.statusCode).toBe(401);
       expect(resOpenAi.headers["www-authenticate"]).toBe('Bearer realm="edgeTTS"');
       expect(resOpenAi.json()).toEqual(UNAUTHORIZED_ERROR);
+      expect(mockTtsService.synthesizeSegmented).not.toHaveBeenCalled();
       expect(mockTtsService.synthesize).not.toHaveBeenCalled();
     });
 
@@ -441,7 +443,8 @@ describe("Server Authentication Endpoints Integration", () => {
         payload: { model: "tts-1", input: "Hello world", voice: "zh-CN-XiaoxiaoNeural" },
       });
       expect(resOpenAi.statusCode).toBe(200);
-      expect(mockTtsService.synthesize).toHaveBeenCalledTimes(1);
+      expect(mockTtsService.synthesizeSegmented).toHaveBeenCalledTimes(2);
+      expect(mockTtsService.synthesize).not.toHaveBeenCalled();
     });
 
     it("accepts valid API key with case-insensitive scheme ('bearer', 'BEARER')", async () => {
