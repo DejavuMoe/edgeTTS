@@ -8,32 +8,22 @@
 
 English | [简体中文](README.zh-CN.md) | [日本語](README.ja.md)
 
-edgeTTS is a high-performance, self-hosted web service and interactive workbench for Microsoft Edge speech synthesis. It provides a drop-in OpenAI-compatible TTS endpoint, a native streaming API for long documents up to 20,000 code points, and an accessible browser workbench.
+edgeTTS is a self-hosted API and browser workbench for Microsoft Edge speech synthesis. It supports MP3 streaming, voice discovery and long text up to 20,000 Unicode code points.
 
 > [!NOTE]
 > edgeTTS relies on the Microsoft Edge TTS online service. Upstream availability and voice catalogs are maintained by Microsoft. edgeTTS is an independent open-source project and is not affiliated with or endorsed by Microsoft.
+
+> Synthesis sends your text through this server to Microsoft over TLS. edgeTTS does not persist synthesis text or audio; it is not an offline engine. TXT import only reads locally until you request synthesis. Microsoft’s handling of submitted data is outside this project’s control.
 
 ---
 
 ## Key Features
 
-- **Dual Speech API**:
-  - **OpenAI-Compatible Endpoint** (`POST /v1/audio/speech`): Drop-in replacement for OpenAI TTS clients supporting `tts-1` (48 kbps) and `tts-1-hd` (96 kbps), Edge voices, speed adjustment (0.5–2.0), and chunked streaming.
-  - **Native Long-Text Streaming API** (`POST /api/speech`): Synthesize up to 20,000 Unicode code points in a single HTTP request with lossless server-side segmentation, fine prosody controls (`speed`, `pitchSemitones`, `volume`), and segment metadata headers.
-- **Lossless Text Segmentation**:
-  - Deterministic boundary segmentation (`paragraph > line break > sentence punctuation > whitespace > hard cut`) with Unicode code-point precision preserving surrogate pairs and CRLF atomicity. Rejoining chunks reproduces the original text exactly.
-- **Fair Concurrency Control**:
-  - Built-in in-memory FIFO limiter (4 concurrent streams, 16 waiting slots). Long-text sessions hold 1 permit across their full stream to prevent mid-stream interruptions. Client disconnections abort upstream synthesis immediately.
-- **Web Workbench**:
-  - Browser-neutral visual design system ("warm-paper" palette) with custom accessible controls (`Select`, `Slider`, `Checkbox`, `AudioPlayer`).
-  - Searchable voice catalog with locale filtering and favorites pinning.
-  - Local UTF-8 `.txt` file import (up to 256 KiB / 20,000 code points, parsed entirely in the browser).
-  - Progressive `MediaSource` streaming playback with automatic Blob fallback, seek slider, and clean MP3 downloads.
-- **Production Hardened**:
-  - Single-origin architecture: Fastify serves both the frontend SPA and API routes under a single port.
-  - Privacy-first: Zero logging of user synthesis text, no analytics, no external telemetry.
-  - Constant-time API key verification (`Authorization: Bearer <API_KEY>`).
-  - Container security: Non-root user `node`, read-only rootfs, dropped capabilities, and no-new-privileges.
+- **Speech APIs**: `/v1/audio/speech` accepts a subset of the OpenAI speech request format, with Edge voice IDs and MP3 output. `/api/speech` supports long text and speed, pitch and volume controls.
+- **Text segmentation**: Splits at paragraph, line, sentence or whitespace boundaries while preserving Unicode. Whitespace-only segments are skipped during synthesis.
+- **Bounded concurrency**: Four active streams, sixteen FIFO queue slots, and one permit held for each complete long-text request.
+- **Browser workbench**: Four UI languages, voice search and favorites, local TXT import, MP3 playback and download. Streaming uses MediaSource where supported; other browsers wait for a complete Blob.
+- **Simple deployment**: One Fastify process serves the UI and API. Bearer authentication and a hardened container configuration are provided.
 
 ---
 
@@ -61,46 +51,23 @@ services:
       - no-new-privileges:true
     tmpfs:
       - /tmp
-    stop_grace_period: 30s
+    stop_grace_period: 35s
     ports:
       - "127.0.0.1:8080:8080"
     environment:
       - NODE_ENV=production
       - HOST=0.0.0.0
       - PORT=8080
-      - API_KEY=${API_KEY}
+      - API_KEY=${API_KEY:?Set API_KEY in .env}
       - REQUIRE_API_KEY=true
 ```
 
 Generate a secure random API key and start the container:
 
 ```bash
-echo "API_KEY=$(openssl rand -hex 32)" > .env
+(umask 077; printf 'API_KEY=%s\n' "$(openssl rand -hex 32)" > .env)
 docker compose up -d
 ```
-
-### Method B: Single Container (`docker run`)
-
-```bash
-export API_KEY="$(openssl rand -hex 32)"
-
-docker run -d \
-  --name edgetts \
-  --restart unless-stopped \
-  --init \
-  --read-only \
-  --cap-drop=ALL \
-  --security-opt=no-new-privileges \
-  --tmpfs /tmp \
-  --stop-timeout 30 \
-  -p 127.0.0.1:8080:8080 \
-  -e API_KEY="$API_KEY" \
-  -e REQUIRE_API_KEY=true \
-  ghcr.io/dejavumoe/edgetts:0.4.0
-```
-
-> [!IMPORTANT]
-> **Loopback Binding (`127.0.0.1:8080:8080`)**: Binding to `127.0.0.1` ensures the container is accessible only from the local host. For public internet access, place an HTTPS reverse proxy (such as Nginx or Caddy) in front.
 
 ### Verify Deployment
 
@@ -111,6 +78,8 @@ curl -i http://127.0.0.1:8080/health
 Expected response: `HTTP/1.1 200 OK` with `{"status":"ok"}`.
 
 Open `http://127.0.0.1:8080` in your web browser to access the Web Workbench.
+
+Generate `.env` only once and preserve it on upgrades. `/health` confirms the HTTP process, not Microsoft availability. Open `http://127.0.0.1:8080` locally, or your reverse proxy’s HTTPS URL for a remote server, then enter the same API key. Before using the shell API examples, load the locally generated key with `set -a; . ./.env; set +a`. Other deployment methods and upgrades are in the [deployment guide](docs/deployment.md).
 
 ---
 
@@ -130,24 +99,6 @@ curl -X POST http://127.0.0.1:8080/v1/audio/speech \
     "speed": 1.0
   }' \
   --output speech.mp3
-```
-
-#### Official OpenAI Python SDK
-
-```python
-from openai import OpenAI
-
-client = OpenAI(
-    base_url="http://127.0.0.1:8080/v1",
-    api_key="your-secret-api-key",
-)
-
-with client.audio.speech.with_streaming_response.create(
-    model="tts-1",
-    voice="zh-CN-XiaoxiaoNeural",
-    input="Hello from edgeTTS streaming synthesis!",
-) as response:
-    response.stream_to_file("speech.mp3")
 ```
 
 ### Native Long-Text Streaming Synthesis (`POST /api/speech`)

@@ -728,6 +728,10 @@ function Workbench() {
             <span className="shortcut-hint">{t("Ctrl/⌘ + Enter 合成 · Esc 取消")}</span>
           </div>
 
+          <p className="control-hint">
+            {t("合成时，文本会发送至微软在线语音服务；edgeTTS 不保存文本。")}
+          </p>
+
           {importError && (
             <div className="input-warning" role="alert">
               {t(importError)}

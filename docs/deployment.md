@@ -2,6 +2,8 @@
 
 This guide covers self-hosted deployment options for `edgeTTS`, from standalone Docker Compose setups using pre-built images to bare-metal systemd services.
 
+`/health` checks the HTTP process only; it does not contact Microsoft or prove synthesis works. For a remote server, use its HTTPS reverse-proxy URL to open the workbench and enter the same key. The Compose `.env` file is not automatically exported to your shell: before the API examples, run `set -a; . ./.env; set +a` for this locally generated file. Do not regenerate `.env` when restarting or upgrading.
+
 ---
 
 ## Deployment Architectures
@@ -62,14 +64,14 @@ services:
       - no-new-privileges:true
     tmpfs:
       - /tmp
-    stop_grace_period: 30s
+    stop_grace_period: 35s
     ports:
       - "127.0.0.1:8080:8080"
     environment:
       - NODE_ENV=production
       - HOST=0.0.0.0
       - PORT=8080
-      - API_KEY=${API_KEY}
+      - API_KEY=${API_KEY:?Set API_KEY in .env}
       - REQUIRE_API_KEY=true
       - SPEECH_RATE_LIMIT_MAX=12
       - SPEECH_RATE_LIMIT_WINDOW_MS=10000
@@ -83,7 +85,7 @@ services:
 Generate a cryptographically secure random API key (minimum 16 characters):
 
 ```bash
-echo "API_KEY=$(openssl rand -hex 32)" > .env
+(umask 077; printf 'API_KEY=%s\n' "$(openssl rand -hex 32)" > .env)
 chmod 600 .env
 ```
 
@@ -140,7 +142,7 @@ docker run -d \
   --cap-drop=ALL \
   --security-opt=no-new-privileges \
   --tmpfs /tmp \
-  --stop-timeout 30 \
+  --stop-timeout 35 \
   -p 127.0.0.1:8080:8080 \
   -e API_KEY="$API_KEY" \
   -e REQUIRE_API_KEY=true \
@@ -157,7 +159,7 @@ docker run -d \
 | `--security-opt=no-new-privileges` | Prevents privilege escalation inside the container                        |
 | `--tmpfs /tmp`                     | Mounts a memory-backed temporary filesystem for transient operations      |
 | `--init`                           | Uses a lightweight init process (tini) to reap zombies and handle signals |
-| `--stop-timeout 30`                | Allows 30 seconds for active synthesis streams to complete gracefully     |
+| `--stop-timeout 35`                | Allows 30 seconds for active synthesis streams to complete gracefully     |
 
 ---
 
@@ -187,9 +189,10 @@ cd edgeTTS
 
 # 2. Configure environment
 cp .env.example .env
+chmod 600 .env
 
 # 3. Generate a secure API key and insert into .env
-sed -i "s/replace-with-a-random-secret/$(openssl rand -hex 32)/" .env
+sed -i "s/^# API_KEY=.*/API_KEY=$(openssl rand -hex 32)/" .env
 
 # 4. Build image and launch container
 docker compose up -d --build
@@ -203,6 +206,8 @@ The repository `compose.yaml` uses `.env` variables for host port mapping:
 ---
 
 ## Method 4: Bare-Metal Installation (Node.js & Systemd)
+
+Run the `/opt` installation steps as root (or with appropriate `sudo` permissions). Verify `command -v node`; update `ExecStart` if Node is not installed at `/usr/bin/node`. Keep the application tree root-owned; only the service runs as `edgetts`. The root-readable `/etc/edgetts.env` keeps the key out of the public unit file. Generate it once and retain it on upgrades.
 
 For hosts running without container engines:
 
@@ -229,7 +234,8 @@ pnpm build
 
 ```bash
 sudo useradd --system --no-create-home --shell /usr/sbin/nologin edgetts
-sudo chown -R edgetts:edgetts /opt/edgetts
+sudo chown -R root:root /opt/edgetts
+sudo sh -c 'umask 077; printf "API_KEY=%s\n" "$(openssl rand -hex 32)" > /etc/edgetts.env'
 ```
 
 ### 4. Configure Systemd Service
@@ -249,13 +255,14 @@ WorkingDirectory=/opt/edgetts
 ExecStart=/usr/bin/node apps/server/dist/server.js
 Restart=on-failure
 RestartSec=5s
+TimeoutStopSec=35s
 
 # Environment configuration
 Environment=NODE_ENV=production
 Environment=HOST=127.0.0.1
 Environment=PORT=8080
 Environment=REQUIRE_API_KEY=true
-Environment=API_KEY=replace-with-your-generated-secret-key-at-least-16-chars
+EnvironmentFile=/etc/edgetts.env
 
 # Security sandbox
 ProtectSystem=strict
@@ -283,20 +290,13 @@ sudo systemctl status edgetts
 
 ## Upgrades and Maintenance
 
-### Upgrading Docker Compose Deployment
+First change `image:` in `compose.yaml` to the desired published version or digest. `docker compose pull` only pulls the configured reference; it does not advance a pinned `0.4.0` to another version. Keep `.env` and the previous image reference.
 
 ```bash
 cd ~/edgetts
-
-# Pull new image version specified in compose.yaml
-docker compose pull
-
-# Recreate container with zero data loss
-docker compose up -d
+docker compose pull edgetts
+docker compose up -d edgetts
+curl --fail http://127.0.0.1:8080/health
 ```
 
-### Clean Stale Images
-
-```bash
-docker image prune -f
-```
+To roll back, restore the previous image reference and repeat these commands. Source builds instead require checking out the desired revision and running `docker compose up -d --build`. A single instance briefly stops accepting requests during replacement; active streams may be interrupted after the 30-second server drain deadline. Do not promise uninterrupted or millisecond upgrades.

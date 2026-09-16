@@ -2,6 +2,8 @@
 
 This guide details how to configure production reverse proxies (Nginx, Caddy) in front of `edgeTTS`.
 
+This example assumes the proxy runs on the host. Inside a proxy container, `127.0.0.1` refers to that proxy container: attach both services to a private Docker network and use `edgetts:8080` instead. The Nginx example assumes certificates already exist; obtain them before `nginx -t`. The deterministic proxy script requires Docker and may pull images even with upstream live checks disabled.
+
 ---
 
 ## Topology & Core Principles
@@ -187,7 +189,7 @@ edgetts.example.com {
 
 Before exposing the service publicly, verify:
 
-1. **Streaming Playback**: Issue a synthesis request through the proxy. Audio playback should begin within 500ms–1500ms rather than after the full synthesis ends.
+1. **Streaming Playback**: Issue a synthesis request through the proxy. Verify that audio chunks arrive incrementally through the proxy. Startup time depends on the upstream service, queue and browser; no fixed latency is guaranteed.
 2. **Bearer Token Preservation**: Ensure `Authorization: Bearer <API_KEY>` is passed through and returns 401 on incorrect keys.
 3. **Error Status Codes**: Ensure application error JSON bodies (`400`, `401`, `429`, `502`, `503`) reach clients intact without proxy substitution.
 4. **Health Check**: Ensure `GET /health` returns `200` with `{"status":"ok"}`.

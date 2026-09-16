@@ -25,37 +25,35 @@ function createAuthorizationHeaders(apiKey?: string): Record<string, string> {
   return headers;
 }
 
-async function fetchWithTimeout(
+async function fetchWithTimeout<T>(
   input: RequestInfo | URL,
-  init?: RequestInit,
+  init: RequestInit,
+  consume: (response: Response) => Promise<T>,
   timeoutMs = DEFAULT_API_TIMEOUT_MS,
-): Promise<Response> {
+): Promise<T> {
   const controller = new AbortController();
-  const onAbort = () => controller.abort(init?.signal?.reason);
-  if (init?.signal?.aborted) {
-    onAbort();
-  } else {
-    init?.signal?.addEventListener("abort", onAbort, { once: true });
-  }
+  const signal = init.signal
+    ? AbortSignal.any([init.signal, controller.signal])
+    : controller.signal;
   const timer = setTimeout(
     () => controller.abort(new DOMException("Request timed out", "TimeoutError")),
     timeoutMs,
   );
   try {
-    return await fetch(input, { ...init, signal: controller.signal });
+    return await consume(await fetch(input, { ...init, signal }));
   } finally {
     clearTimeout(timer);
-    init?.signal?.removeEventListener("abort", onAbort);
   }
 }
 
 export async function fetchHealth(signal?: AbortSignal): Promise<HealthResponse> {
-  const response = await fetchWithTimeout("/api/health", signal ? { signal } : undefined);
-  if (!response.ok) {
-    throw new ApiHttpError(response.status, `Health check failed with status ${response.status}`);
-  }
-  const data: unknown = await response.json();
-  return HealthResponseSchema.parse(data);
+  return fetchWithTimeout("/api/health", signal ? { signal } : {}, async (response) => {
+    if (!response.ok) {
+      throw new ApiHttpError(response.status, `Health check failed with status ${response.status}`);
+    }
+    const data: unknown = await response.json();
+    return HealthResponseSchema.parse(data);
+  });
 }
 
 export async function fetchVoices(
@@ -63,19 +61,20 @@ export async function fetchVoices(
   signal?: AbortSignal,
 ): Promise<readonly VoiceDto[]> {
   const headers = createAuthorizationHeaders(apiKey);
-  const response = await fetchWithTimeout(
+  return fetchWithTimeout(
     "/api/voices",
     signal ? { headers, signal } : { headers },
+    async (response) => {
+      if (!response.ok) {
+        throw new ApiHttpError(
+          response.status,
+          `Failed to fetch voices with status ${response.status}`,
+        );
+      }
+      const data: unknown = await response.json();
+      return VoicesResponseSchema.parse(data).voices;
+    },
   );
-  if (!response.ok) {
-    throw new ApiHttpError(
-      response.status,
-      `Failed to fetch voices with status ${response.status}`,
-    );
-  }
-  const data: unknown = await response.json();
-  const parsed = VoicesResponseSchema.parse(data);
-  return parsed.voices;
 }
 
 export async function synthesizeSpeech(
@@ -88,12 +87,15 @@ export async function synthesizeSpeech(
     ...createAuthorizationHeaders(apiKey),
   };
 
-  const response = await fetchWithTimeout("/api/speech", {
-    method: "POST",
-    headers,
-    body: JSON.stringify(request),
-    signal,
-  });
-
-  return response;
+  return fetchWithTimeout(
+    "/api/speech",
+    {
+      method: "POST",
+      headers,
+      body: JSON.stringify(request),
+      signal,
+    },
+    async (response) => response,
+    45_000,
+  );
 }

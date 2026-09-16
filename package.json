@@ -10,7 +10,7 @@
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
     "lint": "eslint .",
-    "test": "pnpm -r test",
+    "test": "pnpm -r test && bash scripts/test-release-guard.sh",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },

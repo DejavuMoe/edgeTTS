@@ -35,15 +35,6 @@ export type ApiError = z.infer<typeof ApiErrorSchema>;
 export const MAX_VOICE_ID_LENGTH = 128;
 export const VOICE_ID_REGEX = /^[A-Za-z0-9_-]+$/;
 
-export function isValidVoiceId(voice: unknown): voice is string {
-  return (
-    typeof voice === "string" &&
-    voice.length > 0 &&
-    voice.length <= MAX_VOICE_ID_LENGTH &&
-    VOICE_ID_REGEX.test(voice)
-  );
-}
-
 export const VoiceIdSchema = z
   .string()
   .min(1, "Voice must not be empty")
@@ -75,9 +66,6 @@ export const SpeechRequestSchema = z
   .strict();
 
 export type SpeechRequest = z.infer<typeof SpeechRequestSchema>;
-
-export const OpenAiSpeechRequestSchema = SpeechRequestSchema;
-export type OpenAiSpeechRequest = SpeechRequest;
 
 export const MAX_NATIVE_INPUT_CODE_POINTS = 20_000;
 

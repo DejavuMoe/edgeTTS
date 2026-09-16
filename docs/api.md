@@ -18,7 +18,7 @@ This guide details all HTTP API endpoints, request/response contracts, and clien
 
 ## Authentication
 
-When authentication is enabled (`REQUIRE_API_KEY=true`), requests must include the API key in the standard `Authorization` header:
+When `API_KEY` is configured, requests must include the API key in the standard `Authorization` header:
 
 ```http
 Authorization: Bearer <API_KEY>
@@ -39,7 +39,7 @@ If the key is missing or invalid, the server responds with HTTP `401 Unauthorize
 
 ## 1. OpenAI-Compatible Speech API (`POST /v1/audio/speech`)
 
-This endpoint adheres to the OpenAI Audio Speech API contract, allowing drop-in compatibility with LLM workbench tools, AI agents, and third-party frontend applications.
+This endpoint supports the request fields listed below, not the entire OpenAI API. Use an Edge voice ID from `/api/voices`; built-in OpenAI voice aliases are not mapped. `tts-1` and `tts-1-hd` select 48/96 kbps MP3 output from Edge, not OpenAI models. Unknown fields and other formats are rejected. Clients must allow a custom base URL and Edge voice IDs.
 
 ### Request Body (JSON)
 
@@ -47,7 +47,7 @@ This endpoint adheres to the OpenAI Audio Speech API contract, allowing drop-in 
 | :---------------- | :------- | :------- | :--------------------------------------------------------------------------------------------- |
 | `model`           | `string` | **Yes**  | `"tts-1"` (standard, 48 kbps) or `"tts-1-hd"` (high quality, 96 kbps)                          |
 | `voice`           | `string` | **Yes**  | Edge voice identifier (e.g. `zh-CN-XiaoxiaoNeural`, `en-US-JennyNeural`, `ja-JP-NanamiNeural`) |
-| `input`           | `string` | **Yes**  | Text to synthesize (1–4,096 characters, XML-compatible)                                        |
+| `input`           | `string` | **Yes**  | Text to synthesize (1–4,096 UTF-16 code units, XML-compatible)                                 |
 | `response_format` | `string` | No       | `"mp3"` (default and only supported format)                                                    |
 | `speed`           | `number` | No       | Playback speed from `0.5` to `2.0` (default: `1.0`)                                            |
 
@@ -109,22 +109,6 @@ async function main() {
 
 void main();
 ```
-
-### Third-Party Client Integration
-
-- **NextChat (ChatGPT-Next-Web)**:
-  - Settings -> TTS Settings -> Provider: **OpenAI**.
-  - OpenAI Base URL: `https://edgetts.example.com/v1` (or local `http://127.0.0.1:8080/v1`).
-  - API Key: Your configured `API_KEY`.
-  - Model: `tts-1` or `tts-1-hd`.
-  - Voice: Select or enter an Edge voice ID (e.g., `zh-CN-YunxiNeural`).
-- **One API / New API**:
-  - Add Channel -> Type: **OpenAI**.
-  - Base URL: `http://127.0.0.1:8080`.
-  - Key: Your configured `API_KEY`.
-  - Models: `tts-1`, `tts-1-hd`.
-
----
 
 ## 2. Native Long-Text Streaming API (`POST /api/speech`)
 
@@ -254,3 +238,13 @@ All errors return standard JSON payloads adhering to the `ApiError` schema:
 | `429 Too Many Requests`   | `RATE_LIMITED`    | Exceeded admission rate limit (default 12 requests per 10s per process).                      |
 | `502 Bad Gateway`         | `UPSTREAM_ERROR`  | Upstream Microsoft Edge TTS WebSocket connection failure or synthesis rejection.              |
 | `503 Service Unavailable` | `SERVER_BUSY`     | Synthesis concurrency queue is full (exceeded 4 active + 16 queued requests).                 |
+
+The segmenter preserves the original text, but synthesis skips whitespace-only segments; `X-EdgeTTS-Segment-Count` counts segments actually submitted. The health endpoints only report process liveness. They do not probe Microsoft, validate the voice catalog, or synthesize audio.
+
+JSON errors apply before audio response headers are sent. A later upstream error terminates the audio connection; a prior `200` or segment count does not prove all audio was received. Discard interrupted downloads and retry explicitly. Voice discovery is limited to 60 requests/minute per process; speech queue waits expire after 30 seconds with `503 SERVER_BUSY`.
+
+| HTTP | Code                     |
+| ---- | ------------------------ |
+| 413  | `PAYLOAD_TOO_LARGE`      |
+| 415  | `UNSUPPORTED_MEDIA_TYPE` |
+| 500  | `INTERNAL_ERROR`         |

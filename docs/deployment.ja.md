@@ -2,6 +2,8 @@
 
 このドキュメントでは、GHCR 公式ビルド済みイメージを使用したスタンドアロン Docker Compose 構成から、単一 Docker コンテナの実行、ソースコードからのビルド、および Linux systemd ネイティブサービスに至るまで、`edgeTTS` の各種セルフホストデプロイ方法を解説します。
 
+`/health` は HTTP プロセスのみを確認し、Microsoft への接続や合成成功を検証しません。リモートサーバーでは HTTPS プロキシの URL でワークベンチを開き、同じキーを入力します。Compose の `.env` はシェルへ自動展開されないため、API 例の実行前にローカル生成ファイルに対して `set -a; . ./.env; set +a` を実行します。再起動や更新時に `.env` を再生成しないでください。
+
 ---
 
 ## アーキテクチャとセキュリティ原則
@@ -62,14 +64,14 @@ services:
       - no-new-privileges:true
     tmpfs:
       - /tmp
-    stop_grace_period: 30s
+    stop_grace_period: 35s
     ports:
       - "127.0.0.1:8080:8080"
     environment:
       - NODE_ENV=production
       - HOST=0.0.0.0
       - PORT=8080
-      - API_KEY=${API_KEY}
+      - API_KEY=${API_KEY:?Set API_KEY in .env}
       - REQUIRE_API_KEY=true
       - SPEECH_RATE_LIMIT_MAX=12
       - SPEECH_RATE_LIMIT_WINDOW_MS=10000
@@ -83,7 +85,7 @@ services:
 暗号学的に安全なランダム API キー（16 文字以上、空白文字不可）を生成します：
 
 ```bash
-echo "API_KEY=$(openssl rand -hex 32)" > .env
+(umask 077; printf 'API_KEY=%s\n' "$(openssl rand -hex 32)" > .env)
 chmod 600 .env
 ```
 
@@ -140,7 +142,7 @@ docker run -d \
   --cap-drop=ALL \
   --security-opt=no-new-privileges \
   --tmpfs /tmp \
-  --stop-timeout 30 \
+  --stop-timeout 35 \
   -p 127.0.0.1:8080:8080 \
   -e API_KEY="$API_KEY" \
   -e REQUIRE_API_KEY=true \
@@ -157,7 +159,7 @@ docker run -d \
 | `--security-opt=no-new-privileges` | コンテナ内プロセスの権限昇格（setuid 等）を禁止                      |
 | `--tmpfs /tmp`                     | 一時データ書き込み用にメモリベースの `/tmp` のみを許可               |
 | `--init`                           | 軽量 init プロセス（tini）を使用しゾンビプロセスを確実に回収         |
-| `--stop-timeout 30`                | 停止時に進行中の音声ストリームを正常終了させるため 30 秒猶予を付与   |
+| `--stop-timeout 35`                | サーバーの 30 秒停止期限と終了余裕を含め、35 秒待機                  |
 
 ---
 
@@ -187,9 +189,10 @@ cd edgeTTS
 
 # 2. 環境設定ファイルの準備
 cp .env.example .env
+chmod 600 .env
 
 # 3. API キーの生成と設定
-sed -i "s/replace-with-a-random-secret/$(openssl rand -hex 32)/" .env
+sed -i "s/^# API_KEY=.*/API_KEY=$(openssl rand -hex 32)/" .env
 
 # 4. ビルドと起動
 docker compose up -d --build
@@ -198,6 +201,8 @@ docker compose up -d --build
 ---
 
 ## 方法 4: Linux ベアメタル / Systemd サービス
+
+`/opt` へのインストールは root または適切な sudo 権限で実行してください。`command -v node` でパスを確認し、必要に応じて `ExecStart` を変更します。プログラムは root が所有し、サービスのみ `edgetts` で実行します。キーは公開ユニットに書かず、root のみ読み取れる `/etc/edgetts.env` に初回だけ生成し、更新時は保持します。
 
 コンテナ環境を利用しない Linux サーバー向けの構成：
 
@@ -224,7 +229,8 @@ pnpm build
 
 ```bash
 sudo useradd --system --no-create-home --shell /usr/sbin/nologin edgetts
-sudo chown -R edgetts:edgetts /opt/edgetts
+sudo chown -R root:root /opt/edgetts
+sudo sh -c 'umask 077; printf "API_KEY=%s\n" "$(openssl rand -hex 32)" > /etc/edgetts.env'
 ```
 
 ### 4. Systemd ユニットファイルの作成
@@ -244,13 +250,14 @@ WorkingDirectory=/opt/edgetts
 ExecStart=/usr/bin/node apps/server/dist/server.js
 Restart=on-failure
 RestartSec=5s
+TimeoutStopSec=35s
 
 # 環境変数
 Environment=NODE_ENV=production
 Environment=HOST=127.0.0.1
 Environment=PORT=8080
 Environment=REQUIRE_API_KEY=true
-Environment=API_KEY=16文字以上の安全なランダムキーを指定してください
+EnvironmentFile=/etc/edgetts.env
 
 # セキュリティサンドボックス
 ProtectSystem=strict
@@ -278,20 +285,13 @@ sudo systemctl status edgetts
 
 ## アップグレードと保守
 
-### Docker Compose の更新
+最初に `compose.yaml` の `image:` を目的の公開バージョンまたはダイジェストへ変更します。`docker compose pull` は設定された参照だけを取得し、固定された `0.4.0` を別バージョンへ自動更新しません。`.env` と以前のイメージ参照を保持してください。
 
 ```bash
 cd ~/edgetts
-
-# 最新イメージを取得
-docker compose pull
-
-# コンテナを再生成
-docker compose up -d
+docker compose pull edgetts
+docker compose up -d edgetts
+curl --fail http://127.0.0.1:8080/health
 ```
 
-### 不要イメージの削除
-
-```bash
-docker image prune -f
-```
+ロールバックは以前のイメージ参照に戻し、同じコマンドを実行します。ソースビルドの場合は目的のリビジョンに切り替えて `docker compose up -d --build` を実行します。単一インスタンスの交換中は新規接続が一時停止し、進行中の音声もサーバーの 30 秒停止期限で切断される場合があります。無停止やミリ秒での更新は保証しません。
