@@ -9,7 +9,7 @@ import type { SynthesisRequest, TtsAudioFormat, TtsProsody } from "@edgetts/tts-
 import { SynthesisQueueFullError } from "@edgetts/tts-service";
 import type { TtsServicePort } from "../dependencies.js";
 
-export const NATIVE_SEGMENT_CODE_POINTS = 300;
+export const SPEECH_SEGMENT_CODE_POINTS = 300;
 
 export interface SpeechRoutesOptions {
   readonly rateLimiter?: preHandlerAsyncHookHandler | preHandlerHookHandler | undefined;
@@ -94,7 +94,9 @@ export function createSpeechRoutes(
         };
 
         try {
-          const result = await ttsService.synthesize(domainRequest, controller.signal);
+          const result = await ttsService.synthesizeSegmented(domainRequest, controller.signal, {
+            maxSegmentCodePoints: SPEECH_SEGMENT_CODE_POINTS,
+          });
 
           const audioStream = Readable.from(result.audio);
           audioStream.on("error", (err: unknown) => {
@@ -213,7 +215,7 @@ export function createSpeechRoutes(
 
         try {
           const result = await ttsService.synthesizeSegmented(domainRequest, controller.signal, {
-            maxSegmentCodePoints: NATIVE_SEGMENT_CODE_POINTS,
+            maxSegmentCodePoints: SPEECH_SEGMENT_CODE_POINTS,
           });
 
           const audioStream = Readable.from(result.audio);
@@ -230,7 +232,7 @@ export function createSpeechRoutes(
             .header("Content-Type", "audio/mpeg")
             .header("Cache-Control", "no-store")
             .header("X-EdgeTTS-Segment-Count", String(result.segmentCount))
-            .header("X-EdgeTTS-Segment-Max-Code-Points", String(NATIVE_SEGMENT_CODE_POINTS))
+            .header("X-EdgeTTS-Segment-Max-Code-Points", String(SPEECH_SEGMENT_CODE_POINTS))
             .send(audioStream);
         } catch (error) {
           cleanup();

@@ -51,7 +51,7 @@ Create a `compose.yaml` file with the following configuration:
 ```yaml
 services:
   edgetts:
-    image: ghcr.io/dejavumoe/edgetts:0.3.0
+    image: ghcr.io/dejavumoe/edgetts:0.4.0
     container_name: edgetts
     restart: unless-stopped
     init: true
@@ -144,7 +144,7 @@ docker run -d \
   -p 127.0.0.1:8080:8080 \
   -e API_KEY="$API_KEY" \
   -e REQUIRE_API_KEY=true \
-  ghcr.io/dejavumoe/edgetts:0.3.0
+  ghcr.io/dejavumoe/edgetts:0.4.0
 ```
 
 ### Security Flags Explained
@@ -167,7 +167,7 @@ Official multi-architecture images support `linux/amd64` and `linux/arm64`.
 
 | Image Tag                                   | Description                                 | Use Case                                  |
 | :------------------------------------------ | :------------------------------------------ | :---------------------------------------- |
-| `ghcr.io/dejavumoe/edgetts:0.3.0`           | Exact stable SemVer release                 | Production standard                       |
+| `ghcr.io/dejavumoe/edgetts:0.4.0`           | Exact stable SemVer release                 | Production standard                       |
 | `ghcr.io/dejavumoe/edgetts:latest`          | Tracks the highest published stable release | Automatic update environments             |
 | `ghcr.io/dejavumoe/edgetts:main`            | Continuous snapshot built from `main`       | Testing latest fixes                      |
 | `ghcr.io/dejavumoe/edgetts@sha256:<digest>` | Content-addressed immutable image           | Mission-critical reproducible deployments |

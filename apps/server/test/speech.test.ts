@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach } from "vitest";
 import type { FastifyInstance } from "fastify";
 import type { SynthesisRequest, SynthesisResult, TtsProvider, TtsVoice } from "@edgetts/tts-core";
-import { ApiErrorSchema } from "@edgetts/shared";
+import { ApiErrorSchema, countCodePoints } from "@edgetts/shared";
 import {
   segmentText,
   SynthesisQueueFullError,
@@ -132,7 +132,7 @@ describe("POST /v1/audio/speech", () => {
     expect(response.headers["cache-control"]).toBe("no-store");
     expect(response.headers["content-length"]).toBeUndefined();
     expect(response.headers["content-disposition"]).toBeUndefined();
-    expect(fakeService.synthesizeCalls).toBe(1);
+    expect(fakeService.synthesizeSegmentedCalls).toBe(1);
 
     const expectedBytes = Buffer.concat([
       Buffer.from([0x00, 0x01, 0x7f, 0x80, 0xff]),
@@ -157,7 +157,7 @@ describe("POST /v1/audio/speech", () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(fakeService.lastSynthesisRequest?.format).toBe("mp3-48k");
+    expect(fakeService.lastSegmentedRequest?.format).toBe("mp3-48k");
   });
 
   it("maps model tts-1-hd to mp3-96k format", async () => {
@@ -176,7 +176,7 @@ describe("POST /v1/audio/speech", () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(fakeService.lastSynthesisRequest?.format).toBe("mp3-96k");
+    expect(fakeService.lastSegmentedRequest?.format).toBe("mp3-96k");
   });
 
   it("preserves voice and input verbatim without trimming input", async () => {
@@ -195,8 +195,8 @@ describe("POST /v1/audio/speech", () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(fakeService.lastSynthesisRequest?.voice).toBe("en-US-JennyNeural");
-    expect(fakeService.lastSynthesisRequest?.text).toBe("   Hello World!   ");
+    expect(fakeService.lastSegmentedRequest?.voice).toBe("en-US-JennyNeural");
+    expect(fakeService.lastSegmentedRequest?.text).toBe("   Hello World!   ");
   });
 
   it("maps speed correctly to domain prosody", async () => {
@@ -216,7 +216,7 @@ describe("POST /v1/audio/speech", () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(fakeService.lastSynthesisRequest?.prosody).toEqual({ speed: 1.25 });
+    expect(fakeService.lastSegmentedRequest?.prosody).toEqual({ speed: 1.25 });
   });
 
   it("omits domain prosody when speed is omitted in request", async () => {
@@ -235,7 +235,68 @@ describe("POST /v1/audio/speech", () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(fakeService.lastSynthesisRequest?.prosody).toBeUndefined();
+    expect(fakeService.lastSegmentedRequest?.prosody).toBeUndefined();
+  });
+
+  it("segments 3,000 continuous Chinese code points into 10 bounded calls through the real service", async () => {
+    class SegmentedRecordingProvider implements TtsProvider {
+      public readonly requests: SynthesisRequest[] = [];
+
+      async listVoices(): Promise<readonly TtsVoice[]> {
+        return [];
+      }
+
+      async synthesize(request: SynthesisRequest): Promise<SynthesisResult> {
+        const segmentIndex = this.requests.length;
+        this.requests.push(request);
+        return {
+          format: "mp3-96k",
+          contentType: "audio/mpeg",
+          audio: (async function* () {
+            yield new Uint8Array([0x40 + segmentIndex, segmentIndex]);
+            yield new Uint8Array([0x60 + segmentIndex]);
+          })(),
+        };
+      }
+    }
+
+    const provider = new SegmentedRecordingProvider();
+    app = createApp({ ttsService: new TtsService(provider) });
+
+    const input = "汉".repeat(3000);
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/audio/speech",
+      headers: { "content-type": "application/json" },
+      payload: {
+        model: "tts-1-hd",
+        voice: "zh-CN-XiaoxiaoNeural",
+        input,
+        speed: 1.25,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers["content-type"]).toContain("audio/mpeg");
+    expect(response.headers["x-edgetts-segment-count"]).toBeUndefined();
+    expect(response.headers["x-edgetts-segment-max-code-points"]).toBeUndefined();
+
+    expect(provider.requests).toHaveLength(10);
+    const segmentTexts = provider.requests.map((request) => request.text);
+    expect(segmentTexts.join("")).toBe(input);
+    for (const segmentText of segmentTexts) {
+      expect(countCodePoints(segmentText)).toBe(300);
+    }
+    for (const request of provider.requests) {
+      expect(request.voice).toBe("zh-CN-XiaoxiaoNeural");
+      expect(request.format).toBe("mp3-96k");
+      expect(request.prosody).toEqual({ speed: 1.25 });
+    }
+
+    const expectedAudio = Buffer.concat(
+      provider.requests.map((_request, index) => Buffer.from([0x40 + index, index, 0x60 + index])),
+    );
+    expect(response.rawPayload).toEqual(expectedAudio);
   });
 
   it("accepts response_format mp3 and omitted response_format", async () => {
@@ -286,7 +347,7 @@ describe("POST /v1/audio/speech", () => {
       });
     }
 
-    expect(fakeService.synthesizeCalls).toBe(0);
+    expect(fakeService.synthesizeSegmentedCalls).toBe(0);
   });
 
   it("rejects unsupported models with HTTP 400 INVALID_REQUEST", async () => {
@@ -317,7 +378,7 @@ describe("POST /v1/audio/speech", () => {
       });
     }
 
-    expect(fakeService.synthesizeCalls).toBe(0);
+    expect(fakeService.synthesizeSegmentedCalls).toBe(0);
   });
 
   it("rejects missing, empty, or whitespace-only input with HTTP 400", async () => {
@@ -347,7 +408,7 @@ describe("POST /v1/audio/speech", () => {
       expect(parsed.error.code).toBe("INVALID_REQUEST");
     }
 
-    expect(fakeService.synthesizeCalls).toBe(0);
+    expect(fakeService.synthesizeSegmentedCalls).toBe(0);
   });
 
   it("accepts input up to 4096 characters and rejects 4097 characters", async () => {
@@ -399,7 +460,7 @@ describe("POST /v1/audio/speech", () => {
     });
 
     expect(response.statusCode).toBe(400);
-    expect(fakeService.synthesizeCalls).toBe(0);
+    expect(fakeService.synthesizeSegmentedCalls).toBe(0);
   });
 
   it("rejects missing, empty, or whitespace-only voice with HTTP 400", async () => {
@@ -429,7 +490,7 @@ describe("POST /v1/audio/speech", () => {
       expect(parsed.error.code).toBe("INVALID_REQUEST");
     }
 
-    expect(fakeService.synthesizeCalls).toBe(0);
+    expect(fakeService.synthesizeSegmentedCalls).toBe(0);
   });
 
   it("rejects invalid voice format and SSML injection in /v1/audio/speech with HTTP 400 (SEC-01)", async () => {
@@ -462,7 +523,7 @@ describe("POST /v1/audio/speech", () => {
       expect(parsed.error.code).toBe("INVALID_REQUEST");
     }
 
-    expect(fakeService.synthesizeCalls).toBe(0);
+    expect(fakeService.synthesizeSegmentedCalls).toBe(0);
   });
 
   it("validates speed boundary: accepts 0.5, 1, 2 and rejects 0.49, 2.01", async () => {
@@ -547,7 +608,7 @@ describe("POST /v1/audio/speech", () => {
       expect(parsed.error.message).toBe("Invalid speech request");
     }
 
-    expect(fakeService.synthesizeCalls).toBe(0);
+    expect(fakeService.synthesizeSegmentedCalls).toBe(0);
   });
 
   it("returns HTTP 502 UPSTREAM_ERROR when service pre-stream rejects and hides internal error", async () => {
@@ -579,6 +640,8 @@ describe("POST /v1/audio/speech", () => {
 
     expect(response.body).not.toContain("secret upstream detail");
     expect(response.body).not.toContain("token=xyz123");
+    expect(fakeService.synthesizeSegmentedCalls).toBe(1);
+    expect(fakeService.synthesizeCalls).toBe(0);
   });
 
   it("returns HTTP 503 SERVER_BUSY when service throws SynthesisQueueFullError", async () => {
@@ -607,6 +670,8 @@ describe("POST /v1/audio/speech", () => {
         message: "Speech synthesis capacity is full",
       },
     });
+    expect(fakeService.synthesizeSegmentedCalls).toBe(1);
+    expect(fakeService.synthesizeCalls).toBe(0);
   });
 
   it("rejects concurrency request parameter with HTTP 400 INVALID_REQUEST", async () => {
@@ -628,7 +693,7 @@ describe("POST /v1/audio/speech", () => {
     expect(response.statusCode).toBe(400);
     const parsed = ApiErrorSchema.parse(response.json());
     expect(parsed.error.code).toBe("INVALID_REQUEST");
-    expect(fakeService.synthesizeCalls).toBe(0);
+    expect(fakeService.synthesizeSegmentedCalls).toBe(0);
   });
 
   it("verifies health and voices regressions are unaffected", async () => {
@@ -641,7 +706,7 @@ describe("POST /v1/audio/speech", () => {
     });
     expect(healthRes.statusCode).toBe(200);
     expect(fakeService.listVoicesCalls).toBe(0);
-    expect(fakeService.synthesizeCalls).toBe(0);
+    expect(fakeService.synthesizeSegmentedCalls).toBe(0);
 
     const voicesRes = await app.inject({
       method: "GET",
@@ -649,7 +714,7 @@ describe("POST /v1/audio/speech", () => {
     });
     expect(voicesRes.statusCode).toBe(200);
     expect(fakeService.listVoicesCalls).toBe(1);
-    expect(fakeService.synthesizeCalls).toBe(0);
+    expect(fakeService.synthesizeSegmentedCalls).toBe(0);
   });
 });
 
@@ -671,7 +736,7 @@ describe("Deterministic Streaming & Disconnect Integration Tests (localhost)", (
     let secondChunkReleased = false;
 
     const fakeService = new FakeSpeechTtsService();
-    fakeService.customSynthesize = async (request) => {
+    fakeService.customSynthesizeSegmented = async (request) => {
       async function* streamGenerator(): AsyncIterable<Uint8Array> {
         yield new Uint8Array([10, 20, 30]);
         await secondChunkPromise;
@@ -682,6 +747,7 @@ describe("Deterministic Streaming & Disconnect Integration Tests (localhost)", (
       return {
         format: request.format ?? "mp3-48k",
         contentType: "audio/mpeg",
+        segmentCount: 1,
         audio: streamGenerator(),
       };
     };
@@ -738,7 +804,7 @@ describe("Deterministic Streaming & Disconnect Integration Tests (localhost)", (
     });
 
     const fakeService = new FakeSpeechTtsService();
-    fakeService.customSynthesize = async (request) => {
+    fakeService.customSynthesizeSegmented = async (request) => {
       async function* streamGenerator(): AsyncIterable<Uint8Array> {
         yield new Uint8Array([1, 2, 3]);
         // Hang until unblocked or aborted
@@ -749,6 +815,7 @@ describe("Deterministic Streaming & Disconnect Integration Tests (localhost)", (
       return {
         format: request.format ?? "mp3-48k",
         contentType: "audio/mpeg",
+        segmentCount: 1,
         audio: streamGenerator(),
       };
     };
@@ -899,6 +966,103 @@ describe("Deterministic Streaming & Disconnect Integration Tests (localhost)", (
     expect(chunkB.value).toEqual(new Uint8Array([5, 6]));
 
     provider.blockedStreamResolver();
+  });
+
+  it("stops remaining segments and releases the permit when a segmented compatibility request disconnects", async () => {
+    class SegmentedPermitProvider implements TtsProvider {
+      public readonly calls: string[] = [];
+      public releaseFirstStream: () => void = () => {};
+
+      async listVoices(): Promise<readonly TtsVoice[]> {
+        return [];
+      }
+
+      async synthesize(request: SynthesisRequest): Promise<SynthesisResult> {
+        const callIndex = this.calls.length;
+        this.calls.push(request.text);
+        if (callIndex === 0) {
+          const blocked = new Promise<void>((resolve) => {
+            this.releaseFirstStream = resolve;
+          });
+          return {
+            format: "mp3-48k",
+            contentType: "audio/mpeg",
+            audio: (async function* () {
+              yield new Uint8Array([1, 2]);
+              await blocked;
+              yield new Uint8Array([3, 4]);
+            })(),
+          };
+        }
+        return {
+          format: "mp3-48k",
+          contentType: "audio/mpeg",
+          audio: (async function* () {
+            yield new Uint8Array([5, 6]);
+          })(),
+        };
+      }
+    }
+
+    const longInput = "汉".repeat(600);
+    const provider = new SegmentedPermitProvider();
+    const service = new TtsService(provider, {
+      maxConcurrentSyntheses: 1,
+      maxQueuedSyntheses: 5,
+    });
+
+    app = createApp({ ttsService: service });
+    await app.listen({ host: "127.0.0.1", port: 0 });
+    const address = app.addresses()[0]!;
+    const baseUrl = `http://127.0.0.1:${address.port}`;
+    const clientAController = new AbortController();
+
+    const resA = await fetch(`${baseUrl}/v1/audio/speech`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        model: "tts-1",
+        voice: "zh-CN-XiaoxiaoNeural",
+        input: longInput,
+      }),
+      signal: clientAController.signal,
+    });
+
+    expect(resA.status).toBe(200);
+    const readerA = resA.body!.getReader();
+    const chunkA = await readerA.read();
+    expect(chunkA.done).toBe(false);
+    expect(provider.calls).toHaveLength(1);
+    expect(provider.calls[0]).toBe(longInput.slice(0, 300));
+
+    const resBPromise = fetch(`${baseUrl}/v1/audio/speech`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        model: "tts-1",
+        voice: "zh-CN-XiaoxiaoNeural",
+        input: "B",
+      }),
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(provider.calls).toHaveLength(1);
+
+    clientAController.abort();
+    await readerA.cancel().catch(() => {});
+
+    const resB = await resBPromise;
+    expect(resB.status).toBe(200);
+    expect(provider.calls).toHaveLength(2);
+    expect(provider.calls[1]).toBe("B");
+
+    const readerB = resB.body!.getReader();
+    const chunkB = await readerB.read();
+    expect(chunkB.value).toEqual(new Uint8Array([5, 6]));
+    const doneB = await readerB.read();
+    expect(doneB.done).toBe(true);
+
+    provider.releaseFirstStream();
   });
 });
 
@@ -1274,8 +1438,8 @@ describe("POST /api/speech", () => {
       },
     });
     expect(res4096.statusCode).toBe(200);
-    expect(fakeService.synthesizeCalls).toBe(1);
-    expect(fakeService.synthesizeSegmentedCalls).toBe(0);
+    expect(fakeService.synthesizeSegmentedCalls).toBe(1);
+    expect(fakeService.synthesizeCalls).toBe(0);
 
     // 4097 characters rejected on /v1
     const res4097 = await app.inject({

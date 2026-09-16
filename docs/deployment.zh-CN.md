@@ -51,7 +51,7 @@ mkdir -p ~/edgetts && cd ~/edgetts
 ```yaml
 services:
   edgetts:
-    image: ghcr.io/dejavumoe/edgetts:0.3.0
+    image: ghcr.io/dejavumoe/edgetts:0.4.0
     container_name: edgetts
     restart: unless-stopped
     init: true
@@ -144,7 +144,7 @@ docker run -d \
   -p 127.0.0.1:8080:8080 \
   -e API_KEY="$API_KEY" \
   -e REQUIRE_API_KEY=true \
-  ghcr.io/dejavumoe/edgetts:0.3.0
+  ghcr.io/dejavumoe/edgetts:0.4.0
 ```
 
 ### 安全参数说明
@@ -167,7 +167,7 @@ docker run -d \
 
 | 镜像标签                                    | 描述                               | 适用场景                 |
 | :------------------------------------------ | :--------------------------------- | :----------------------- |
-| `ghcr.io/dejavumoe/edgetts:0.3.0`           | 严格语义化版本发布标签             | 生产环境常规部署         |
+| `ghcr.io/dejavumoe/edgetts:0.4.0`           | 严格语义化版本发布标签             | 生产环境常规部署         |
 | `ghcr.io/dejavumoe/edgetts:latest`          | 始终指向最新稳定发布版本           | 自动化环境跟踪           |
 | `ghcr.io/dejavumoe/edgetts:main`            | 跟踪 `main` 分支最新构建的代码快照 | 测试最新特性或缺陷修复   |
 | `ghcr.io/dejavumoe/edgetts@sha256:<digest>` | 基于内容寻址的不可变镜像摘要       | 严格可复现的生产基线锁定 |

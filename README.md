@@ -50,7 +50,7 @@ mkdir -p ~/edgetts && cd ~/edgetts
 ```yaml
 services:
   edgetts:
-    image: ghcr.io/dejavumoe/edgetts:0.3.0
+    image: ghcr.io/dejavumoe/edgetts:0.4.0
     container_name: edgetts
     restart: unless-stopped
     init: true
@@ -96,7 +96,7 @@ docker run -d \
   -p 127.0.0.1:8080:8080 \
   -e API_KEY="$API_KEY" \
   -e REQUIRE_API_KEY=true \
-  ghcr.io/dejavumoe/edgetts:0.3.0
+  ghcr.io/dejavumoe/edgetts:0.4.0
 ```
 
 > [!IMPORTANT]

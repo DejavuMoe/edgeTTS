@@ -51,7 +51,7 @@ mkdir -p ~/edgetts && cd ~/edgetts
 ```yaml
 services:
   edgetts:
-    image: ghcr.io/dejavumoe/edgetts:0.3.0
+    image: ghcr.io/dejavumoe/edgetts:0.4.0
     container_name: edgetts
     restart: unless-stopped
     init: true
@@ -144,7 +144,7 @@ docker run -d \
   -p 127.0.0.1:8080:8080 \
   -e API_KEY="$API_KEY" \
   -e REQUIRE_API_KEY=true \
-  ghcr.io/dejavumoe/edgetts:0.3.0
+  ghcr.io/dejavumoe/edgetts:0.4.0
 ```
 
 ### セキュリティパラメータの説明
@@ -167,7 +167,7 @@ docker run -d \
 
 | タグ                                        | 説明                                         | 推奨用途                     |
 | :------------------------------------------ | :------------------------------------------- | :--------------------------- |
-| `ghcr.io/dejavumoe/edgetts:0.3.0`           | 厳格な SemVer リリースタグ                   | 本番環境の通常デプロイ       |
+| `ghcr.io/dejavumoe/edgetts:0.4.0`           | 厳格な SemVer リリースタグ                   | 本番環境の通常デプロイ       |
 | `ghcr.io/dejavumoe/edgetts:latest`          | 公開された最新の安定リリース                 | 自動更新環境                 |
 | `ghcr.io/dejavumoe/edgetts:main`            | `main` ブランチの最新ビルドスナップショット  | 最新機能のテスト             |
 | `ghcr.io/dejavumoe/edgetts@sha256:<digest>` | コンテンツアドレス指定による不変ダイジェスト | 厳格な再現性を求める本番環境 |
