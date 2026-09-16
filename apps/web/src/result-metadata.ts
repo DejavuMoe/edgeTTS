@@ -1,3 +1,4 @@
+import { translate, type UiLocale } from "./i18n.js";
 import { formatAudioBytes } from "./synthesis-telemetry.js";
 
 export interface CompletedResultMeta {
@@ -78,23 +79,26 @@ export function createCompletedResultMeta(
   };
 }
 
-export function formatResultMetadataDisplay(meta: CompletedResultMeta): string {
-  const qualityText = meta.quality === "high" ? "高品质" : "标准";
+export function formatResultMetadataDisplay(
+  meta: CompletedResultMeta,
+  locale: UiLocale = "zh-CN",
+): string {
+  const qualityText = translate(meta.quality === "high" ? "高品质" : "标准", locale);
   const speedText = `${meta.speed.toFixed(2)}×`;
   const parts: string[] = [meta.voiceDisplayName, meta.voiceId, qualityText, speedText];
 
   if (meta.pitchSemitones !== 0) {
     const pitchSign =
       meta.pitchSemitones > 0 ? `+${meta.pitchSemitones}` : `${meta.pitchSemitones}`;
-    parts.push(`${pitchSign}半音`);
+    parts.push(translate("{value}半音", locale, { value: pitchSign }));
   }
 
   if (meta.volume !== 1.0) {
-    parts.push(`${Math.round(meta.volume * 100)}%音量`);
+    parts.push(translate("{value}%音量", locale, { value: Math.round(meta.volume * 100) }));
   }
 
   if (meta.segmentCount !== undefined && meta.segmentCount !== null && meta.segmentCount > 0) {
-    parts.push(`${meta.segmentCount} 段`);
+    parts.push(translate("{count} 段", locale, { count: meta.segmentCount }));
   }
 
   if (meta.audioBytes !== undefined && meta.audioBytes !== null && meta.audioBytes >= 0) {

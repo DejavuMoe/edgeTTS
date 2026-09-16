@@ -1,3 +1,4 @@
+import { translate, type UiLocale } from "./i18n.js";
 /**
  * Telemetry and metadata utilities for EdgeTTS speech synthesis.
  */
@@ -107,18 +108,21 @@ export function formatAudioBytes(bytes: number): string {
 /**
  * Formats user-facing status indicator text during synthesis.
  */
-export function formatGeneratingStatusText(telemetry: {
-  readonly phase: "requesting" | "streaming";
-  readonly segmentCount: number | null;
-  readonly bytesReceived: number;
-}): string {
+export function formatGeneratingStatusText(
+  telemetry: {
+    readonly phase: "requesting" | "streaming";
+    readonly segmentCount: number | null;
+    readonly bytesReceived: number;
+  },
+  locale: UiLocale = "zh-CN",
+): string {
   if (telemetry.phase === "requesting") {
-    return "正在等待语音服务…";
+    return translate("正在等待语音服务…", locale);
   }
 
-  const parts: string[] = ["正在流式接收音频"];
+  const parts: string[] = [translate("正在流式接收音频", locale)];
   if (telemetry.segmentCount !== null && telemetry.segmentCount > 0) {
-    parts.push(`共 ${telemetry.segmentCount} 段`);
+    parts.push(translate("共 {count} 段", locale, { count: telemetry.segmentCount }));
   }
   if (telemetry.bytesReceived > 0) {
     parts.push(formatAudioBytes(telemetry.bytesReceived));

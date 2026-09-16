@@ -1,3 +1,4 @@
+import { useI18n } from "../i18n.js";
 import React from "react";
 
 export interface SliderProps {
@@ -27,10 +28,11 @@ export function Slider({
   onChange,
   onReset,
   isDefault = false,
-  resetAriaLabel = "重置",
+  resetAriaLabel,
   disabled = false,
   className = "",
 }: SliderProps) {
+  const { t } = useI18n();
   const percentage = Math.max(0, Math.min(100, ((value - min) / (max - min || 1)) * 100));
 
   return (
@@ -46,9 +48,9 @@ export function Slider({
             className="btn-reset"
             onClick={onReset}
             disabled={disabled || isDefault}
-            aria-label={resetAriaLabel}
+            aria-label={resetAriaLabel ?? t("重置")}
           >
-            重置
+            {t("重置")}
           </button>
         )}
       </div>

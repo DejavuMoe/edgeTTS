@@ -1,3 +1,4 @@
+import { useI18n } from "../i18n.js";
 import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
@@ -40,12 +41,13 @@ export function Select({
   onChange,
   options,
   groups,
-  placeholder = "请选择...",
+  placeholder,
   disabled = false,
   className = "",
   "aria-label": ariaLabel,
   "aria-labelledby": ariaLabelledBy,
 }: SelectProps) {
+  const { t } = useI18n();
   const generatedId = useId();
   const triggerId = explicitId || generatedId;
   const listboxId = `${triggerId}-listbox`;
@@ -241,7 +243,7 @@ export function Select({
     }
   };
 
-  const displayLabel = activeOption ? activeOption.label : placeholder;
+  const displayLabel = activeOption ? activeOption.label : (placeholder ?? t("请选择..."));
 
   return (
     <div className={`ui-select-container ${className}`}>
@@ -300,7 +302,7 @@ export function Select({
               maxHeight: `${dropdownPos.maxHeight}px`,
               zIndex: 9999,
             }}
-            aria-label={ariaLabel || "Options"}
+            aria-label={ariaLabel || t("选项")}
             aria-activedescendant={
               focusedIndex >= 0 && flatOptions[focusedIndex]
                 ? `${listboxId}-opt-${flatOptions[focusedIndex].value || focusedIndex}`

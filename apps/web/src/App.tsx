@@ -21,6 +21,7 @@ import {
 } from "./result-metadata.js";
 import {
   getLocaleOptions,
+  formatVoiceGender,
   filterVoices,
   getGroupedVoices,
   isVoiceVisible,
@@ -38,6 +39,7 @@ import {
   formatGeneratingStatusText,
 } from "./synthesis-telemetry.js";
 import { Select, Checkbox, Slider, AudioPlayer } from "./ui/index.js";
+import { I18nProvider, useI18n, LANGUAGE_OPTIONS, type MessageKey, type UiLocale } from "./i18n.js";
 import "./App.css";
 
 type ApiStatus = "loading" | "healthy" | "unavailable";
@@ -49,6 +51,16 @@ export function isValidApiKeyFormat(key: string): boolean {
 }
 
 export function App() {
+  return (
+    <I18nProvider>
+      <Workbench />
+    </I18nProvider>
+  );
+}
+
+function Workbench() {
+  const { locale, setLocale, t } = useI18n();
+  const clearDialogRef = useRef<HTMLDialogElement>(null);
   // Synchronous preference hydration on initial render
   const [initialPreferences] = useState<WorkbenchPreferencesV1>(() => loadWorkbenchPreferences());
   const savedVoiceIdRef = useRef<string>(initialPreferences.voiceId);
@@ -65,13 +77,13 @@ export function App() {
   const [voiceSearch, setVoiceSearch] = useState<string>("");
   const [selectedLocale, setSelectedLocale] = useState<string>("all");
   const [favoriteOnly, setFavoriteOnly] = useState<boolean>(false);
-  const [voiceError, setVoiceError] = useState<string | null>(null);
+  const [voiceError, setVoiceError] = useState<MessageKey | null>(null);
 
   // In-memory authentication state (never persisted to storage)
   const apiKeyRef = useRef<string | null>(null);
   const [authRequired, setAuthRequired] = useState<boolean>(false);
   const [authKeyInput, setAuthKeyInput] = useState<string>("");
-  const [authError, setAuthError] = useState<string | null>(null);
+  const [authError, setAuthError] = useState<MessageKey | null>(null);
   const [isUnlocking, setIsUnlocking] = useState<boolean>(false);
 
   // Form controls initialized from persisted preferences
@@ -83,14 +95,14 @@ export function App() {
 
   // Generation & Playback state
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
-  const [generationError, setGenerationError] = useState<string | null>(null);
+  const [generationError, setGenerationError] = useState<MessageKey | null>(null);
   const [audioSrc, setAudioSrc] = useState<string | null>(null);
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
   const [completedResult, setCompletedResult] = useState<CompletedResultMeta | null>(null);
   const [telemetry, setTelemetry] = useState<GenerationTelemetryState | null>(null);
 
   // Local file import & editor state
-  const [importError, setImportError] = useState<string | null>(null);
+  const [importError, setImportError] = useState<MessageKey | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const importGenerationIdRef = useRef<number>(0);
   const isMountedRef = useRef<boolean>(false);
@@ -133,7 +145,7 @@ export function App() {
   const favoriteSet = useMemo(() => new Set(favoriteVoiceIds), [favoriteVoiceIds]);
 
   // Catalog partitions and locales
-  const localeOptions = useMemo(() => getLocaleOptions(voices), [voices]);
+  const localeOptions = useMemo(() => getLocaleOptions(voices, locale), [voices, locale]);
 
   const totalFavoritesInCatalog = useMemo(
     () => voices.filter((v) => favoriteSet.has(v.id)).length,
@@ -148,8 +160,9 @@ export function App() {
         locale: selectedLocale,
         favoriteOnly,
         favoriteIds: favoriteSet,
+        uiLocale: locale,
       }),
-    [voices, voiceSearch, selectedLocale, favoriteOnly, favoriteSet],
+    [voices, voiceSearch, selectedLocale, favoriteOnly, favoriteSet, locale],
   );
 
   // Visibility of active selection in current filtered results
@@ -160,8 +173,8 @@ export function App() {
 
   // Hierarchical grouped catalog: Favorites first, then Locale groups
   const voiceGroups = useMemo(
-    () => getGroupedVoices(filteredVoices, favoriteSet),
-    [filteredVoices, favoriteSet],
+    () => getGroupedVoices(filteredVoices, favoriteSet, locale),
+    [filteredVoices, favoriteSet, locale],
   );
 
   const selectLocaleOptions = useMemo(
@@ -175,27 +188,27 @@ export function App() {
       options: group.voices.map((v) => ({
         value: v.id,
         label: v.displayName,
-        secondaryLabel: `${v.locale} · ${v.gender}`,
+        secondaryLabel: `${v.locale} · ${formatVoiceGender(v.gender, locale)}`,
       })),
     }));
-  }, [voiceGroups]);
+  }, [voiceGroups, locale]);
 
   const selectVoicePlaceholderOptions = useMemo(() => {
     if (filteredVoices.length === 0) {
-      return [{ value: "", label: "没有匹配的声音", disabled: true }];
+      return [{ value: "", label: t("没有匹配的声音"), disabled: true }];
     }
     if (!isCurrentVoiceVisible) {
-      return [{ value: "", label: "当前声音不在筛选结果中", disabled: true }];
+      return [{ value: "", label: t("当前声音不在筛选结果中"), disabled: true }];
     }
     return undefined;
-  }, [filteredVoices.length, isCurrentVoiceVisible]);
+  }, [filteredVoices.length, isCurrentVoiceVisible, t]);
 
   const qualityOptions = useMemo(
     () => [
-      { value: "standard", label: "标准 (48 kbps MP3)" },
-      { value: "high", label: "高品质 (96 kbps MP3)" },
+      { value: "standard", label: t("标准 (48 kbps MP3)") },
+      { value: "high", label: t("高品质 (96 kbps MP3)") },
     ],
-    [],
+    [t],
   );
 
   // Active voice metadata
@@ -252,17 +265,15 @@ export function App() {
     }
   };
 
-  // Safe text clearing with native confirmation
   const handleClearText = (): void => {
-    if (isGenerating || input.length === 0) {
-      return;
-    }
-    const confirmed = window.confirm("确定清空当前文本吗？此操作无法撤销。");
-    if (confirmed) {
-      ++importGenerationIdRef.current;
-      setInput("");
-      setImportError(null);
-    }
+    if (!isGenerating && input.length > 0) clearDialogRef.current?.showModal();
+  };
+
+  const confirmClearText = (): void => {
+    ++importGenerationIdRef.current;
+    setInput("");
+    setImportError(null);
+    clearDialogRef.current?.close();
   };
 
   // Persist non-sensitive preferences only after hydration and when a valid voice is active
@@ -456,12 +467,7 @@ export function App() {
           setGenerationError("API Key 已失效或未提供，请重新验证");
           return;
         } else if (response.status === 429) {
-          try {
-            const data = (await response.json()) as { error?: { message?: string } };
-            setGenerationError(data?.error?.message ?? "Too many speech requests");
-          } catch {
-            setGenerationError("Too many speech requests");
-          }
+          setGenerationError("Too many speech requests");
           return;
         } else if (response.status === 400) {
           setGenerationError("输入参数有误");
@@ -591,35 +597,70 @@ export function App() {
       <header className="app-header">
         <div className="header-brand">
           <h1 className="brand-title">EdgeTTS</h1>
-          <span className="brand-badge">Workbench</span>
+          <span className="brand-badge">{t("Workbench")}</span>
         </div>
-        <div className="header-status">
-          <span className="status-label">API 状态:</span>
-          <span
-            className="header-status-value"
-            role="status"
-            aria-live="polite"
-            aria-atomic="true"
-            aria-label="API 状态"
-          >
-            {apiStatus === "loading" && (
-              <span className="status-badge status-loading">连接中...</span>
-            )}
-            {apiStatus === "healthy" && <span className="status-badge status-healthy">正常</span>}
-            {apiStatus === "unavailable" && (
-              <span className="status-badge status-unavailable">不可用</span>
-            )}
-          </span>
+        <div className="header-tools">
+          <div className="language-control">
+            <Select
+              options={LANGUAGE_OPTIONS}
+              value={locale}
+              onChange={(value) => setLocale(value as UiLocale)}
+              aria-label={t("界面语言")}
+            />
+          </div>
+          <div className="header-status">
+            <span className="status-label">{t("API 状态")}</span>
+            <span
+              className="header-status-value"
+              role="status"
+              aria-live="polite"
+              aria-atomic="true"
+              aria-label={t("API 状态")}
+            >
+              {apiStatus === "loading" && (
+                <span className="status-badge status-loading">{t("连接中...")}</span>
+              )}
+              {apiStatus === "healthy" && (
+                <span className="status-badge status-healthy">{t("正常")}</span>
+              )}
+              {apiStatus === "unavailable" && (
+                <span className="status-badge status-unavailable">{t("不可用")}</span>
+              )}
+            </span>
+          </div>
         </div>
       </header>
 
+      <dialog
+        ref={clearDialogRef}
+        className="confirm-dialog"
+        aria-labelledby="clear-dialog-title"
+        aria-describedby="clear-dialog-description"
+      >
+        <h2 id="clear-dialog-title" className="panel-title">
+          {t("清空当前文本")}
+        </h2>
+        <p id="clear-dialog-description">{t("确定清空当前文本吗？此操作无法撤销。")}</p>
+        <div className="dialog-actions">
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={() => clearDialogRef.current?.close()}
+          >
+            {t("取消")}
+          </button>
+          <button type="button" className="btn btn-primary" onClick={confirmClearText}>
+            {t("确认清空")}
+          </button>
+        </div>
+      </dialog>
       <main className="workbench-main">
         {/* Left Column: Text Editor */}
-        <section className="panel editor-panel" aria-label="文本编辑区域">
+        <section className="panel editor-panel" aria-label={t("文本编辑区域")}>
           <div className="panel-header">
             <div className="editor-header-left">
               <label htmlFor={textInputId} className="panel-title">
-                文本内容
+                {t("文本内容")}
               </label>
               <div className="editor-actions">
                 <input
@@ -636,31 +677,34 @@ export function App() {
                   className="btn-editor-action"
                   onClick={() => fileInputRef.current?.click()}
                   disabled={isGenerating}
-                  aria-label="导入 TXT 文件"
+                  aria-label={t("导入 TXT 文件")}
                 >
-                  导入 TXT
+                  {t("导入 TXT")}
                 </button>
                 <button
                   type="button"
                   className="btn-editor-action"
                   onClick={handleClearText}
                   disabled={isGenerating || input.length === 0}
-                  aria-label="清空当前文本"
+                  aria-label={t("清空当前文本")}
                 >
-                  清空
+                  {t("清空")}
                 </button>
               </div>
             </div>
             <span className={`char-counter ${isOverLimit ? "counter-error" : ""}`}>
-              {lineCount} 行 · {codePointCount.toLocaleString()} /{" "}
-              {MAX_NATIVE_INPUT_CODE_POINTS.toLocaleString()} 字
+              {t("{lines} 行 · {count} / {max} 字", {
+                lines: lineCount.toLocaleString(locale),
+                count: codePointCount.toLocaleString(locale),
+                max: MAX_NATIVE_INPUT_CODE_POINTS.toLocaleString(locale),
+              })}
             </span>
           </div>
 
           <textarea
             id={textInputId}
             className={`text-editor ${isOverLimit ? "editor-invalid" : ""}`}
-            placeholder="在此输入需要合成为语音的文本内容..."
+            placeholder={t("在此输入需要合成为语音的文本内容...")}
             value={input}
             onChange={(e) => {
               ++importGenerationIdRef.current;
@@ -681,30 +725,32 @@ export function App() {
           />
 
           <div className="editor-footer">
-            <span className="shortcut-hint">Ctrl/⌘ + Enter 合成 · Esc 取消</span>
+            <span className="shortcut-hint">{t("Ctrl/⌘ + Enter 合成 · Esc 取消")}</span>
           </div>
 
           {importError && (
             <div className="input-warning" role="alert">
-              {importError}
+              {t(importError)}
             </div>
           )}
 
           {isOverLimit && (
             <div className="input-warning" role="alert">
-              文本长度超出上限 ({codePointCount.toLocaleString()} /{" "}
-              {MAX_NATIVE_INPUT_CODE_POINTS.toLocaleString()} 字符)，请删减后再合成。
+              {t("文本长度超出上限 ({count} / {max} 字符)，请删减后再合成。", {
+                count: codePointCount.toLocaleString(locale),
+                max: MAX_NATIVE_INPUT_CODE_POINTS.toLocaleString(locale),
+              })}
             </div>
           )}
         </section>
 
         {/* Right Column: Controls Panel */}
-        <aside className="panel controls-panel" aria-label="语音参数配置">
+        <aside className="panel controls-panel" aria-label={t("语音参数配置")}>
           {/* Authentication Unlock Card */}
           {authRequired && (
-            <div className="auth-card" role="region" aria-label="API 认证">
+            <div className="auth-card" role="region" aria-label={t("API 认证")}>
               <div className="auth-card-header">
-                <span className="auth-card-title">API 需要认证</span>
+                <span className="auth-card-title">{t("API 需要认证")}</span>
               </div>
               <form
                 className="auth-card-form"
@@ -717,7 +763,7 @@ export function App() {
                   type="password"
                   className="auth-key-input"
                   aria-label="API Key"
-                  placeholder="请输入 API Key"
+                  placeholder={t("请输入 API Key")}
                   autoComplete="off"
                   spellCheck={false}
                   value={authKeyInput}
@@ -729,12 +775,12 @@ export function App() {
                   className="btn-unlock"
                   disabled={isUnlocking || authKeyInput.length === 0}
                 >
-                  {isUnlocking ? "验证中..." : "解锁"}
+                  {isUnlocking ? t("验证中...") : t("解锁")}
                 </button>
               </form>
               {authError && (
                 <div className="auth-card-error" role="alert">
-                  {authError}
+                  {t(authError)}
                 </div>
               )}
             </div>
@@ -744,22 +790,26 @@ export function App() {
           <div className="voice-filter-row">
             <div className="control-group search-group">
               <label htmlFor={voiceSearchId} className="control-label">
-                搜索声音
+                {t("搜索声音")}
               </label>
               <input
                 id={voiceSearchId}
                 type="search"
                 className="control-input"
-                placeholder="按名称、ID、语言或性别过滤..."
+                aria-describedby={`${voiceSearchId}-hint`}
+                placeholder={t("搜索...")}
                 value={voiceSearch}
                 onChange={(e) => setVoiceSearch(e.target.value)}
                 disabled={isGenerating || voices.length === 0}
               />
+              <span id={`${voiceSearchId}-hint`} className="control-hint">
+                {t("按名称、ID、语言或性别过滤")}
+              </span>
             </div>
 
             <div className="control-group locale-group">
               <label htmlFor={localeSelectId} className="control-label">
-                地区 / Locale
+                {t("地区 / Locale")}
               </label>
               <Select
                 id={localeSelectId}
@@ -767,7 +817,7 @@ export function App() {
                 onChange={setSelectedLocale}
                 options={selectLocaleOptions}
                 disabled={isGenerating || voices.length === 0}
-                aria-label="地区 / Locale"
+                aria-label={t("地区 / Locale")}
               />
             </div>
           </div>
@@ -779,18 +829,18 @@ export function App() {
               checked={favoriteOnly}
               onChange={setFavoriteOnly}
               disabled={isGenerating || totalFavoritesInCatalog === 0}
-              label="只看收藏"
+              label={t("只看收藏")}
             />
           </div>
 
           {/* Voice Selection */}
           <div className="control-group">
             <label htmlFor={voiceSelectId} className="control-label">
-              选择声音 ({filteredVoices.length})
+              {t("选择声音 ({count})", { count: filteredVoices.length })}
             </label>
             {voiceError ? (
               <div className="control-error" role="alert">
-                {voiceError}
+                {t(voiceError)}
               </div>
             ) : (
               <Select
@@ -805,16 +855,17 @@ export function App() {
                 options={selectVoicePlaceholderOptions}
                 groups={filteredVoices.length > 0 ? selectVoiceGroups : undefined}
                 disabled={isGenerating || filteredVoices.length === 0}
-                aria-label={`选择声音 (${filteredVoices.length})`}
+                aria-label={t("选择声音 ({count})", { count: filteredVoices.length })}
               />
             )}
 
             {/* Current Voice Details & Favorite Action */}
             {activeVoice && (
-              <div className="current-voice-details" aria-label="当前声音详情">
+              <div className="current-voice-details" aria-label={t("当前声音详情")}>
                 <div className="current-voice-meta">
                   <span className="current-voice-title">
-                    {activeVoice.displayName} · {activeVoice.locale} · {activeVoice.gender}
+                    {activeVoice.displayName} · {activeVoice.locale} ·{" "}
+                    {formatVoiceGender(activeVoice.gender, locale)}
                   </span>
                   <span className="current-voice-id">{activeVoice.id}</span>
                 </div>
@@ -824,9 +875,9 @@ export function App() {
                   onClick={handleToggleFavorite}
                   disabled={isGenerating || !selectedVoiceId}
                   aria-pressed={isCurrentVoiceFavorite}
-                  aria-label={isCurrentVoiceFavorite ? "取消收藏当前声音" : "收藏当前声音"}
+                  aria-label={isCurrentVoiceFavorite ? t("取消收藏当前声音") : t("收藏当前声音")}
                 >
-                  {isCurrentVoiceFavorite ? "★ 已收藏" : "☆ 收藏"}
+                  {isCurrentVoiceFavorite ? t("★ 已收藏") : t("☆ 收藏")}
                 </button>
               </div>
             )}
@@ -835,7 +886,7 @@ export function App() {
           {/* Quality */}
           <div className="control-group">
             <label htmlFor={qualitySelectId} className="control-label">
-              音质 (Quality)
+              {t("音质 (Quality)")}
             </label>
             <Select
               id={qualitySelectId}
@@ -843,14 +894,14 @@ export function App() {
               onChange={(val) => setQuality(val as "standard" | "high")}
               options={qualityOptions}
               disabled={isGenerating}
-              aria-label="音质 (Quality)"
+              aria-label={t("音质 (Quality)")}
             />
           </div>
 
           {/* Speed */}
           <Slider
             id={speedSliderId}
-            label="语速 (Speed)"
+            label={t("语速 (Speed)")}
             value={speed}
             formattedValue={`${speed.toFixed(2)}x`}
             min={0.5}
@@ -859,32 +910,32 @@ export function App() {
             onChange={setSpeed}
             onReset={() => setSpeed(1.0)}
             isDefault={speed === 1.0}
-            resetAriaLabel="重置语速"
+            resetAriaLabel={t("重置语速")}
             disabled={isGenerating}
           />
 
           {/* Pitch */}
           <Slider
             id={pitchSliderId}
-            label="音调 (Pitch)"
+            label={t("音调 (Pitch)")}
             value={pitchSemitones}
-            formattedValue={
-              pitchSemitones > 0 ? `+${pitchSemitones} 半音` : `${pitchSemitones} 半音`
-            }
+            formattedValue={t("{value} 半音", {
+              value: pitchSemitones > 0 ? `+${pitchSemitones}` : pitchSemitones,
+            })}
             min={-12}
             max={12}
             step={1}
             onChange={setPitchSemitones}
             onReset={() => setPitchSemitones(0)}
             isDefault={pitchSemitones === 0}
-            resetAriaLabel="重置音调"
+            resetAriaLabel={t("重置音调")}
             disabled={isGenerating}
           />
 
           {/* Volume */}
           <Slider
             id={volumeSliderId}
-            label="音量 (Volume)"
+            label={t("音量 (Volume)")}
             value={volume}
             formattedValue={`${Math.round(volume * 100)}%`}
             min={0.0}
@@ -893,7 +944,7 @@ export function App() {
             onChange={setVolume}
             onReset={() => setVolume(1.0)}
             isDefault={volume === 1.0}
-            resetAriaLabel="重置音量"
+            resetAriaLabel={t("重置音量")}
             disabled={isGenerating}
           />
 
@@ -904,9 +955,9 @@ export function App() {
               className="btn-reset-params"
               onClick={handleResetAllParameters}
               disabled={isGenerating || isAllParametersDefault}
-              aria-label="恢复默认参数"
+              aria-label={t("恢复默认参数")}
             >
-              恢复默认参数
+              {t("恢复默认参数")}
             </button>
           </div>
 
@@ -920,41 +971,41 @@ export function App() {
                 isGenerating || isInputEmpty || isOverLimit || !selectedVoiceId || authRequired
               }
             >
-              {isGenerating ? "正在合成..." : "合成语音"}
+              {isGenerating ? t("正在合成...") : t("合成语音")}
             </button>
             {isGenerating && (
               <button
                 type="button"
                 className="btn btn-secondary"
                 onClick={handleCancel}
-                aria-label="取消合成"
+                aria-label={t("取消合成")}
                 aria-keyshortcuts="Escape"
               >
-                取消
+                {t("取消")}
               </button>
             )}
           </div>
         </aside>
 
         {/* Bottom Section: Single Audio Player & Status */}
-        <section className="panel result-panel" aria-label="合成结果播放">
+        <section className="panel result-panel" aria-label={t("合成结果播放")}>
           <div className="result-header">
-            <h2 className="panel-title">合成结果</h2>
+            <h2 className="panel-title">{t("合成结果")}</h2>
             {isGenerating && telemetry && (
               <span
                 className="generating-indicator"
                 role="status"
                 aria-live="polite"
-                aria-label="合成状态"
+                aria-label={t("合成状态")}
               >
-                {formatGeneratingStatusText(telemetry)}
+                {formatGeneratingStatusText(telemetry, locale)}
               </span>
             )}
           </div>
 
           {generationError && (
             <div className="generation-error" role="alert">
-              {generationError}
+              {t(generationError)}
             </div>
           )}
 
@@ -964,18 +1015,18 @@ export function App() {
               src={audioSrc}
               downloadUrl={downloadUrl}
               downloadFilename={completedResult?.filename}
-              aria-label="语音合成播放器"
+              aria-label={t("语音合成播放器")}
             />
           )}
 
           {audioSrc && completedResult && (
-            <div className="result-metadata" aria-label="音频生成信息">
-              <span>{formatResultMetadataDisplay(completedResult)}</span>
+            <div className="result-metadata" aria-label={t("音频生成信息")}>
+              <span>{formatResultMetadataDisplay(completedResult, locale)}</span>
             </div>
           )}
 
           {!audioSrc && !generationError && !isGenerating && (
-            <p className="empty-result-text">输入文本并点击“合成语音”后在此试听与下载。</p>
+            <p className="empty-result-text">{t("输入文本并点击“合成语音”后在此试听与下载。")}</p>
           )}
         </section>
       </main>

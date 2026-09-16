@@ -1,3 +1,4 @@
+import type { MessageKey } from "./i18n.js";
 import { countCodePoints, MAX_NATIVE_INPUT_CODE_POINTS } from "@edgetts/shared";
 
 /**
@@ -12,7 +13,7 @@ export interface TextImportSuccess {
 
 export interface TextImportFailure {
   readonly success: false;
-  readonly error: string;
+  readonly error: MessageKey;
 }
 
 export type TextImportResult = TextImportSuccess | TextImportFailure;
