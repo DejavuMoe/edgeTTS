@@ -1,0 +1,193 @@
+# Reverse Proxy Configuration Guide
+
+This guide details how to configure production reverse proxies (Nginx, Caddy) in front of `edgeTTS`.
+
+---
+
+## Topology & Core Principles
+
+```text
+Clients (Browsers / Mobile Apps / OpenAI Clients)
+                      │
+                HTTPS (Port 443)
+                      ▼
+             Reverse Proxy (Nginx / Caddy)
+                      │
+             HTTP (127.0.0.1:8080)
+                      ▼
+             edgeTTS (Docker or Host Service)
+```
+
+1. **Loopback Isolation**: edgeTTS binds strictly to `127.0.0.1` on the host, preventing direct exposure to external public interfaces.
+2. **TLS Termination**: The proxy manages public certificates and terminates HTTPS.
+3. **The Golden Streaming Rule**: Response buffering **must** be disabled for streaming audio endpoints (`/api/speech` and `/v1/audio/speech`). Microsoft Edge TTS synthesizes audio progressively. If the proxy buffers responses, the client will experience silence until the entire synthesis finishes.
+4. **Header Passthrough**: Client `Host`, `X-Real-IP`, `X-Forwarded-For`, `X-Forwarded-Proto`, and `Authorization: Bearer <API_KEY>` headers must pass through unaltered.
+
+---
+
+## Nginx Configuration
+
+A fully verified reference configuration is provided in [`deploy/nginx/edgetts.conf.example`](../deploy/nginx/edgetts.conf.example).
+
+### Configuration Template
+
+```nginx
+upstream edgetts_backend {
+    server 127.0.0.1:8080;
+    keepalive 16;
+}
+
+# Redirect HTTP to HTTPS
+server {
+    listen 80;
+    listen [::]:80;
+    server_name edgetts.example.com;
+
+    server_tokens off;
+    return 301 https://$host$request_uri;
+}
+
+# Production HTTPS server
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    server_name edgetts.example.com;
+
+    server_tokens off;
+    client_max_body_size 1m;
+
+    # TLS Certificates (managed by Certbot or organizational CA)
+    ssl_certificate /etc/letsencrypt/live/edgetts.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/edgetts.example.com/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!aNULL:!MD5;
+    ssl_prefer_server_ciphers on;
+
+    # Security headers
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header Referrer-Policy "same-origin" always;
+    proxy_hide_header X-Frame-Options;
+    add_header X-Frame-Options "SAMEORIGIN" always;
+
+    # Native streaming speech endpoint - NO BUFFERING
+    location = /api/speech {
+        proxy_pass http://edgetts_backend;
+        proxy_http_version 1.1;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        proxy_buffering off;
+        proxy_cache off;
+
+        proxy_read_timeout 300s;
+        proxy_send_timeout 60s;
+    }
+
+    # OpenAI-compatible streaming speech endpoint - NO BUFFERING
+    location = /v1/audio/speech {
+        proxy_pass http://edgetts_backend;
+        proxy_http_version 1.1;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        proxy_buffering off;
+        proxy_cache off;
+
+        proxy_read_timeout 300s;
+        proxy_send_timeout 60s;
+    }
+
+    # General application routing (WebUI, static assets, voices discovery, health probes)
+    location / {
+        proxy_pass http://edgetts_backend;
+        proxy_http_version 1.1;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+### Installation Steps (Ubuntu / Debian)
+
+```bash
+# 1. Copy configuration
+sudo cp deploy/nginx/edgetts.conf.example /etc/nginx/sites-available/edgetts.conf
+
+# 2. Edit domain name and TLS certificate paths
+sudo nano /etc/nginx/sites-available/edgetts.conf
+
+# 3. Enable site
+sudo ln -s /etc/nginx/sites-available/edgetts.conf /etc/nginx/sites-enabled/edgetts.conf
+
+# 4. Test syntax
+sudo nginx -t
+
+# 5. Reload Nginx
+sudo systemctl reload nginx
+```
+
+### Automated Proxy Test Suite
+
+The repository includes an automated integration test script [`deploy/nginx/test-proxy.sh`](../deploy/nginx/test-proxy.sh). It validates configuration syntax, streaming delivery without buffering, error preservation, and header passthrough:
+
+```bash
+# Deterministic verification mode (no external network needed)
+EDGETTS_NGINX_SKIP_LIVE=1 ./deploy/nginx/test-proxy.sh
+```
+
+---
+
+## Caddy Configuration
+
+Caddy provides automatic HTTPS with Let's Encrypt / ZeroSSL and simplified configuration.
+
+### `Caddyfile` Example
+
+```caddyfile
+edgetts.example.com {
+    encode zstd gzip
+
+    # Streaming speech endpoints - disable response buffering
+    @streaming {
+        path /api/speech
+        path /v1/audio/speech
+    }
+    handle @streaming {
+        reverse_proxy 127.0.0.1:8080 {
+            flush_interval -1
+            transport http {
+                dial_timeout 10s
+                response_header_timeout 300s
+            }
+        }
+    }
+
+    # Default handler for WebUI, voices, and health
+    handle {
+        reverse_proxy 127.0.0.1:8080
+    }
+}
+```
+
+> [!TIP]
+> Setting `flush_interval -1` forces Caddy to immediately flush every audio chunk to the client as soon as it is received from edgeTTS.
+
+---
+
+## Reverse Proxy Checklist
+
+Before exposing the service publicly, verify:
+
+1. **Streaming Playback**: Issue a synthesis request through the proxy. Audio playback should begin within 500ms–1500ms rather than after the full synthesis ends.
+2. **Bearer Token Preservation**: Ensure `Authorization: Bearer <API_KEY>` is passed through and returns 401 on incorrect keys.
+3. **Error Status Codes**: Ensure application error JSON bodies (`400`, `401`, `429`, `502`, `503`) reach clients intact without proxy substitution.
+4. **Health Check**: Ensure `GET /health` returns `200` with `{"status":"ok"}`.
