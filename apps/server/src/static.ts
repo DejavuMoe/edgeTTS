@@ -3,7 +3,6 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import fastifyStatic from "@fastify/static";
-import type { ApiError } from "@edgetts/shared";
 
 export interface StaticHostingOptions {
   readonly webDistDir?: string | undefined;
@@ -63,7 +62,6 @@ export function registerStaticHosting(
     prefix: "/",
     wildcard: true,
     setHeaders(reply: FastifyReply, filePath: string): void {
-      reply.header("X-Frame-Options", "SAMEORIGIN");
       const normalized = filePath.replace(/\\/g, "/");
       if (normalized.includes("/assets/")) {
         reply.header("Cache-Control", "public, max-age=31536000, immutable");
@@ -86,24 +84,11 @@ export function registerStaticHosting(
 
     if (!isApi && !hasExtension && (request.method === "GET" || request.method === "HEAD")) {
       reply.header("Cache-Control", "no-cache");
-      reply.header("X-Frame-Options", "SAMEORIGIN");
       return reply.sendFile("index.html");
     }
 
-    if (isApi) {
-      const apiError: ApiError = {
-        error: {
-          code: "NOT_FOUND",
-          message: `Route ${request.method}:${pathname} not found`,
-        },
-      };
-      return reply.code(404).type("application/json").send(apiError);
-    }
-
     return reply.code(404).send({
-      error: "Not Found",
-      message: `Route ${request.method}:${pathname} not found`,
-      statusCode: 404,
+      error: { code: "NOT_FOUND", message: `Route ${request.method}:${pathname} not found` },
     });
   });
 

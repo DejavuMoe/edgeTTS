@@ -48,7 +48,7 @@ export function resolveRequireApiKey(configured?: boolean | string | null): bool
     configured !== undefined && configured !== null ? configured : process.env["REQUIRE_API_KEY"];
 
   if (raw === undefined || raw === null) {
-    return false;
+    return process.env["NODE_ENV"] === "production";
   }
 
   if (typeof raw !== "string") {

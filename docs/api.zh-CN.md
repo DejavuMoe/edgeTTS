@@ -18,7 +18,7 @@
 
 ## 认证方式
 
-当启用认证（`REQUIRE_API_KEY=true`）时，客户端发起的受保护请求必须在标准 HTTP 请求头中提供 API 密钥：
+当配置了 `API_KEY` 时，客户端发起的受保护请求必须在标准 HTTP 请求头中提供 API 密钥：
 
 ```http
 Authorization: Bearer <API_KEY>
@@ -39,7 +39,7 @@ Authorization: Bearer <API_KEY>
 
 ## 1. OpenAI 兼容接口 (`POST /v1/audio/speech`)
 
-该接口完全对齐 OpenAI Audio Speech API 契约，支持直接对接各类开源 LLM 对话应用、AI Agent 及第三方客户端。
+该接口兼容下表列出的请求字段，并非完整 OpenAI API。音色必须使用 `/api/voices` 返回的 Edge ID，不映射 OpenAI 音色别名。`tts-1` 和 `tts-1-hd` 只选择 Edge 的 48/96 kbps MP3 输出，不代表使用 OpenAI 模型。其他格式及未知字段会被拒绝；客户端需允许自定义 Base URL 和音色 ID。
 
 ### 请求体参数（JSON）
 
@@ -47,7 +47,7 @@ Authorization: Bearer <API_KEY>
 | :---------------- | :------- | :----- | :----------------------------------------------------------------------------------- |
 | `model`           | `string` | **是** | `"tts-1"`（标准音质，48 kbps）或 `"tts-1-hd"`（高品质，96 kbps）                     |
 | `voice`           | `string` | **是** | Edge 音色 ID（如 `zh-CN-XiaoxiaoNeural`、`en-US-JennyNeural`、`ja-JP-NanamiNeural`） |
-| `input`           | `string` | **是** | 待合成的文本（1–4,096 字符，符合 XML 规范字符）                                      |
+| `input`           | `string` | **是** | 待合成的文本（1–4,096 UTF-16 代码单元，符合 XML 规范字符）                           |
 | `response_format` | `string` | 否     | 仅支持 `"mp3"`（默认且唯一支持格式）                                                 |
 | `speed`           | `number` | 否     | 播放语速倍率，范围 `0.5` 至 `2.0`（默认 `1.0`）                                      |
 
@@ -109,22 +109,6 @@ async function main() {
 
 void main();
 ```
-
-### 第三方客户端接入指南
-
-- **NextChat (ChatGPT-Next-Web)**：
-  - 设置 -> 语音设置 -> TTS 服务商选择：**OpenAI**。
-  - 接口地址（Base URL）：`https://edgetts.example.com/v1`（或本地调试 `http://127.0.0.1:8080/v1`）。
-  - API Key：填入您配置的 `API_KEY`。
-  - 模型：`tts-1` 或 `tts-1-hd`。
-  - 语音（Voice）：填写 Edge 音色（如 `zh-CN-YunxiNeural`）。
-- **One API / New API 聚合分发平台**：
-  - 添加渠道 -> 类型：**OpenAI**。
-  - 代理地址：`http://127.0.0.1:8080`。
-  - 密钥：填入您配置的 `API_KEY`。
-  - 模型列表：添加 `tts-1` 与 `tts-1-hd`。
-
----
 
 ## 2. 原生长文本流式接口 (`POST /api/speech`)
 
@@ -214,7 +198,7 @@ curl -s http://127.0.0.1:8080/api/voices \
 
 ## 4. 健康检查接口 (`GET /health`, `GET /api/health`)
 
-用于 Docker 容器探针、Kubernetes 存活/就绪检查及反向代理后端健康巡检。
+用于检查 HTTP 进程是否响应，不探测上游或验证完整合成链路。
 
 ### cURL 调用示例
 
@@ -254,3 +238,13 @@ Content-Type: application/json; charset=utf-8
 | `429 Too Many Requests`   | `RATE_LIMITED`    | 触发接口准入频次限制（单进程默认 10 秒 12 次请求）。             |
 | `502 Bad Gateway`         | `UPSTREAM_ERROR`  | 与微软 Edge TTS 上游 WebSocket 连接失败或上游拒绝合成。          |
 | `503 Service Unavailable` | `SERVER_BUSY`     | 并发限制队列已满（超过 4 个正在合成任务 + 16 个排队槽位）。      |
+
+分段器保留原文本，但合成会跳过纯空白分段；`X-EdgeTTS-Segment-Count` 统计实际提交合成的段数。健康接口仅报告进程存活，不探测微软、不验证音色列表，也不执行合成。
+
+JSON 错误适用于音频响应头发出之前。开始传输后若上游出错，会终止音频连接；先前的 `200` 或段数不代表完整合成成功。应丢弃中断的下载并显式重试。音色查询限制为单进程每分钟 60 次，合成排队超过 30 秒返回 `503 SERVER_BUSY`。
+
+| HTTP | Code                     |
+| ---- | ------------------------ |
+| 413  | `PAYLOAD_TOO_LARGE`      |
+| 415  | `UNSUPPORTED_MEDIA_TYPE` |
+| 500  | `INTERNAL_ERROR`         |

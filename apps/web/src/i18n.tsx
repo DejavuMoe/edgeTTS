@@ -36,6 +36,8 @@ const zhCN = {
   "{lines} 行 · {count} / {max} 字": "{lines} 行 · {count} / {max} 字",
   "在此输入需要合成为语音的文本内容...": "在此输入需要合成为语音的文本内容...",
   "Ctrl/⌘ + Enter 合成 · Esc 取消": "Ctrl/⌘ + Enter 合成 · Esc 取消",
+  "合成时，文本会发送至微软在线语音服务；edgeTTS 不保存文本。":
+    "合成时，文本会发送至微软在线语音服务；edgeTTS 不保存文本。",
   "文本长度超出上限 ({count} / {max} 字符)，请删减后再合成。":
     "文本长度超出上限 ({count} / {max} 字符)，请删减后再合成。",
   语音参数配置: "语音参数配置",
@@ -140,6 +142,8 @@ const zhTW: Record<MessageKey, string> = {
   "{lines} 行 · {count} / {max} 字": "{lines} 行 · {count} / {max} 字",
   "在此输入需要合成为语音的文本内容...": "在此輸入要合成語音的文字內容...",
   "Ctrl/⌘ + Enter 合成 · Esc 取消": "Ctrl/⌘ + Enter 合成 · Esc 取消",
+  "合成时，文本会发送至微软在线语音服务；edgeTTS 不保存文本。":
+    "合成時，文字會傳送至微軟線上語音服務；edgeTTS 不儲存文字。",
   "文本长度超出上限 ({count} / {max} 字符)，请删减后再合成。":
     "文字長度超出上限（{count} / {max} 字元），請刪減後再合成。",
   语音参数配置: "語音參數設定",
@@ -244,6 +248,8 @@ const en: Record<MessageKey, string> = {
   "{lines} 行 · {count} / {max} 字": "Lines: {lines} · Characters: {count} / {max}",
   "在此输入需要合成为语音的文本内容...": "Enter text to turn into speech…",
   "Ctrl/⌘ + Enter 合成 · Esc 取消": "Ctrl/⌘ + Enter to synthesize · Esc to cancel",
+  "合成时，文本会发送至微软在线语音服务；edgeTTS 不保存文本。":
+    "Synthesis sends text to Microsoft’s online speech service. edgeTTS does not store the text.",
   "文本长度超出上限 ({count} / {max} 字符)，请删减后再合成。":
     "Text exceeds the limit ({count} / {max} characters). Shorten it before synthesizing.",
   语音参数配置: "Speech settings",
@@ -349,6 +355,8 @@ const ja: Record<MessageKey, string> = {
   "{lines} 行 · {count} / {max} 字": "{lines} 行 · {count} / {max} 文字",
   "在此输入需要合成为语音的文本内容...": "音声に変換するテキストを入力…",
   "Ctrl/⌘ + Enter 合成 · Esc 取消": "Ctrl/⌘ + Enter で合成 · Esc でキャンセル",
+  "合成时，文本会发送至微软在线语音服务；edgeTTS 不保存文本。":
+    "合成時にテキストを Microsoft のオンライン音声サービスに送信します。edgeTTS はテキストを保存しません。",
   "文本长度超出上限 ({count} / {max} 字符)，请删减后再合成。":
     "文字数が上限を超えています（{count} / {max} 文字）。テキストを短くしてください。",
   语音参数配置: "音声設定",

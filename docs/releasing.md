@@ -93,7 +93,7 @@ Pull the exact immutable digest and launch the replacement container:
 
 ```bash
 # 1. Pull the known-good image digest directly
-docker pull ghcr.io/dejavumoe/edgetts@sha256:<known-good-digest>
+docker pull 'ghcr.io/dejavumoe/edgetts@sha256:<known-good-digest>'
 
 # 2. Stop and remove the degraded container
 docker stop edgetts && docker rm edgetts
@@ -101,6 +101,9 @@ docker stop edgetts && docker rm edgetts
 # 3. Start the container referencing the exact digest
 docker run -d \
   --name edgetts \
+  --restart unless-stopped \
+  --init \
+  --stop-timeout 35 \
   --read-only \
   --cap-drop=ALL \
   --security-opt=no-new-privileges \
@@ -108,7 +111,7 @@ docker run -d \
   -e REQUIRE_API_KEY=true \
   -e "API_KEY=$API_KEY" \
   -p 127.0.0.1:8080:8080 \
-  ghcr.io/dejavumoe/edgetts@sha256:<known-good-digest>
+  'ghcr.io/dejavumoe/edgetts@sha256:<known-good-digest>'
 ```
 
 #### Step 3: Rollback via Docker Compose
@@ -172,7 +175,7 @@ Follow this manual procedure when releasing a new stable version of `edgeTTS`.
 Ensure the local working tree is clean and `main` is synchronized with GitHub:
 
 ```bash
-cd /data/Forgejo/edgeTTS
+cd /path/to/edgeTTS
 git fetch origin
 git status --short --branch
 ```

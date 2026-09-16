@@ -18,7 +18,7 @@
 
 ## 認証方式
 
-認証が有効な場合（`REQUIRE_API_KEY=true`）、保護されたエンドポイントへのリクエストには HTTP `Authorization` ヘッダーが必要です：
+`API_KEY` が設定されている場合、保護されたエンドポイントへのリクエストには HTTP `Authorization` ヘッダーが必要です：
 
 ```http
 Authorization: Bearer <API_KEY>
@@ -39,7 +39,7 @@ Authorization: Bearer <API_KEY>
 
 ## 1. OpenAI 互換音声合成 API (`POST /v1/audio/speech`)
 
-OpenAI Audio Speech API 仕様に準拠しており、ChatGPT-Next-Web、One API、各種 AI エージェント等の外部ツールと直接連携できます。
+対応範囲は以下のリクエスト項目であり、OpenAI API 全体との互換性ではありません。音色は `/api/voices` の Edge ID を指定し、OpenAI 音色名への変換は行いません。`tts-1` と `tts-1-hd` は Edge の 48/96 kbps MP3 を選択する名前で、OpenAI モデルを使用するわけではありません。未対応形式や未知の項目は拒否します。クライアント側で Base URL と音色 ID を指定できる必要があります。
 
 ### リクエストパラメータ（JSON）
 
@@ -47,7 +47,7 @@ OpenAI Audio Speech API 仕様に準拠しており、ChatGPT-Next-Web、One API
 | :---------------- | :------- | :------- | :------------------------------------------------------------------------------------ |
 | `model`           | `string` | **必須** | `"tts-1"`（標準、48 kbps）または `"tts-1-hd"`（高音質、96 kbps）                      |
 | `voice`           | `string` | **必須** | Edge 音色 ID（例: `ja-JP-NanamiNeural`、`zh-CN-XiaoxiaoNeural`、`en-US-JennyNeural`） |
-| `input`           | `string` | **必須** | 合成対象テキスト（1〜4,096 文字、XML 互換文字）                                       |
+| `input`           | `string` | **必須** | 合成対象テキスト（1〜4,096 UTF-16 コード単位、XML 互換文字）                          |
 | `response_format` | `string` | 任意     | `"mp3"`（デフォルトかつ唯一の対応形式）                                               |
 | `speed`           | `number` | 任意     | 再生速度倍率（`0.5`〜`2.0`、デフォルト `1.0`）                                        |
 
@@ -162,3 +162,13 @@ curl -i http://127.0.0.1:8080/health
 | `429 Too Many Requests`   | `RATE_LIMITED`    | レート制限の超過（単一プロセスあたり 10 秒 12 回上限）             |
 | `502 Bad Gateway`         | `UPSTREAM_ERROR`  | アップストリーム（Microsoft）への接続失敗または合成拒絶            |
 | `503 Service Unavailable` | `SERVER_BUSY`     | 並行合成キューが満杯（実行中 4 件 + 待機 16 件超過）               |
+
+分割処理は元のテキストを保持しますが、合成では空白のみのチャンクを省略します。`X-EdgeTTS-Segment-Count` は実際に合成へ送信するチャンク数です。ヘルスチェックはプロセスの応答のみを示し、Microsoft 接続、音色一覧や合成を検証しません。
+
+JSON エラーは音声レスポンスヘッダー送信前に適用します。送信後の上流エラーは音声接続を終了するため、`200` やチャンク数だけでは完了を確認できません。中断したダウンロードは破棄し、明示的に再試行します。音色一覧はプロセスあたり毎分 60 回、合成キューは 30 秒で期限切れとなり `503 SERVER_BUSY` を返します。
+
+| HTTP | Code                     |
+| ---- | ------------------------ |
+| 413  | `PAYLOAD_TOO_LARGE`      |
+| 415  | `UNSUPPORTED_MEDIA_TYPE` |
+| 500  | `INTERNAL_ERROR`         |

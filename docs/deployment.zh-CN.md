@@ -2,6 +2,8 @@
 
 本文档介绍 `edgeTTS` 的多种自托管部署方案，包括使用 GHCR 预构建镜像的独立 Docker Compose 部署、Docker 单容器运行、源码编译部署以及 Linux systemd 原生服务运行。
 
+`/health` 只检查 HTTP 进程，不访问微软，也不证明合成可用。部署在远程服务器时，通过反向代理的 HTTPS 地址打开工作台，并输入同一个密钥。Compose 的 `.env` 不会自动导入当前 shell；执行 API 示例前，对本地生成的文件运行 `set -a; . ./.env; set +a`。重启或升级时不要重新生成 `.env`。
+
 ---
 
 ## 部署架构与安全原则
@@ -62,14 +64,14 @@ services:
       - no-new-privileges:true
     tmpfs:
       - /tmp
-    stop_grace_period: 30s
+    stop_grace_period: 35s
     ports:
       - "127.0.0.1:8080:8080"
     environment:
       - NODE_ENV=production
       - HOST=0.0.0.0
       - PORT=8080
-      - API_KEY=${API_KEY}
+      - API_KEY=${API_KEY:?Set API_KEY in .env}
       - REQUIRE_API_KEY=true
       - SPEECH_RATE_LIMIT_MAX=12
       - SPEECH_RATE_LIMIT_WINDOW_MS=10000
@@ -83,7 +85,7 @@ services:
 生成强随机 API Key（长度不少于 16 字符，禁止包含空白符）：
 
 ```bash
-echo "API_KEY=$(openssl rand -hex 32)" > .env
+(umask 077; printf 'API_KEY=%s\n' "$(openssl rand -hex 32)" > .env)
 chmod 600 .env
 ```
 
@@ -140,7 +142,7 @@ docker run -d \
   --cap-drop=ALL \
   --security-opt=no-new-privileges \
   --tmpfs /tmp \
-  --stop-timeout 30 \
+  --stop-timeout 35 \
   -p 127.0.0.1:8080:8080 \
   -e API_KEY="$API_KEY" \
   -e REQUIRE_API_KEY=true \
@@ -149,15 +151,15 @@ docker run -d \
 
 ### 安全参数说明
 
-| 参数                               | 说明                                                         |
-| :--------------------------------- | :----------------------------------------------------------- |
-| `-p 127.0.0.1:8080:8080`           | 将容器 8080 端口严格绑定至宿主机 127.0.0.1 回环接口          |
-| `--read-only`                      | 将容器根文件系统挂载为只读，防止文件意外或恶意篡改           |
-| `--cap-drop=ALL`                   | 移除全部 Linux 内核 Capabilities，执行最小特权原则           |
-| `--security-opt=no-new-privileges` | 禁止容器内进程获取更高权限（禁用 setuid/setgid 提权）        |
-| `--tmpfs /tmp`                     | 仅挂载内存临时目录 `/tmp` 供应用写入临时数据                 |
-| `--init`                           | 启用轻量级 init 进程（tini）回收僵尸进程并可靠转发信号       |
-| `--stop-timeout 30`                | 给予容器 30 秒平滑停止超时时间，以便正在传输的语音流自然收尾 |
+| 参数                               | 说明                                                       |
+| :--------------------------------- | :--------------------------------------------------------- |
+| `-p 127.0.0.1:8080:8080`           | 将容器 8080 端口严格绑定至宿主机 127.0.0.1 回环接口        |
+| `--read-only`                      | 将容器根文件系统挂载为只读，防止文件意外或恶意篡改         |
+| `--cap-drop=ALL`                   | 移除全部 Linux 内核 Capabilities，执行最小特权原则         |
+| `--security-opt=no-new-privileges` | 禁止容器内进程获取更高权限（禁用 setuid/setgid 提权）      |
+| `--tmpfs /tmp`                     | 仅挂载内存临时目录 `/tmp` 供应用写入临时数据               |
+| `--init`                           | 启用轻量级 init 进程（tini）回收僵尸进程并可靠转发信号     |
+| `--stop-timeout 35`                | 给予容器 35 秒停止时间，包含服务端 30 秒等待期限与退出余量 |
 
 ---
 
@@ -187,9 +189,10 @@ cd edgeTTS
 
 # 2. 初始化环境配置
 cp .env.example .env
+chmod 600 .env
 
 # 3. 生成随机 API Key 并填入 .env
-sed -i "s/replace-with-a-random-secret/$(openssl rand -hex 32)/" .env
+sed -i "s/^# API_KEY=.*/API_KEY=$(openssl rand -hex 32)/" .env
 
 # 4. 构建本地镜像并启动
 docker compose up -d --build
@@ -203,6 +206,8 @@ docker compose up -d --build
 ---
 
 ## 方案四：Linux 原生服务部署（Node.js + Systemd）
+
+安装到 `/opt` 的步骤需以 root 或相应 sudo 权限执行。先用 `command -v node` 确认路径；若不是 `/usr/bin/node`，修改 `ExecStart`。程序目录由 root 持有，仅服务进程使用 `edgetts` 用户。密钥放入仅 root 可读的 `/etc/edgetts.env`，不写入公开的服务单元；只在首次安装时生成，升级时保留。
 
 适用于不具备容器环境的纯 Linux 服务器：
 
@@ -229,7 +234,8 @@ pnpm build
 
 ```bash
 sudo useradd --system --no-create-home --shell /usr/sbin/nologin edgetts
-sudo chown -R edgetts:edgetts /opt/edgetts
+sudo chown -R root:root /opt/edgetts
+sudo sh -c 'umask 077; printf "API_KEY=%s\n" "$(openssl rand -hex 32)" > /etc/edgetts.env'
 ```
 
 ### 4. 编写 Systemd 服务单元
@@ -249,13 +255,14 @@ WorkingDirectory=/opt/edgetts
 ExecStart=/usr/bin/node apps/server/dist/server.js
 Restart=on-failure
 RestartSec=5s
+TimeoutStopSec=35s
 
 # 环境变量配置
 Environment=NODE_ENV=production
 Environment=HOST=127.0.0.1
 Environment=PORT=8080
 Environment=REQUIRE_API_KEY=true
-Environment=API_KEY=请在此处填入不少于16字符的随机安全密钥
+EnvironmentFile=/etc/edgetts.env
 
 # 系统沙盒与权限隔离
 ProtectSystem=strict
@@ -283,20 +290,13 @@ sudo systemctl status edgetts
 
 ## 版本更新与日常维护
 
-### 更新 Docker Compose 实例
+先将 `compose.yaml` 中的 `image:` 改成要部署的已发布版本或摘要。`docker compose pull` 只拉取配置指定的镜像，不会把固定的 `0.4.0` 自动升级到其他版本。保留 `.env` 和上一版本镜像引用。
 
 ```bash
 cd ~/edgetts
-
-# 拉取 compose.yaml 中指定的最新镜像
-docker compose pull
-
-# 重新创建容器（服务中断仅在毫秒级重启期间）
-docker compose up -d
+docker compose pull edgetts
+docker compose up -d edgetts
+curl --fail http://127.0.0.1:8080/health
 ```
 
-### 清理废弃镜像
-
-```bash
-docker image prune -f
-```
+回滚时恢复上一版本镜像引用并重复以上命令。源码构建方式需切换到目标代码版本，再执行 `docker compose up -d --build`。单实例替换期间会短暂停止接收请求；仍在传输的音频可能在服务端 30 秒停机期限后中断，不保证毫秒级或无中断更新。

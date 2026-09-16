@@ -22,6 +22,6 @@ services:
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
-    stop_grace_period: 30s
+    stop_grace_period: 35s
     tmpfs:
       - /tmp

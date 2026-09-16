@@ -8,32 +8,22 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md) | 日本語
 
-edgeTTS は、Microsoft Edge の音声読み上げサービスを活用した高性能なセルフホスト型 Web サービスおよびインタラクティブなワークベンチです。OpenAI 互換の音声合成エンドポイント、最大 20,000 コードポイントの長文に対応したネイティブストリーミング API、およびモダンな WebUI を提供します。
+edgeTTS は Microsoft Edge のオンライン音声サービスを利用するセルフホスト API と Web ワークベンチです。MP3 ストリーミング合成、音色一覧、最大 20,000 Unicode コードポイントの長文に対応します。
 
 > [!NOTE]
 > edgeTTS は Microsoft Edge TTS オンラインサービスを利用しています。アップストリームの可用性や音声カタログはマイクロソフトにより管理されています。edgeTTS は独立したオープンソースプロジェクトであり、マイクロソフト社との提携や推奨関係はありません。
+
+> 合成時は本サーバー経由でテキストを TLS 通信により Microsoft に送信します。edgeTTS は合成テキストや音声を永続保存しませんが、オフラインエンジンではありません。TXT 読み込みはローカルで行い、合成時にテキストを送信します。Microsoft 側のデータ処理は本プロジェクトの管理外です。
 
 ---
 
 ## 主な機能
 
-- **デュアル音声合成 API**:
-  - **OpenAI 互換エンドポイント** (`POST /v1/audio/speech`): OpenAI TTS の代替としてそのまま利用可能。`tts-1`（48 kbps）および `tts-1-hd`（96 kbps）モデル、Edge 全音色、速度変更（0.5〜2.0）、およびストリーミング配信に対応。
-  - **ネイティブ長文ストリーミング API** (`POST /api/speech`): 1 回の HTTP リクエストで最大 20,000 Unicode コードポイントの長文を可逆自動分割してストリーミング配信。詳細な韻律制御（速度、ピッチ半音、音量）および分割メタデータヘッダーを提供。
-- **可逆階層的テキスト分割**:
-  - Unicode コードポイント精度に基づく境界分割（`段落 > 改行 > 文末記号 > 空白 > 強制切断`）。サロゲートペアや CRLF の原子性を厳格に保持し、チャンクを再結合すると元のテキストが完全に再現されます。
-- **公平な並行制御とキュー管理**:
-  - インメモリ FIFO リミッター（4 並行ストリーム、16 待機枠）。長文セッションはストリーミング全体で 1 つの実行許可を保持し、再生中の中断を防止します。クライアント切断時は即座にアップストリーム接続を中断します。
-- **モダンな Web ワークベンチ**:
-  - ブラウザ標準コンポーネントの挙動差を排除した軽量 UI プリミティブ群（`Select`、`Slider`、`Checkbox`、`AudioPlayer`）と、目に優しい「warm-paper」デザインシステム。
-  - 地域フィルタリングおよび全文検索に対応した音色カタログ（お気に入りピン留め機能付き）。
-  - ローカル UTF-8 `.txt` ファイルのインポート（最大 256 KiB / 20,000 コードポイント、ブラウザ内で完結しサーバーへは保存されません）。
-  - `MediaSource` プログレッシブストリーミング再生（Blob への自動フォールバック対応）、シークバー、および MP3 ダウンロード機能。
-- **本番運用の堅牢性**:
-  - 単一オリジン構成: Fastify がフロントエンド SPA とバックエンド API を単一ポートで配信。
-  - プライバシー保護: ユーザー入力テキストのログ記録なし、アクセス解析なし、外部テレメトリなし。
-  - 定数時間比較による API キー検証（`Authorization: Bearer <API_KEY>`）。
-  - コンテナセキュリティ: 非 root ユーザー `node`、読み取り専用ルートファイルシステム、ケーパビリティ破棄、特権昇格防止。
+- **音声 API**：`/v1/audio/speech` は OpenAI 音声リクエスト形式の一部に対応し、Edge 音色 ID と MP3 出力を使用します。`/api/speech` は長文と速度・ピッチ・音量調整に対応します。
+- **テキスト分割**：段落、改行、文末、空白を境界に Unicode 文字を保護して分割します。合成時は空白のみのチャンクを省略します。
+- **並行処理の上限**：実行中 4 ストリーム、FIFO 待機 16 件。長文リクエストは合成全体で 1 つの実行許可を保持します。
+- **Web ワークベンチ**：4 言語 UI、音色検索・お気に入り、ローカル TXT 読み込み、MP3 再生・ダウンロード。MediaSource 対応ブラウザーでは順次再生し、その他では Blob 全体の受信後に再生します。
+- **簡単な配備**：単一 Fastify プロセスで UI と API を配信し、Bearer 認証とコンテナ保護設定を提供します。
 
 ---
 
@@ -61,46 +51,23 @@ services:
       - no-new-privileges:true
     tmpfs:
       - /tmp
-    stop_grace_period: 30s
+    stop_grace_period: 35s
     ports:
       - "127.0.0.1:8080:8080"
     environment:
       - NODE_ENV=production
       - HOST=0.0.0.0
       - PORT=8080
-      - API_KEY=${API_KEY}
+      - API_KEY=${API_KEY:?Set API_KEY in .env}
       - REQUIRE_API_KEY=true
 ```
 
 ランダムな API キーを生成してサービスを起動します：
 
 ```bash
-echo "API_KEY=$(openssl rand -hex 32)" > .env
+(umask 077; printf 'API_KEY=%s\n' "$(openssl rand -hex 32)" > .env)
 docker compose up -d
 ```
-
-### 方法 B: 単一 Docker コンテナ実行 (`docker run`)
-
-```bash
-export API_KEY="$(openssl rand -hex 32)"
-
-docker run -d \
-  --name edgetts \
-  --restart unless-stopped \
-  --init \
-  --read-only \
-  --cap-drop=ALL \
-  --security-opt=no-new-privileges \
-  --tmpfs /tmp \
-  --stop-timeout 30 \
-  -p 127.0.0.1:8080:8080 \
-  -e API_KEY="$API_KEY" \
-  -e REQUIRE_API_KEY=true \
-  ghcr.io/dejavumoe/edgetts:0.4.0
-```
-
-> [!IMPORTANT]
-> **ループバックバインド（`127.0.0.1:8080:8080`）**: `127.0.0.1` にバインドすることで、ポートが公衆網へ直接公開されるのを防ぎます。インターネット経由でアクセスする場合は、前段に HTTPS リバースプロキシ（Nginx や Caddy）を配置してください。
 
 ### 動作確認
 
@@ -111,6 +78,8 @@ curl -i http://127.0.0.1:8080/health
 期待されるレスポンス: `HTTP/1.1 200 OK`、`{"status":"ok"}`。
 
 ブラウザで `http://127.0.0.1:8080` を開くと Web ワークベンチが表示されます。
+
+`.env` は初回だけ生成し、更新時に保持します。`/health` は HTTP プロセスのみを確認します。ローカルでは `http://127.0.0.1:8080`、リモートでは HTTPS プロキシの URL を開き、同じ API キーを入力します。シェル API 例を使う前に `set -a; . ./.env; set +a` でローカル生成キーを読み込みます。その他の配備方法と更新は[配備ガイド](docs/deployment.ja.md)を参照してください。
 
 ---
 
@@ -130,24 +99,6 @@ curl -X POST http://127.0.0.1:8080/v1/audio/speech \
     "speed": 1.0
   }' \
   --output speech.mp3
-```
-
-#### Python 公式 OpenAI SDK での呼び出し
-
-```python
-from openai import OpenAI
-
-client = OpenAI(
-    base_url="http://127.0.0.1:8080/v1",
-    api_key="your-secret-api-key",
-)
-
-with client.audio.speech.with_streaming_response.create(
-    model="tts-1",
-    voice="ja-JP-NanamiNeural",
-    input="こんにちは！edgeTTS からストリーミング再生を行っています。",
-) as response:
-    response.stream_to_file("speech.mp3")
 ```
 
 ### 2. ネイティブ長文ストリーミング合成 (`POST /api/speech`)

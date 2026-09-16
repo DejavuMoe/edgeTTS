@@ -2,6 +2,8 @@
 
 本文档详细说明 `edgeTTS` 的所有环境变量配置、认证行为、并发队列机制与容器安全基线。
 
+`REQUIRE_API_KEY` 控制缺少密钥时是否拒绝启动，不会关闭已配置密钥的验证。使用外部认证时，需同时设置 `REQUIRE_API_KEY=false` 并移除 `API_KEY`。production 默认要求密钥，本地开发可不设置。Node 不自动加载 `.env`；请使用导出的环境变量、`node --env-file=...` 或 systemd 的 `EnvironmentFile`。Compose 仅转发 `environment` 中列出的变量。
+
 ---
 
 ## 环境变量参考
@@ -16,9 +18,9 @@
 | `PORT`                        | HTTP 服务监听端口                  | `1`–`65535`                         | `8080`                                             |
 | `NODE_ENV`                    | 运行环境模式                       | `production`, `development`, `test` | `production` (Docker)                              |
 | `API_KEY`                     | Bearer 认证访问密钥                | 字符串（不少于 16 字符，无空白符）  | 无                                                 |
-| `REQUIRE_API_KEY`             | 是否强制开启 API Key 验证          | `true` 或 `false`                   | `false` (裸机 Node)<br>`true` (Docker Compose)     |
+| `REQUIRE_API_KEY`             | 是否要求启动时必须配置密钥         | `true` 或 `false`                   | `true`（production / Compose）；其他环境 `false`   |
 | `SPEECH_RATE_LIMIT_MAX`       | 单个时间窗口内允许的最大语音请求数 | 整数（`1`–`10000`）                 | `12`                                               |
-| `SPEECH_RATE_LIMIT_WINDOW_MS` | 限流滑动时间窗口大小（毫秒）       | 整数（`100`–`3600000`）             | `10000`（10 秒）                                   |
+| `SPEECH_RATE_LIMIT_WINDOW_MS` | 限流固定时间窗口大小（毫秒）       | 整数（`100`–`3600000`）             | `10000`（10 秒）                                   |
 | `SERVE_STATIC`                | 是否启用 Fastify 前端静态资源托管  | `true` 或 `false`                   | `production` 环境下默认开启                        |
 | `WEB_DIST_DIR`                | 前端编译产物存放的文件系统路径     | 绝对路径或相对路径                  | `/app/web-dist` (Docker)<br>`apps/web/dist` (Node) |
 
@@ -37,7 +39,7 @@
 
 ### Bearer Token 规范
 
-当启用认证（`REQUIRE_API_KEY=true`）后，所有受保护接口均要求客户端在 HTTP 请求头中携带凭据：
+只要配置了 `API_KEY`，所有受保护接口均要求客户端在 HTTP 请求头中携带凭据：
 
 ```http
 Authorization: Bearer <API_KEY>
@@ -82,7 +84,7 @@ Authorization: Bearer <API_KEY>
 
 ## 接口准入限流
 
-语音合成路由（`/api/speech` 与 `/v1/audio/speech`）受滑动窗口限流器保护：
+语音合成路由（`/api/speech` 与 `/v1/audio/speech`）受固定窗口限流器保护：
 
 - **默认限额**：单进程每 10 秒最多处理 12 次请求。
 - **标准响应头**：
@@ -94,27 +96,30 @@ Authorization: Bearer <API_KEY>
   {
     "error": {
       "code": "RATE_LIMITED",
-      "message": "Too many speech requests, please try again later"
+      "message": "Too many speech requests"
     }
   }
   ```
 
 ---
 
+合成请求最多排队 **30 秒**，超时返回 `503 SERVER_BUSY`；此期限不限制已经开始的音频流。提供者连接建立期限为 10 秒、音频无数据期限为 120 秒，不保证总合成时长。
+
+语音准入限额由两条路由和所有调用者共享，作用于单进程。这是单密钥服务，不提供租户隔离。需要区分不同可信客户端时，在可信网关配置客户端认证及配额，不把未经验证的转发 IP 当作身份。音色查询另有 **单进程每分钟 60 次** 的限制，在认证通过后计数；健康检查公开且不占用上述配额。
+
+---
+
 ## 音色元数据缓存
 
 - `GET /api/voices` 获取的音色数据在服务端内存中缓存 **6 小时**（TTL）。
-- 当上游网络发生异常或拉取失败时，引入 5 秒退避时间，避免持续重试导致雪崩。
+- 首次请求时才获取音色，并发获取共享同一个请求。
+- 刷新失败时继续返回已有列表，固定等待 5 秒后允许重试；冷缓存没有旧数据回退或退避。
+- 上游获取有 10 秒逻辑超时，依赖库无法取消底层 HTTP 请求。
 
 ---
 
 ## 容器运行时安全基线
 
-官方 Docker 镜像依据生产最高安全标准构建：
+镜像默认以 `node` 用户运行。推荐的 Compose / `docker run` 参数额外启用只读根目录、`cap_drop=ALL`、禁止提权、`/tmp` tmpfs 和 Docker 注入的 init 进程（`init: true` / `--init`）。这些运行时限制不内置在镜像中。
 
-- **非 root 运行**：采用系统用户 `node`（`UID 1000` / `GID 1000`）。
-- **根文件系统只读**：启用 `--read-only`，杜绝恶意写入。
-- **内核 Capabilities 清空**：清空全部 Linux 特权（`--cap-drop=ALL`）。
-- **特权提升锁定**：配置 `no-new-privileges:true`。
-- **内存临时目录**：仅挂载 `/tmp` 为 `tmpfs` 内存卷。
-- **进程管理与优雅终止**：内置 `tini` 作为 1 号进程，配置 30 秒超时（`stop_grace_period: 30s`），确保容器重启时流式连接平滑断开。
+服务端发送 `nosniff`、Referrer 策略、摄像头/麦克风/定位限制和 CSP。CSP 允许同源脚本、控件所需的内联样式以及 `blob:` 音频，禁止内联脚本和跨源页面嵌入。HTTPS 仍由反向代理提供。

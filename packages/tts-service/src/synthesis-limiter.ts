@@ -29,6 +29,7 @@ interface QueueItem {
   readonly reject: (err: unknown) => void;
   readonly signal: AbortSignal;
   readonly onAbort: () => void;
+  readonly timer: ReturnType<typeof setTimeout>;
 }
 
 export class SynthesisLimiter {
@@ -71,17 +72,24 @@ export class SynthesisLimiter {
     }
 
     return new Promise<Permit>((resolve, reject) => {
+      const remove = () => {
+        const index = this.queue.indexOf(item);
+        if (index !== -1) this.queue.splice(index, 1);
+        clearTimeout(item.timer);
+        signal.removeEventListener("abort", item.onAbort);
+      };
       const item: QueueItem = {
         resolve,
         reject,
         signal,
         onAbort: () => {
-          const index = this.queue.indexOf(item);
-          if (index !== -1) {
-            this.queue.splice(index, 1);
-          }
+          remove();
           reject(createAbortError(signal.reason));
         },
+        timer: setTimeout(() => {
+          remove();
+          reject(new SynthesisQueueFullError("Speech synthesis queue wait timed out"));
+        }, 30_000),
       };
 
       signal.addEventListener("abort", item.onAbort, { once: true });
@@ -105,6 +113,7 @@ export class SynthesisLimiter {
   private dispatchNext(): void {
     while (this.queue.length > 0) {
       const next = this.queue.shift()!;
+      clearTimeout(next.timer);
       next.signal.removeEventListener("abort", next.onAbort);
 
       if (next.signal.aborted) {
