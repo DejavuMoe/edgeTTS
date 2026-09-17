@@ -4,4 +4,4 @@ coverage
 pnpm-lock.yaml
 .git
 # Preserve the vendored upstream skill verbatim.
-.pi/skills/security-audit/
+.agents/skills/security-audit/
