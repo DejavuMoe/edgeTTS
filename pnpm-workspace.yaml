@@ -1,6 +1,9 @@
 packages:
   - "apps/*"
   - "packages/*"
+# Remove the patch once upstream safely ignores frames for disposed streams.
+patchedDependencies:
+  msedge-tts@2.0.7: patches/msedge-tts@2.0.7.patch
 allowBuilds:
   esbuild: true
   msedge-tts: true

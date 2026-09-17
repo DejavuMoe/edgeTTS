@@ -1,0 +1,13 @@
+diff --git a/dist/MsEdgeTTS.js b/dist/MsEdgeTTS.js
+--- a/dist/MsEdgeTTS.js
++++ b/dist/MsEdgeTTS.js
+@@ -132,6 +132,9 @@ class MsEdgeTTS {
+                 const buffer = index_1.Buffer.from(m.data);
+                 const message = buffer.toString();
+                 const requestId = /X-RequestId:(.*?)\r\n/gm.exec(message)[1];
++                // Destroyed streams are removed before the WebSocket close handshake finishes.
++                // Ignore their in-flight frames instead of dereferencing deleted request state.
++                if (!Object.hasOwn(this._streams, requestId)) return;
+                 if (message.includes(`Path:${messageTypes.TURN_START}`)) {
+                     // start of turn, ignore
+                     this._log("->", message);

@@ -12,6 +12,7 @@ WORKDIR /build
 
 # Copy dependency manifests
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
+COPY patches/ ./patches/
 COPY apps/server/package.json ./apps/server/
 COPY apps/web/package.json ./apps/web/
 COPY packages/shared/package.json ./packages/shared/
