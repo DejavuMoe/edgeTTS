@@ -723,7 +723,10 @@ describe("Deterministic Streaming & Disconnect Integration Tests (localhost)", (
 
   afterEach(async () => {
     if (app) {
-      await app.close();
+      const closing = app.close();
+      // Dispose test-client connections after assertions, including abort-related sockets.
+      app.server.closeAllConnections();
+      await closing;
     }
   });
 
