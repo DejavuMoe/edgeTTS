@@ -1,0 +1,296 @@
+{
+  "baselineCommit": "22c9b40c97ca441ad447025904f24c3afe4b280c",
+  "node": "v24.21.0",
+  "platform": "linux",
+  "vitest": "4.1.11",
+  "pnpm": "12.3.4",
+  "sourceHashes": {
+    "packages/tts-service/src/voice-cache.ts": "d7ad0d42b3e6e8af725d6375b76622204aabe339fd4ab479f9c690a5a9f1f29f",
+    "packages/tts-service/src/synthesis-limiter.ts": "b9ad9a8e29ca2cee40322ea22f0d8a5ef09a5a91be49885c746554daa80806d0",
+    "packages/tts-service/src/text-segmenter.ts": "271440dba7ed0faa948c623c0abac01f17ec99d922c9723e00ff1b881b5b3e76",
+    "packages/tts-service/src/tts-service.ts": "46a060d40e4f7e2feb31a1039147b0c2c5736c423bee7cbf6ad20573fd502873",
+    "packages/edge-provider/src/edge-provider.ts": "0c2a16b8f2035cba9a478057ddcf8901e6bb2a3ef5d408cb21d87eabbd8a8b54",
+    "apps/server/src/rate-limit.ts": "1d501274713602f69d2e64f62c13fc690db09fc925a2cada5c85f8666d579955",
+    "apps/web/src/audio/stream-controller.ts": "f48f43d3447f4104582a160ca31695293d4dfde32e87fd9f2763379ac2ea2ad8"
+  },
+  "runs": [
+    {
+      "id": "baseline-service",
+      "group": "service",
+      "passed": 160,
+      "failed": 0,
+      "total": 160,
+      "timedOutTests": 0,
+      "unhandledErrors": 0,
+      "failedTests": null
+    },
+    {
+      "id": "no-cache-ttl",
+      "group": "service",
+      "passed": 153,
+      "failed": 7,
+      "total": 160,
+      "timedOutTests": 0,
+      "unhandledErrors": 0,
+      "failedTests": [
+        "serves 100 sequential warm voice reads with one upstream call",
+        "TtsService voice cache behavior serves from cache on fresh subsequent calls without hitting provider",
+        "TtsService voice cache behavior expires cache exactly at age >= TTL",
+        "TtsService voice cache behavior records cachedAt timestamp upon successful return, not fetch start",
+        "TtsService voice cache behavior forces refresh when forceRefresh is true even if cache is fresh",
+        "TtsService voice cache behavior isolates internal cache from caller mutations and provider mutations",
+        "VoiceCache fetches and caches voices when cold"
+      ]
+    },
+    {
+      "id": "no-single-flight",
+      "group": "service",
+      "passed": 156,
+      "failed": 4,
+      "total": 160,
+      "timedOutTests": 0,
+      "unhandledErrors": 0,
+      "failedTests": [
+        "coalesces a 20-reader cold burst into one upstream call",
+        "TtsService voice cache behavior de-duplicates concurrent cold cache misses to a single provider call",
+        "TtsService voice cache behavior joins existing in-flight fetch when forceRefresh is requested while fetch is in progress",
+        "VoiceCache coalesces concurrent requests into a single in-flight fetch"
+      ]
+    },
+    {
+      "id": "no-stale-fallback",
+      "group": "service",
+      "passed": 157,
+      "failed": 3,
+      "total": 160,
+      "timedOutTests": 0,
+      "unhandledErrors": 0,
+      "failedTests": [
+        "serves 20 expired-cache reads during outage with one refresh attempt",
+        "TtsService voice cache behavior returns stale cache and backs off when expired cache refresh fails",
+        "VoiceCache falls back to stale cached voices on expired refresh failure and enforces backoff (SEC-03)"
+      ]
+    },
+    {
+      "id": "no-error-backoff",
+      "group": "service",
+      "passed": 157,
+      "failed": 3,
+      "total": 160,
+      "timedOutTests": 0,
+      "unhandledErrors": 0,
+      "failedTests": [
+        "serves 20 expired-cache reads during outage with one refresh attempt",
+        "TtsService voice cache behavior returns stale cache and backs off when expired cache refresh fails",
+        "VoiceCache falls back to stale cached voices on expired refresh failure and enforces backoff (SEC-03)"
+      ]
+    },
+    {
+      "id": "no-cache-copy",
+      "group": "service",
+      "passed": 158,
+      "failed": 2,
+      "total": 160,
+      "timedOutTests": 0,
+      "unhandledErrors": 0,
+      "failedTests": [
+        "TtsService voice cache behavior isolates internal cache from caller mutations and provider mutations",
+        "VoiceCache returns isolated copies to prevent caller mutations from affecting cache"
+      ]
+    },
+    {
+      "id": "no-active-limit",
+      "group": "service",
+      "passed": 145,
+      "failed": 15,
+      "total": 160,
+      "timedOutTests": 0,
+      "unhandledErrors": 1,
+      "failedTests": [
+        "bounds a 24-request burst to four active and sixteen waiting permits",
+        "expires queued requests without releasing active permits and admits the next FIFO waiter",
+        "removes queue timers on cancellation and does not expire an admitted stream",
+        "TtsService synthesis concurrency limiter and bounded FIFO queue defaults to 4 active syntheses and queues the 5th",
+        "TtsService synthesis concurrency limiter and bounded FIFO queue active slot covers entire stream lifetime, not just provider.synthesize resolution",
+        "TtsService synthesis concurrency limiter and bounded FIFO queue schedules queued requests in strict FIFO order",
+        "TtsService synthesis concurrency limiter and bounded FIFO queue rejects with SynthesisQueueFullError when queue capacity is exceeded",
+        "TtsService synthesis concurrency limiter and bounded FIFO queue rejects immediately with SynthesisQueueFullError when maxQueuedSyntheses is 0",
+        "TtsService synthesis concurrency limiter and bounded FIFO queue prevents double release from causing over-allocation",
+        "TtsService synthesis concurrency limiter and bounded FIFO queue never exceeds configured maxConcurrentSyntheses limit under concurrency",
+        "TtsService synthesis concurrency limiter and bounded FIFO queue queue-full error on a new request does not affect existing queued requests",
+        "TtsService synthesis concurrency limiter and bounded FIFO queue listVoices is completely unaffected by synthesis limiter saturation",
+        "TtsService synthesizeSegmented holds permit across segments so queued requests wait until entire segmented session finishes (ARCH-01)",
+        "TtsService Phase 13.1 Streaming Lifecycle Hardening releases permit exactly once and does not over-allocate when return and abort coincide",
+        "TtsService Phase 13.1 Streaming Lifecycle Hardening holds a single permit across all segments without releasing between segments (ARCH-01)"
+      ]
+    },
+    {
+      "id": "no-queue-bound",
+      "group": "service",
+      "passed": 154,
+      "failed": 6,
+      "total": 160,
+      "timedOutTests": 0,
+      "unhandledErrors": 0,
+      "failedTests": [
+        "bounds a 24-request burst to four active and sixteen waiting permits",
+        "TtsService synthesis concurrency limiter and bounded FIFO queue rejects with SynthesisQueueFullError when queue capacity is exceeded",
+        "TtsService synthesis concurrency limiter and bounded FIFO queue rejects immediately with SynthesisQueueFullError when maxQueuedSyntheses is 0",
+        "TtsService synthesis concurrency limiter and bounded FIFO queue queue-full error on a new request does not affect existing queued requests",
+        "TtsService synthesis concurrency limiter and bounded FIFO queue listVoices is completely unaffected by synthesis limiter saturation",
+        "TtsService Phase 13.1 Streaming Lifecycle Hardening holds a single permit across all segments without releasing between segments (ARCH-01)"
+      ]
+    },
+    {
+      "id": "no-natural-boundaries",
+      "group": "service",
+      "passed": 145,
+      "failed": 15,
+      "total": 160,
+      "timedOutTests": 0,
+      "unhandledErrors": 0,
+      "failedTests": [
+        "TextSegmenter boundary priority prefers paragraph boundary over line, sentence, and whitespace even if paragraph occurs earlier",
+        "TextSegmenter boundary priority prefers line boundary over sentence and whitespace when no paragraph boundary is available",
+        "TextSegmenter boundary priority prefers sentence boundary over whitespace when no paragraph or line boundary is available",
+        "TextSegmenter boundary priority falls back to whitespace boundary when no paragraph, line, or sentence boundary is available",
+        "TextSegmenter punctuation and quote handling supports Chinese sentence punctuation (。！？；)",
+        "TextSegmenter punctuation and quote handling supports English sentence punctuation (.!?;)",
+        "TextSegmenter punctuation and quote handling keeps closing quotes attached to the preceding sentence punctuation",
+        "TextSegmenter punctuation and quote handling handles multiple nested closing quotes and brackets",
+        "TextSegmenter CRLF contract and atomicity never splits a CRLF pair across chunk boundaries in line breaks for limit >= 2",
+        "TextSegmenter CRLF contract and atomicity never splits a CRLF pair in paragraph breaks for limit >= 2",
+        "TextSegmenter CRLF contract and atomicity never splits CRLF in hard split when window ends on \\r for limit >= 2",
+        "TextSegmenter scale, adversarial patterns, and determinism handles 100k adversarial frequent early high-priority boundaries without performance degradation",
+        "TtsService synthesizeSegmented yields all audio chunks from all segments in order without buffering entire stream",
+        "TtsService synthesizeSegmented propagates pre-stream failure in later segment and stops subsequent segments",
+        "TtsService synthesizeSegmented propagates stream failure in later segment and stops subsequent segments"
+      ]
+    },
+    {
+      "id": "no-unicode-index",
+      "group": "service",
+      "passed": 159,
+      "failed": 1,
+      "total": 160,
+      "timedOutTests": 0,
+      "unhandledErrors": 0,
+      "failedTests": "TextSegmenter Unicode and emoji handling measures limit in Unicode code points without corrupting surrogate pairs"
+    },
+    {
+      "id": "no-session-permit",
+      "group": "service",
+      "passed": 158,
+      "failed": 2,
+      "total": 160,
+      "timedOutTests": 0,
+      "unhandledErrors": 0,
+      "failedTests": [
+        "TtsService synthesizeSegmented holds permit across segments so queued requests wait until entire segmented session finishes (ARCH-01)",
+        "TtsService Phase 13.1 Streaming Lifecycle Hardening holds a single permit across all segments without releasing between segments (ARCH-01)"
+      ]
+    },
+    {
+      "id": "no-whitespace-skip",
+      "group": "service",
+      "passed": 159,
+      "failed": 1,
+      "total": 160,
+      "timedOutTests": 0,
+      "unhandledErrors": 0,
+      "failedTests": "TtsService Phase 13.1 Streaming Lifecycle Hardening skips whitespace-only segments so a valid long request completes"
+    },
+    {
+      "id": "baseline-provider",
+      "group": "provider",
+      "passed": 29,
+      "failed": 0,
+      "total": 29,
+      "timedOutTests": 0,
+      "unhandledErrors": 0,
+      "failedTests": null
+    },
+    {
+      "id": "no-late-setup-close",
+      "group": "provider",
+      "passed": 25,
+      "failed": 4,
+      "total": 29,
+      "timedOutTests": 0,
+      "unhandledErrors": 0,
+      "failedTests": [
+        "EdgeTtsProvider timeouts and aborts during handshake closes again when aborted setMetadata resolves late",
+        "EdgeTtsProvider timeouts and aborts during handshake closes again when timed-out setMetadata resolves late",
+        "EdgeTtsProvider timeouts and aborts during handshake closes again without unhandled rejection when abort abandons setMetadata",
+        "EdgeTtsProvider timeouts and aborts during handshake closes again without unhandled rejection when timeout abandons setMetadata"
+      ]
+    },
+    {
+      "id": "baseline-http",
+      "group": "http",
+      "passed": 21,
+      "failed": 0,
+      "total": 21,
+      "timedOutTests": 0,
+      "unhandledErrors": 0,
+      "failedTests": null
+    },
+    {
+      "id": "no-group-id",
+      "group": "http",
+      "passed": 21,
+      "failed": 0,
+      "total": 21,
+      "timedOutTests": 0,
+      "unhandledErrors": 0,
+      "failedTests": null
+    },
+    {
+      "id": "no-cross-route-budget",
+      "group": "http",
+      "passed": 20,
+      "failed": 1,
+      "total": 21,
+      "timedOutTests": 0,
+      "unhandledErrors": 0,
+      "failedTests": "Speech Rate Limit Integration shares rate limit budget between /api/speech and /v1/audio/speech"
+    },
+    {
+      "id": "baseline-playback",
+      "group": "playback",
+      "passed": 17,
+      "failed": 0,
+      "total": 17,
+      "timedOutTests": 0,
+      "unhandledErrors": 0,
+      "failedTests": null
+    },
+    {
+      "id": "no-blob-fallback",
+      "group": "playback",
+      "passed": 11,
+      "failed": 6,
+      "total": 17,
+      "timedOutTests": 0,
+      "unhandledErrors": 0,
+      "failedTests": [
+        "StreamPlaybackController Session Isolation & URL Lifecycle revokes single fallback blob URL exactly once",
+        "StreamPlaybackController Session Isolation & URL Lifecycle isolates playback sessions: stale session A settling late does not cancel B, revoke B URLs, or fire stale callbacks",
+        "StreamPlaybackController Session Isolation & URL Lifecycle Blob fallback genuine error: calls onError exactly once and does not call onFinish or ready callbacks",
+        "StreamPlaybackController Session Isolation & URL Lifecycle MediaSource addSourceBuffer failure falls back cleanly to Blob playback",
+        "StreamPlaybackController Session Isolation & URL Lifecycle MediaSource addSourceBuffer failure followed by Blob fallback failure calls onError exactly once",
+        "StreamPlaybackController Session Isolation & URL Lifecycle Streaming Telemetry & Byte Accounting Blob fallback reports final blob.size via onProgress"
+      ]
+    },
+    {
+      "id": "no-progress-throttle",
+      "group": "playback",
+      "passed": 16,
+      "failed": 1,
+      "total": 17,
+      "timedOutTests": 0,
+      "unhandledErrors": 0,
+      "failedTests": "StreamPlaybackController Session Isolation & URL Lifecycle Streaming Telemetry & Byte Accounting accumulates bytes with 1024-byte chunks, throttles progress, and reports final bytes"
+    }
+  ]
+}

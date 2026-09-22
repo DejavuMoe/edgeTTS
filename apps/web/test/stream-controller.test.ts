@@ -552,76 +552,79 @@ describe("StreamPlaybackController Session Isolation & URL Lifecycle", () => {
   });
 
   describe("Streaming Telemetry & Byte Accounting", () => {
-    it("accumulates bytes monotonically, ignores zero-length chunks, and reports final cumulative bytes", async () => {
-      class MockSourceBuffer extends EventTarget {
-        updating = false;
-        appendBuffer = vi.fn(() => {
-          queueMicrotask(() => {
-            this.dispatchEvent(new Event("updateend"));
+    it.each([32768, 1024])(
+      "accumulates bytes with %i-byte chunks, throttles progress, and reports final bytes",
+      async (chunkSize) => {
+        class MockSourceBuffer extends EventTarget {
+          updating = false;
+          appendBuffer = vi.fn(() => {
+            queueMicrotask(() => {
+              this.dispatchEvent(new Event("updateend"));
+            });
           });
+          abort = vi.fn();
+        }
+
+        const mockBuffer = new MockSourceBuffer();
+        class MockMediaSource extends EventTarget {
+          readyState = "open";
+          addSourceBuffer = vi.fn(() => mockBuffer as unknown as SourceBuffer);
+          endOfStream = vi.fn();
+          static isTypeSupported = vi.fn(() => true);
+        }
+
+        // @ts-expect-error Mocking MediaSource
+        window.MediaSource = MockMediaSource;
+
+        const controller = new StreamPlaybackController();
+        const progressReports: number[] = [];
+
+        // Chunks: 32 KiB, empty (0 bytes), 32 KiB, 10 KiB
+        const chunk1 = new Uint8Array(chunkSize).fill(1);
+        const chunkEmpty = new Uint8Array(0);
+        const chunk2 = new Uint8Array(chunkSize).fill(2);
+        const chunk3 = new Uint8Array(10 * 1024).fill(3);
+
+        const stream = new ReadableStream<Uint8Array>({
+          start(ctrl) {
+            for (let bytes = 0; bytes < 32768; bytes += chunkSize) ctrl.enqueue(chunk1);
+            ctrl.enqueue(chunkEmpty);
+            for (let bytes = 0; bytes < 32768; bytes += chunkSize) ctrl.enqueue(chunk2);
+            ctrl.enqueue(chunk3);
+            ctrl.close();
+          },
         });
-        abort = vi.fn();
-      }
 
-      const mockBuffer = new MockSourceBuffer();
-      class MockMediaSource extends EventTarget {
-        readyState = "open";
-        addSourceBuffer = vi.fn(() => mockBuffer as unknown as SourceBuffer);
-        endOfStream = vi.fn();
-        static isTypeSupported = vi.fn(() => true);
-      }
+        const mockResponse = { body: stream } as unknown as Response;
+        const callbacks = {
+          onStreamReady: vi.fn(),
+          onDownloadReady: vi.fn(),
+          onError: vi.fn(),
+          onFinish: vi.fn(),
+          onProgress: vi.fn((bytes: number) => {
+            progressReports.push(bytes);
+          }),
+        };
 
-      // @ts-expect-error Mocking MediaSource
-      window.MediaSource = MockMediaSource;
+        const ac = new AbortController();
+        await controller.startStream(mockResponse, ac.signal, callbacks);
 
-      const controller = new StreamPlaybackController();
-      const progressReports: number[] = [];
+        expect(callbacks.onFinish).toHaveBeenCalledTimes(1);
+        expect(progressReports.length).toBe(3);
 
-      // Chunks: 32 KiB, empty (0 bytes), 32 KiB, 10 KiB
-      const chunk1 = new Uint8Array(32 * 1024).fill(1);
-      const chunkEmpty = new Uint8Array(0);
-      const chunk2 = new Uint8Array(32 * 1024).fill(2);
-      const chunk3 = new Uint8Array(10 * 1024).fill(3);
+        // Chunk 1 reported 32768
+        expect(progressReports[0]).toBe(32768);
+        // Chunk 2 reported 65536
+        expect(progressReports[1]).toBe(65536);
+        // Final chunk 3 (10 KiB) emitted at stream finish even below 32 KiB threshold: 75776
+        expect(progressReports[progressReports.length - 1]).toBe(75776);
 
-      const stream = new ReadableStream<Uint8Array>({
-        start(ctrl) {
-          ctrl.enqueue(chunk1);
-          ctrl.enqueue(chunkEmpty);
-          ctrl.enqueue(chunk2);
-          ctrl.enqueue(chunk3);
-          ctrl.close();
-        },
-      });
-
-      const mockResponse = { body: stream } as unknown as Response;
-      const callbacks = {
-        onStreamReady: vi.fn(),
-        onDownloadReady: vi.fn(),
-        onError: vi.fn(),
-        onFinish: vi.fn(),
-        onProgress: vi.fn((bytes: number) => {
-          progressReports.push(bytes);
-        }),
-      };
-
-      const ac = new AbortController();
-      await controller.startStream(mockResponse, ac.signal, callbacks);
-
-      expect(callbacks.onFinish).toHaveBeenCalledTimes(1);
-      expect(progressReports.length).toBeGreaterThanOrEqual(3);
-
-      // Chunk 1 reported 32768
-      expect(progressReports[0]).toBe(32768);
-      // Chunk 2 reported 65536
-      expect(progressReports[1]).toBe(65536);
-      // Final chunk 3 (10 KiB) emitted at stream finish even below 32 KiB threshold: 75776
-      expect(progressReports[progressReports.length - 1]).toBe(75776);
-
-      // Monotonic non-decreasing
-      for (let i = 1; i < progressReports.length; i++) {
-        expect(progressReports[i]).toBeGreaterThanOrEqual(progressReports[i - 1]!);
-      }
-    });
+        // Monotonic non-decreasing
+        for (let i = 1; i < progressReports.length; i++) {
+          expect(progressReports[i]).toBeGreaterThanOrEqual(progressReports[i - 1]!);
+        }
+      },
+    );
 
     it("emits final byte count when total stream size is below throttle threshold (< 32 KiB)", async () => {
       class MockSourceBuffer extends EventTarget {
