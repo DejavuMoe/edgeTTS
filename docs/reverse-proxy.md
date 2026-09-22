@@ -4,8 +4,6 @@ This guide details how to configure production reverse proxies (Nginx, Caddy) in
 
 This example assumes the proxy runs on the host. Inside a proxy container, `127.0.0.1` refers to that proxy container: attach both services to a private Docker network and use `edgetts:8080` instead. The Nginx example assumes certificates already exist; obtain them before `nginx -t`. The deterministic proxy script requires Docker and may pull images even with upstream live checks disabled.
 
----
-
 ## Topology & Core Principles
 
 ```text
@@ -22,101 +20,12 @@ Clients (Browsers / Mobile Apps / OpenAI Clients)
 
 1. **Loopback Isolation**: edgeTTS binds strictly to `127.0.0.1` on the host, preventing direct exposure to external public interfaces.
 2. **TLS Termination**: The proxy manages public certificates and terminates HTTPS.
-3. **The Golden Streaming Rule**: Response buffering **must** be disabled for streaming audio endpoints (`/api/speech` and `/v1/audio/speech`). Microsoft Edge TTS synthesizes audio progressively. If the proxy buffers responses, the client will experience silence until the entire synthesis finishes.
-4. **Header Passthrough**: Client `Host`, `X-Real-IP`, `X-Forwarded-For`, `X-Forwarded-Proto`, and `Authorization: Bearer <API_KEY>` headers must pass through unaltered.
-
----
+3. **Streaming**: Disable response buffering and caching for `/api/speech` and `/v1/audio/speech` to avoid delaying audio delivery.
+4. **Headers**: Preserve `Authorization`. Set forwarding headers at the proxy; they do not provide authenticated client identities or per-client quotas.
 
 ## Nginx Configuration
 
-A fully verified reference configuration is provided in [`deploy/nginx/edgetts.conf.example`](../deploy/nginx/edgetts.conf.example).
-
-### Configuration Template
-
-```nginx
-upstream edgetts_backend {
-    server 127.0.0.1:8080;
-    keepalive 16;
-}
-
-# Redirect HTTP to HTTPS
-server {
-    listen 80;
-    listen [::]:80;
-    server_name edgetts.example.com;
-
-    server_tokens off;
-    return 301 https://$host$request_uri;
-}
-
-# Production HTTPS server
-server {
-    listen 443 ssl;
-    listen [::]:443 ssl;
-    server_name edgetts.example.com;
-
-    server_tokens off;
-    client_max_body_size 1m;
-
-    # TLS Certificates (managed by Certbot or organizational CA)
-    ssl_certificate /etc/letsencrypt/live/edgetts.example.com/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/edgetts.example.com/privkey.pem;
-    ssl_protocols TLSv1.2 TLSv1.3;
-    ssl_ciphers HIGH:!aNULL:!MD5;
-    ssl_prefer_server_ciphers on;
-
-    # Security headers
-    add_header X-Content-Type-Options "nosniff" always;
-    add_header Referrer-Policy "same-origin" always;
-    proxy_hide_header X-Frame-Options;
-    add_header X-Frame-Options "SAMEORIGIN" always;
-
-    # Native streaming speech endpoint - NO BUFFERING
-    location = /api/speech {
-        proxy_pass http://edgetts_backend;
-        proxy_http_version 1.1;
-
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-
-        proxy_buffering off;
-        proxy_cache off;
-
-        proxy_read_timeout 300s;
-        proxy_send_timeout 60s;
-    }
-
-    # OpenAI-compatible streaming speech endpoint - NO BUFFERING
-    location = /v1/audio/speech {
-        proxy_pass http://edgetts_backend;
-        proxy_http_version 1.1;
-
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-
-        proxy_buffering off;
-        proxy_cache off;
-
-        proxy_read_timeout 300s;
-        proxy_send_timeout 60s;
-    }
-
-    # General application routing (WebUI, static assets, voices discovery, health probes)
-    location / {
-        proxy_pass http://edgetts_backend;
-        proxy_http_version 1.1;
-
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-}
-```
+Use the [canonical Nginx template](../deploy/nginx/edgetts.conf.example). Replace its domain and certificate paths before enabling it. Keep buffering and caching disabled for both speech routes.
 
 ### Installation Steps (Ubuntu / Debian)
 
@@ -145,8 +54,6 @@ The repository includes an automated integration test script [`deploy/nginx/test
 # Deterministic verification mode (no external network needed)
 EDGETTS_NGINX_SKIP_LIVE=1 ./deploy/nginx/test-proxy.sh
 ```
-
----
 
 ## Caddy Configuration
 
@@ -182,8 +89,6 @@ edgetts.example.com {
 
 > [!TIP]
 > Setting `flush_interval -1` forces Caddy to immediately flush every audio chunk to the client as soon as it is received from edgeTTS.
-
----
 
 ## Reverse Proxy Checklist
 

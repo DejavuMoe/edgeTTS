@@ -4,8 +4,6 @@ This guide covers self-hosted deployment options for `edgeTTS`, from standalone 
 
 `/health` checks the HTTP process only; it does not contact Microsoft or prove synthesis works. For a remote server, use its HTTPS reverse-proxy URL to open the workbench and enter the same key. The Compose `.env` file is not automatically exported to your shell: before the API examples, run `set -a; . ./.env; set +a` for this locally generated file. Do not regenerate `.env` when restarting or upgrading.
 
----
-
 ## Deployment Architectures
 
 `edgeTTS` is designed to run behind a reverse proxy (such as Nginx or Caddy) on production hosts:
@@ -26,100 +24,15 @@ Internet (Clients / Browsers / API Consumers)
 - **TLS Termination**: The reverse proxy terminates HTTPS, handles domain certificates, and forwards requests.
 - **Streaming Buffering Rule**: Reverse proxies **must** disable response buffering (`proxy_buffering off;`) for speech synthesis routes so audio streams progressively to clients without latency.
 
----
-
 ## Prerequisites
 
 - **Container Deployment**: Docker Engine 24.0+ and Docker Compose v2.
 - **Bare-Metal Deployment**: Node.js 24 LTS and pnpm 12.3.4.
 - **Network Egress**: Outbound HTTPS (TCP port 443) connectivity to Microsoft Edge TTS upstream endpoints.
 
----
-
 ## Method 1: Docker Compose with Pre-built Image (Recommended)
 
-This is the fastest and most maintainable way to run edgeTTS in production. It requires no source code checkout and pulls multi-arch images directly from GitHub Container Registry (GHCR).
-
-### 1. Create a Project Directory
-
-```bash
-mkdir -p ~/edgetts && cd ~/edgetts
-```
-
-### 2. Create `compose.yaml`
-
-Create a `compose.yaml` file with the following configuration:
-
-```yaml
-services:
-  edgetts:
-    image: ghcr.io/dejavumoe/edgetts:0.5.0
-    container_name: edgetts
-    restart: unless-stopped
-    init: true
-    read_only: true
-    cap_drop:
-      - ALL
-    security_opt:
-      - no-new-privileges:true
-    tmpfs:
-      - /tmp
-    stop_grace_period: 35s
-    ports:
-      - "127.0.0.1:8080:8080"
-    environment:
-      - NODE_ENV=production
-      - HOST=0.0.0.0
-      - PORT=8080
-      - API_KEY=${API_KEY:?Set API_KEY in .env}
-      - REQUIRE_API_KEY=true
-      - SPEECH_RATE_LIMIT_MAX=12
-      - SPEECH_RATE_LIMIT_WINDOW_MS=10000
-```
-
-> [!NOTE]
-> To bind to a different local port, change `"127.0.0.1:8080:8080"` to `"127.0.0.1:<PORT>:8080"`. Keep `127.0.0.1:` to prevent exposing the port to public interfaces.
-
-### 3. Generate Secret & Configure Environment
-
-Generate a cryptographically secure random API key (minimum 16 characters):
-
-```bash
-(umask 077; printf 'API_KEY=%s\n' "$(openssl rand -hex 32)" > .env)
-chmod 600 .env
-```
-
-### 4. Start the Service
-
-```bash
-docker compose up -d
-```
-
-### 5. Verify Health
-
-```bash
-curl -i http://127.0.0.1:8080/health
-```
-
-Expected output: `HTTP/1.1 200 OK` with body `{"status":"ok"}`.
-
-### Container Management
-
-```bash
-# View container status
-docker compose ps
-
-# Follow application logs
-docker compose logs -f
-
-# Gracefully stop the service
-docker compose stop
-
-# Remove container
-docker compose down
-```
-
----
+See [README](../README.md) for the Compose configuration and first start.
 
 ## Method 2: Single Container (`docker run`)
 
@@ -161,8 +74,6 @@ docker run -d \
 | `--init`                           | Uses a lightweight init process (tini) to reap zombies and handle signals |
 | `--stop-timeout 35`                | Allows 30 seconds for active synthesis streams to complete gracefully     |
 
----
-
 ## Image Tags & Digest Pinning
 
 Official multi-architecture images support `linux/amd64` and `linux/arm64`.
@@ -175,8 +86,6 @@ Official multi-architecture images support `linux/amd64` and `linux/arm64`.
 | `ghcr.io/dejavumoe/edgetts@sha256:<digest>` | Content-addressed immutable image           | Mission-critical reproducible deployments |
 
 Each release records its verified multi-arch OCI index digest in the [GitHub Release Notes](https://github.com/DejavuMoe/edgeTTS/releases).
-
----
 
 ## Method 3: Build from Source with Docker Compose
 
@@ -202,8 +111,6 @@ The repository `compose.yaml` uses `.env` variables for host port mapping:
 
 - `EDGETTS_BIND_ADDRESS`: Host IP binding (default: `127.0.0.1`).
 - `EDGETTS_HOST_PORT`: Host port mapping (default: `8080`).
-
----
 
 ## Method 4: Bare-Metal Installation (Node.js & Systemd)
 
@@ -235,7 +142,7 @@ pnpm build
 ```bash
 sudo useradd --system --no-create-home --shell /usr/sbin/nologin edgetts
 sudo chown -R root:root /opt/edgetts
-sudo sh -c 'umask 077; printf "API_KEY=%s\n" "$(openssl rand -hex 32)" > /etc/edgetts.env'
+sudo sh -c 'umask 077; set -C; printf "API_KEY=%s\n" "$(openssl rand -hex 32)" > /etc/edgetts.env'
 ```
 
 ### 4. Configure Systemd Service
@@ -285,8 +192,6 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now edgetts
 sudo systemctl status edgetts
 ```
-
----
 
 ## Upgrades and Maintenance
 

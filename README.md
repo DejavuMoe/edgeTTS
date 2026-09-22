@@ -15,8 +15,6 @@ edgeTTS is a self-hosted API and browser workbench for Microsoft Edge speech syn
 
 > Synthesis sends your text through this server to Microsoft over TLS. edgeTTS does not persist synthesis text or audio; it is not an offline engine. TXT import only reads locally until you request synthesis. Microsoft’s handling of submitted data is outside this project’s control.
 
----
-
 ## Key Features
 
 - **Speech APIs**: `/v1/audio/speech` accepts a subset of the OpenAI speech request format, with Edge voice IDs and MP3 output. `/api/speech` supports long text and speed, pitch and volume controls.
@@ -25,11 +23,9 @@ edgeTTS is a self-hosted API and browser workbench for Microsoft Edge speech syn
 - **Browser workbench**: Four UI languages, voice search and favorites, local TXT import, MP3 playback and download. Streaming uses MediaSource where supported; other browsers wait for a complete Blob.
 - **Simple deployment**: One Fastify process serves the UI and API. Bearer authentication and a hardened container configuration are provided.
 
----
-
 ## Quick Start
 
-### Method A: Docker Compose with Pre-built Image (Recommended)
+### Docker Compose with Pre-built Image (Recommended)
 
 Create a directory and define `compose.yaml`:
 
@@ -65,7 +61,7 @@ services:
 Generate a secure random API key and start the container:
 
 ```bash
-(umask 077; printf 'API_KEY=%s\n' "$(openssl rand -hex 32)" > .env)
+(umask 077; set -C; printf 'API_KEY=%s\n' "$(openssl rand -hex 32)" > .env)
 docker compose up -d
 ```
 
@@ -81,27 +77,11 @@ Open `http://127.0.0.1:8080` in your web browser to access the Web Workbench.
 
 Generate `.env` only once and preserve it on upgrades. `/health` confirms the HTTP process, not Microsoft availability. Open `http://127.0.0.1:8080` locally, or your reverse proxy’s HTTPS URL for a remote server, then enter the same API key. Before using the shell API examples, load the locally generated key with `set -a; . ./.env; set +a`. Other deployment methods and upgrades are in the [deployment guide](docs/deployment.md).
 
----
-
 ## API Usage at a Glance
 
-### OpenAI-Compatible Synthesis (`POST /v1/audio/speech`)
-
-```bash
-curl -X POST http://127.0.0.1:8080/v1/audio/speech \
-  -H "Authorization: Bearer $API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "tts-1",
-    "voice": "zh-CN-XiaoxiaoNeural",
-    "input": "你好，世界！这是一段测试文本。",
-    "response_format": "mp3",
-    "speed": 1.0
-  }' \
-  --output speech.mp3
-```
-
 ### Native Long-Text Streaming Synthesis (`POST /api/speech`)
+
+Both speech APIs synthesize sequential segments of at most 300 Unicode code points. Native requests allow 20,000 code points; the compatibility API allows 4,096 UTF-16 code units. The browser retains audio for download, so memory grows with audio size.
 
 ```bash
 curl -X POST http://127.0.0.1:8080/api/speech \
@@ -118,11 +98,7 @@ curl -X POST http://127.0.0.1:8080/api/speech \
   --output long-speech.mp3
 ```
 
----
-
 ## Documentation
-
-Comprehensive guides are available in the [`docs/`](docs/) directory:
 
 | Document                                               | Description                                                                         |
 | :----------------------------------------------------- | :---------------------------------------------------------------------------------- |
@@ -132,21 +108,26 @@ Comprehensive guides are available in the [`docs/`](docs/) directory:
 | [**API Reference & Integrations**](docs/api.md)        | Endpoint specifications, schemas, error codes, and third-party client integrations. |
 | [**Release Governance & Security**](docs/releasing.md) | SemVer policies, OCI supply-chain attestations, and immutable digest pinning.       |
 
----
+- [Ablation results (Chinese)](docs/ablation.zh-CN.md)
 
 ## Architecture
 
-```text
-HTTP Route (apps/server)
-       ↓
-  TtsService (packages/tts-service)
-       ↓
-  TtsProvider (packages/tts-core)
-       ↓
-EdgeTtsProvider (packages/edge-provider)
-       ↓
-   msedge-tts (Upstream WebSocket)
+```mermaid
+flowchart TD
+  UI["React Web workbench"] --> HTTP["Fastify HTTP routes"]
+  Client["External API clients"] --> HTTP
+  HTTP --> Service[TtsService]
+  Service --> Port["TtsProvider domain contract"]
+  Port --> Edge[EdgeTtsProvider]
+  Edge --> Library[msedge-tts]
+  Library --> Microsoft["Microsoft Edge online service"]
+  Shared["shared: Zod request/response contracts"] -.-> UI
+  Shared -.-> HTTP
+  Composition["server composition.ts: inject implementations"] -.-> Service
+  Composition -.-> Edge
 ```
+
+Solid arrows show the call path; dashed arrows show shared contracts and dependency injection.
 
 - `apps/server`: Fastify composition root, HTTP routing, rate-limiting, and static file hosting.
 - `apps/web`: React + Vite SPA workbench featuring browser-neutral accessible UI primitives.
@@ -154,8 +135,6 @@ EdgeTtsProvider (packages/edge-provider)
 - `packages/tts-core`: Domain abstractions and port definitions.
 - `packages/edge-provider`: Microsoft Edge Read Aloud WebSocket provider adapter.
 - `packages/shared`: Shared validation schemas, types, and Unicode text processing utilities.
-
----
 
 ## License
 

@@ -108,7 +108,6 @@ export function createSpeechRateLimiter(scope: FastifyInstance, config: SpeechRa
     max: config.max,
     timeWindow: config.timeWindowMs,
     keyGenerator: () => "speech-global",
-    groupId: "speech-admission",
     errorResponseBuilder: (_req, context) => {
       return new RateLimitedError(RATE_LIMITED_ERROR.error.message, context.statusCode);
     },

@@ -4,8 +4,6 @@
 
 本示例假设代理运行在宿主机。代理也在容器内时，`127.0.0.1` 指向代理容器自身；应将两个服务接入私有 Docker 网络并使用 `edgetts:8080`。Nginx 示例要求证书文件已经存在，请先取得证书再执行 `nginx -t`。确定性代理脚本需要 Docker，即使关闭上游实时检查，也可能需要联网拉取镜像。
 
----
-
 ## 部署拓扑与核心原则
 
 ```text
@@ -23,100 +21,11 @@
 1. **本地回环隔离**：edgeTTS 仅监听 `127.0.0.1`，不直接暴露给外部公网接口。
 2. **TLS 证书终结**：反向代理集中管理 SSL/TLS 证书并提供 HTTPS 加密传输。
 3. **流式传输无缓冲准则（关键）**：针对流式语音合成接口（`/api/speech` 与 `/v1/audio/speech`），**必须禁用反向代理的响应缓冲**。微软 Edge TTS 是实时分片合成音频的，如果反向代理开启缓冲，客户端必须等待整个音频全部生成完毕或缓冲区填满才会接收到数据，导致播放延迟极高。
-4. **请求头透传**：确保透传客户端的 `Host`、`X-Real-IP`、`X-Forwarded-For`、`X-Forwarded-Proto` 以及带有凭据的 `Authorization: Bearer <API_KEY>` 请求头。
-
----
+4. **请求头**：保留 `Authorization`，由代理设置转发请求头；转发 IP 不作为已认证的客户端身份，也不提供独立配额。
 
 ## Nginx 配置方案
 
-完整经过验证的 Nginx 配置模板位于 [`deploy/nginx/edgetts.conf.example`](../deploy/nginx/edgetts.conf.example)。
-
-### 配置文件模板
-
-```nginx
-upstream edgetts_backend {
-    server 127.0.0.1:8080;
-    keepalive 16;
-}
-
-# HTTP 强制重定向至 HTTPS
-server {
-    listen 80;
-    listen [::]:80;
-    server_name edgetts.example.com;
-
-    server_tokens off;
-    return 301 https://$host$request_uri;
-}
-
-# 生产 HTTPS 虚拟主机
-server {
-    listen 443 ssl;
-    listen [::]:443 ssl;
-    server_name edgetts.example.com;
-
-    server_tokens off;
-    client_max_body_size 1m;
-
-    # SSL 证书配置（替换为实际证书路径）
-    ssl_certificate /etc/letsencrypt/live/edgetts.example.com/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/edgetts.example.com/privkey.pem;
-    ssl_protocols TLSv1.2 TLSv1.3;
-    ssl_ciphers HIGH:!aNULL:!MD5;
-    ssl_prefer_server_ciphers on;
-
-    # 安全响应头
-    add_header X-Content-Type-Options "nosniff" always;
-    add_header Referrer-Policy "same-origin" always;
-    proxy_hide_header X-Frame-Options;
-    add_header X-Frame-Options "SAMEORIGIN" always;
-
-    # 原生分段流式语音合成接口 - 关闭缓冲
-    location = /api/speech {
-        proxy_pass http://edgetts_backend;
-        proxy_http_version 1.1;
-
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-
-        proxy_buffering off;
-        proxy_cache off;
-
-        proxy_read_timeout 300s;
-        proxy_send_timeout 60s;
-    }
-
-    # OpenAI 兼容流式语音合成接口 - 关闭缓冲
-    location = /v1/audio/speech {
-        proxy_pass http://edgetts_backend;
-        proxy_http_version 1.1;
-
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-
-        proxy_buffering off;
-        proxy_cache off;
-
-        proxy_read_timeout 300s;
-        proxy_send_timeout 60s;
-    }
-
-    # 通用应用路由（Web 工作台、静态资源、音色查询、健康探测） - 保留正常缓冲
-    location / {
-        proxy_pass http://edgetts_backend;
-        proxy_http_version 1.1;
-
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-}
-```
+使用[仓库内的 Nginx 模板](../deploy/nginx/edgetts.conf.example)，替换域名和证书路径后启用。两条语音路由均保持响应缓冲与缓存关闭。
 
 ### 安装与生效（Ubuntu / Debian）
 
@@ -145,8 +54,6 @@ sudo systemctl reload nginx
 # 执行确定性验证（不调用微软上游）
 EDGETTS_NGINX_SKIP_LIVE=1 ./deploy/nginx/test-proxy.sh
 ```
-
----
 
 ## Caddy 配置方案
 
@@ -182,8 +89,6 @@ edgetts.example.com {
 
 > [!TIP]
 > `flush_interval -1` 指示 Caddy 在接收到 edgeTTS 返回的每个音频分片时立即推送到客户端，完全避免中间积压缓冲。
-
----
 
 ## 上线检查清单
 
