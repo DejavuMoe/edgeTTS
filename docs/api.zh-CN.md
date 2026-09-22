@@ -2,8 +2,6 @@
 
 本文档介绍 `edgeTTS` 的所有 HTTP API 端点、请求/响应协议规范以及常见客户端的对接示例。
 
----
-
 ## 接口总览
 
 | 请求方法 | 路由路径           | 需携带认证       | 说明                                            |
@@ -13,8 +11,6 @@
 | `GET`    | `/api/voices`      | 是（若启用认证） | 获取可用的 Edge TTS 音色列表                    |
 | `POST`   | `/v1/audio/speech` | 是（若启用认证） | 兼容 OpenAI TTS 协议的流式语音合成接口          |
 | `POST`   | `/api/speech`      | 是（若启用认证） | 原生分段长文本流式语音合成接口                  |
-
----
 
 ## 认证方式
 
@@ -34,8 +30,6 @@ Authorization: Bearer <API_KEY>
   }
 }
 ```
-
----
 
 ## 1. OpenAI 兼容接口 (`POST /v1/audio/speech`)
 
@@ -67,59 +61,11 @@ curl -X POST http://127.0.0.1:8080/v1/audio/speech \
   --output speech.mp3
 ```
 
-### Python 官方 OpenAI SDK 调用示例
-
-```python
-from openai import OpenAI
-
-client = OpenAI(
-    base_url="http://127.0.0.1:8080/v1",
-    api_key="your-secret-api-key",
-)
-
-with client.audio.speech.with_streaming_response.create(
-    model="tts-1",
-    voice="zh-CN-XiaoxiaoNeural",
-    input="你好，通过 Python OpenAI SDK 调用 edgeTTS 生成的音频流！",
-) as response:
-    response.stream_to_file("output.mp3")
-```
-
-### Node.js / TypeScript 官方 SDK 调用示例
-
-```typescript
-import fs from "node:fs";
-import OpenAI from "openai";
-
-const openai = new OpenAI({
-  baseURL: "http://127.0.0.1:8080/v1",
-  apiKey: "your-secret-api-key",
-});
-
-async function main() {
-  const response = await openai.audio.speech.create({
-    model: "tts-1",
-    voice: "zh-CN-XiaoxiaoNeural",
-    input: "来自 Node.js 官方 SDK 的流式语音合成。",
-  });
-
-  const buffer = Buffer.from(await response.arrayBuffer());
-  await fs.promises.writeFile("output.mp3", buffer);
-}
-
-void main();
-```
-
 ## 2. 原生长文本流式接口 (`POST /api/speech`)
 
 专为长篇文档、小说朗读、新闻播报设计，支持单次 HTTP 请求直接合成高达 **20,000 Unicode 码点** 的长文本。
 
-### 服务端无损层次分段
-
-当输入文本超过 300 码点时，服务端会按照确定性的分级边界规则自动拆分：
-`段落 (\n\n) > 换行 (\n) > 句子标点 (. ! ? 。 ！？) > 空白字符 > 硬截断`
-
-每个分段在上游串行合成，音频帧通过单个 HTTP 长连接流式拼接返回。所有分段重新拼接可 100% 还原原始输入文本，绝无字符丢失或意外修剪。
+两条合成接口都按段落、换行、句子、空白的优先级分段，每段最多 300 Unicode 码点。分段器保留原始文本，合成时跳过纯空白段；各段串行合成，通过一个 HTTP 音频流返回。
 
 ### 请求体参数（JSON）
 
@@ -136,7 +82,7 @@ void main();
 
 - `Content-Type`: `audio/mpeg`
 - `Cache-Control`: `no-store`
-- `X-EdgeTTS-Segment-Count`: 服务端计划切分的总分段数。
+- `X-EdgeTTS-Segment-Count`: 计划合成的非空白段数，不表示已完成段数。
 - `X-EdgeTTS-Segment-Max-Code-Points`: 单分段最大码点限制（`300`）。
 
 ### cURL 调用示例
@@ -155,8 +101,6 @@ curl -X POST http://127.0.0.1:8080/api/speech \
   }' \
   --output long-speech.mp3
 ```
-
----
 
 ## 3. 音色查询接口 (`GET /api/voices`)
 
@@ -194,11 +138,9 @@ curl -s http://127.0.0.1:8080/api/voices \
 }
 ```
 
----
-
 ## 4. 健康检查接口 (`GET /health`, `GET /api/health`)
 
-用于检查 HTTP 进程是否响应，不探测上游或验证完整合成链路。
+健康接口只检查 HTTP 进程存活，不访问微软，也不验证合成就绪。
 
 ### cURL 调用示例
 
@@ -215,36 +157,24 @@ Content-Type: application/json; charset=utf-8
 {"status":"ok"}
 ```
 
----
-
 ## 错误代码与状态码说明
 
-所有错误响应均遵循统一的 `ApiError` JSON 结构：
+音频响应头发送前的错误使用下方 JSON 结构；流开始后的错误会终止连接。HTTP 200 不保证下载完整，应丢弃中断音频并显式重试。
 
 ```json
-{
-  "error": {
-    "code": "错误代号",
-    "message": "人类可读的详细错误说明"
-  }
-}
+{ "error": { "code": "INVALID_REQUEST", "message": "Invalid request" } }
 ```
 
-| HTTP 状态码               | 错误代号          | 原因分析                                                         |
-| :------------------------ | :---------------- | :--------------------------------------------------------------- |
-| `400 Bad Request`         | `INVALID_REQUEST` | 参数校验失败（如超出文本长度限制、非法字符、音色格式不合法等）。 |
-| `401 Unauthorized`        | `UNAUTHORIZED`    | 请求未提供 API Key 或提供的密钥无效。                            |
-| `404 Not Found`           | —                 | 访问的路由不存在。                                               |
-| `429 Too Many Requests`   | `RATE_LIMITED`    | 触发接口准入频次限制（单进程默认 10 秒 12 次请求）。             |
-| `502 Bad Gateway`         | `UPSTREAM_ERROR`  | 与微软 Edge TTS 上游 WebSocket 连接失败或上游拒绝合成。          |
-| `503 Service Unavailable` | `SERVER_BUSY`     | 并发限制队列已满（超过 4 个正在合成任务 + 16 个排队槽位）。      |
+| HTTP | Code                     | 原因                   |
+| ---- | ------------------------ | ---------------------- |
+| 400  | `INVALID_REQUEST`        | 请求校验失败           |
+| 401  | `UNAUTHORIZED`           | 密钥缺失或无效         |
+| 404  | `NOT_FOUND`              | 路由或资源不存在       |
+| 429  | `RATE_LIMITED`           | 准入配额耗尽           |
+| 413  | `PAYLOAD_TOO_LARGE`      | 请求体过大             |
+| 415  | `UNSUPPORTED_MEDIA_TYPE` | 不支持的 Content-Type  |
+| 500  | `INTERNAL_ERROR`         | 内部错误               |
+| 502  | `UPSTREAM_ERROR`         | 上游连接或合成失败     |
+| 503  | `SERVER_BUSY`            | 队列满或排队超过 30 秒 |
 
-分段器保留原文本，但合成会跳过纯空白分段；`X-EdgeTTS-Segment-Count` 统计实际提交合成的段数。健康接口仅报告进程存活，不探测微软、不验证音色列表，也不执行合成。
-
-JSON 错误适用于音频响应头发出之前。开始传输后若上游出错，会终止音频连接；先前的 `200` 或段数不代表完整合成成功。应丢弃中断的下载并显式重试。音色查询限制为单进程每分钟 60 次，合成排队超过 30 秒返回 `503 SERVER_BUSY`。
-
-| HTTP | Code                     |
-| ---- | ------------------------ |
-| 413  | `PAYLOAD_TOO_LARGE`      |
-| 415  | `UNSUPPORTED_MEDIA_TYPE` |
-| 500  | `INTERNAL_ERROR`         |
+两条语音接口共享单进程 12 次/10 秒配额，音色查询为单进程每分钟 60 次。详见[配置参考](configuration.zh-CN.md)。

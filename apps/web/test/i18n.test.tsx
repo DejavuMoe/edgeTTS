@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { App } from "../src/App.js";
 import {
   LANGUAGE_OPTIONS,
@@ -72,7 +72,9 @@ describe("workbench localization", () => {
     }
     expect(fetch).toHaveBeenCalledTimes(2);
     unmount();
-    render(<App />);
+    await act(async () => {
+      render(<App />);
+    });
     expect(screen.getByRole("button", { name: "音声を合成" })).toBeDefined();
     expect((screen.getByRole("textbox") as HTMLTextAreaElement).value).toBe("");
   });
@@ -178,7 +180,7 @@ describe("workbench localization", () => {
     expect(URL.revokeObjectURL).not.toHaveBeenCalled();
   });
 
-  it("falls back safely for invalid or blocked preference storage", () => {
+  it("falls back safely for invalid or blocked preference storage", async () => {
     localStorage.setItem(UI_LOCALE_KEY, "unsupported");
     expect(loadUiLocale()).toBe("zh-CN");
     vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
@@ -188,7 +190,9 @@ describe("workbench localization", () => {
       throw new Error("blocked");
     });
     expect(loadUiLocale()).toBe("zh-CN");
-    render(<App />);
+    await act(async () => {
+      render(<App />);
+    });
     switchLanguage("English");
     expect(document.documentElement.lang).toBe("en");
   });

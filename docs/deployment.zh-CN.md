@@ -4,8 +4,6 @@
 
 `/health` 只检查 HTTP 进程，不访问微软，也不证明合成可用。部署在远程服务器时，通过反向代理的 HTTPS 地址打开工作台，并输入同一个密钥。Compose 的 `.env` 不会自动导入当前 shell；执行 API 示例前，对本地生成的文件运行 `set -a; . ./.env; set +a`。重启或升级时不要重新生成 `.env`。
 
----
-
 ## 部署架构与安全原则
 
 在生产环境中，`edgeTTS` 建议部署在反向代理（如 Nginx 或 Caddy）之后：
@@ -26,100 +24,15 @@
 - **TLS 证书终结**：反向代理统一负责 HTTPS 证书管理与自动续期。
 - **流式无缓冲原则**：反向代理针对语音合成接口（`/api/speech` 与 `/v1/audio/speech`）**必须**关闭响应缓冲（`proxy_buffering off;`），确保音频分片能够实时流式推送到客户端播放器。
 
----
-
 ## 环境准备
 
 - **容器化部署**：Docker Engine 24.0+ 与 Docker Compose v2。
 - **源码与裸机部署**：Node.js 24 LTS 与 pnpm 12.3.4。
 - **出站网络**：宿主机必须具备访问微软 Edge TTS 官方节点的出站 HTTPS（TCP 443 端口）网络权限。
 
----
-
 ## 方案一：Docker Compose 预构建镜像部署（推荐）
 
-这是生产环境下最推荐、维护成本最低的部署方式。无需克隆完整仓库源码，直接使用 GitHub Container Registry (GHCR) 发布的官方多架构镜像。
-
-### 1. 创建工作目录
-
-```bash
-mkdir -p ~/edgetts && cd ~/edgetts
-```
-
-### 2. 编写 `compose.yaml`
-
-在目录下创建 `compose.yaml` 文件：
-
-```yaml
-services:
-  edgetts:
-    image: ghcr.io/dejavumoe/edgetts:0.5.0
-    container_name: edgetts
-    restart: unless-stopped
-    init: true
-    read_only: true
-    cap_drop:
-      - ALL
-    security_opt:
-      - no-new-privileges:true
-    tmpfs:
-      - /tmp
-    stop_grace_period: 35s
-    ports:
-      - "127.0.0.1:8080:8080"
-    environment:
-      - NODE_ENV=production
-      - HOST=0.0.0.0
-      - PORT=8080
-      - API_KEY=${API_KEY:?Set API_KEY in .env}
-      - REQUIRE_API_KEY=true
-      - SPEECH_RATE_LIMIT_MAX=12
-      - SPEECH_RATE_LIMIT_WINDOW_MS=10000
-```
-
-> [!NOTE]
-> 如果需要映射到宿主机的其他端口，请将 `"127.0.0.1:8080:8080"` 修改为 `"127.0.0.1:<端口>:8080"`。请始终保留 `127.0.0.1:` 前缀，避免端口直接暴露在公网接口上。
-
-### 3. 生成密钥并配置环境变量
-
-生成强随机 API Key（长度不少于 16 字符，禁止包含空白符）：
-
-```bash
-(umask 077; printf 'API_KEY=%s\n' "$(openssl rand -hex 32)" > .env)
-chmod 600 .env
-```
-
-### 4. 启动服务
-
-```bash
-docker compose up -d
-```
-
-### 5. 验证健康状态
-
-```bash
-curl -i http://127.0.0.1:8080/health
-```
-
-预期返回：`HTTP/1.1 200 OK`，响应体为 `{"status":"ok"}`。
-
-### 常用管理命令
-
-```bash
-# 查看容器运行状态
-docker compose ps
-
-# 查看实时日志
-docker compose logs -f
-
-# 停止服务
-docker compose stop
-
-# 停止并移除容器
-docker compose down
-```
-
----
+完整 Compose 配置和首次启动步骤见 [README](../README.zh-CN.md)。
 
 ## 方案二：Docker 单容器运行 (`docker run`)
 
@@ -161,8 +74,6 @@ docker run -d \
 | `--init`                           | 启用轻量级 init 进程（tini）回收僵尸进程并可靠转发信号     |
 | `--stop-timeout 35`                | 给予容器 35 秒停止时间，包含服务端 30 秒等待期限与退出余量 |
 
----
-
 ## 容器镜像标签与摘要
 
 官方多架构镜像同时原生支持 `linux/amd64` 与 `linux/arm64`（Apple Silicon、树莓派等）。
@@ -175,8 +86,6 @@ docker run -d \
 | `ghcr.io/dejavumoe/edgetts@sha256:<digest>` | 基于内容寻址的不可变镜像摘要       | 严格可复现的生产基线锁定 |
 
 每个稳定发布版本的已验证 OCI 索引摘要均记录在对应的 [GitHub Release 说明](https://github.com/DejavuMoe/edgeTTS/releases) 中。
-
----
 
 ## 方案三：源码编译与 Docker Compose 部署
 
@@ -202,8 +111,6 @@ docker compose up -d --build
 
 - `EDGETTS_BIND_ADDRESS`：宿主机绑定地址（默认 `127.0.0.1`）。
 - `EDGETTS_HOST_PORT`：宿主机映射端口（默认 `8080`）。
-
----
 
 ## 方案四：Linux 原生服务部署（Node.js + Systemd）
 
@@ -235,7 +142,7 @@ pnpm build
 ```bash
 sudo useradd --system --no-create-home --shell /usr/sbin/nologin edgetts
 sudo chown -R root:root /opt/edgetts
-sudo sh -c 'umask 077; printf "API_KEY=%s\n" "$(openssl rand -hex 32)" > /etc/edgetts.env'
+sudo sh -c 'umask 077; set -C; printf "API_KEY=%s\n" "$(openssl rand -hex 32)" > /etc/edgetts.env'
 ```
 
 ### 4. 编写 Systemd 服务单元
@@ -285,8 +192,6 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now edgetts
 sudo systemctl status edgetts
 ```
-
----
 
 ## 版本更新与日常维护
 

@@ -4,8 +4,6 @@
 
 この例はホスト上のプロキシを前提とします。プロキシもコンテナの場合、`127.0.0.1` はそのコンテナ自身です。両サービスをプライベート Docker ネットワークに接続し `edgetts:8080` を指定します。Nginx 例は証明書が既に存在する前提です。`nginx -t` の前に取得してください。検証スクリプトは Docker が必要で、上流のライブ検証を無効にしてもイメージ取得にネットワークが必要な場合があります。
 
----
-
 ## 構成トポロジと設計原則
 
 ```text
@@ -23,100 +21,11 @@
 1. **ループバック隔離**: edgeTTS はホストの `127.0.0.1` のみにバインドし、未暗号化または未保護のポートを直接公衆網に公開しません。
 2. **TLS 終端**: リバースプロキシが SSL/TLS 証明書を管理し、HTTPS 通信を暗号化します。
 3. **ストリーミング非バッファリング原則（最重要）**: 音声合成エンドポイント（`/api/speech` および `/v1/audio/speech`）では、**プロキシ側の応答バッファリングを必ず無効化**してください。Microsoft Edge TTS は音声をチャンク単位で順次合成します。プロキシ側でバッファリングが有効になっていると、全文の合成が完了するかバッファが満杯になるまでクライアントに音声が届かず、長時間の無音状態が発生します。
-4. **ヘッダーの透過**: クライアントの `Host`、`X-Real-IP`、`X-Forwarded-For`、`X-Forwarded-Proto`、および `Authorization: Bearer <API_KEY>` をそのまま edgeTTS に転送する必要があります。
-
----
+4. **ヘッダー**: `Authorization` を保持し、転送ヘッダーはプロキシで設定します。転送 IP は認証済みクライアントの識別や個別の配分には使用しません。
 
 ## Nginx の設定
 
-リポジトリ内の [`deploy/nginx/edgetts.conf.example`](../deploy/nginx/edgetts.conf.example) に検証済みのテンプレートが用意されています。
-
-### 設定テンプレート
-
-```nginx
-upstream edgetts_backend {
-    server 127.0.0.1:8080;
-    keepalive 16;
-}
-
-# HTTP から HTTPS へのリダイレクト
-server {
-    listen 80;
-    listen [::]:80;
-    server_name edgetts.example.com;
-
-    server_tokens off;
-    return 301 https://$host$request_uri;
-}
-
-# 本番 HTTPS サーバー
-server {
-    listen 443 ssl;
-    listen [::]:443 ssl;
-    server_name edgetts.example.com;
-
-    server_tokens off;
-    client_max_body_size 1m;
-
-    # 証明書パス（実際のパスに書き換えてください）
-    ssl_certificate /etc/letsencrypt/live/edgetts.example.com/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/edgetts.example.com/privkey.pem;
-    ssl_protocols TLSv1.2 TLSv1.3;
-    ssl_ciphers HIGH:!aNULL:!MD5;
-    ssl_prefer_server_ciphers on;
-
-    # セキュリティヘッダー
-    add_header X-Content-Type-Options "nosniff" always;
-    add_header Referrer-Policy "same-origin" always;
-    proxy_hide_header X-Frame-Options;
-    add_header X-Frame-Options "SAMEORIGIN" always;
-
-    # ネイティブストリーミング音声合成 - バッファリング無効
-    location = /api/speech {
-        proxy_pass http://edgetts_backend;
-        proxy_http_version 1.1;
-
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-
-        proxy_buffering off;
-        proxy_cache off;
-
-        proxy_read_timeout 300s;
-        proxy_send_timeout 60s;
-    }
-
-    # OpenAI 互換ストリーミング音声合成 - バッファリング無効
-    location = /v1/audio/speech {
-        proxy_pass http://edgetts_backend;
-        proxy_http_version 1.1;
-
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-
-        proxy_buffering off;
-        proxy_cache off;
-
-        proxy_read_timeout 300s;
-        proxy_send_timeout 60s;
-    }
-
-    # 一般アプリケーションルーティング（WebUI、静的ファイル、音色一覧、ヘルスチェック）
-    location / {
-        proxy_pass http://edgetts_backend;
-        proxy_http_version 1.1;
-
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-}
-```
+[リポジトリの Nginx テンプレート](../deploy/nginx/edgetts.conf.example)を使用し、ドメインと証明書パスを置換して有効化します。両音声ルートの応答バッファリングとキャッシュは無効のままにします。
 
 ### 反映手順（Ubuntu / Debian）
 
@@ -136,8 +45,6 @@ sudo nginx -t
 # 5. リロード
 sudo systemctl reload nginx
 ```
-
----
 
 ## Caddy の設定
 
@@ -173,8 +80,6 @@ edgetts.example.com {
 
 > [!TIP]
 > `flush_interval -1` を設定すると、Caddy は edgeTTS から受信した音声チャンクをバッファリングせず即座にクライアントへフラッシュします。
-
----
 
 ## 本番公開前チェックリスト
 

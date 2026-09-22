@@ -4,8 +4,6 @@
 
 `/health` は HTTP プロセスのみを確認し、Microsoft への接続や合成成功を検証しません。リモートサーバーでは HTTPS プロキシの URL でワークベンチを開き、同じキーを入力します。Compose の `.env` はシェルへ自動展開されないため、API 例の実行前にローカル生成ファイルに対して `set -a; . ./.env; set +a` を実行します。再起動や更新時に `.env` を再生成しないでください。
 
----
-
 ## アーキテクチャとセキュリティ原則
 
 本番環境において、`edgeTTS` はリバースプロキシ（Nginx または Caddy）の背後で実行することを推奨します：
@@ -26,100 +24,15 @@
 - **TLS 終端**: リバースプロキシが HTTPS 接続と証明書の更新を一元管理します。
 - **ストリーミング非バッファリング原則**: 音声合成エンドポイント（`/api/speech` および `/v1/audio/speech`）については、リバースプロキシ側の応答バッファリングを**必ず無効化**（`proxy_buffering off;`）してください。これにより、音声チャンクがクライアントに遅延なく即座に配信されます。
 
----
-
 ## 前提条件
 
 - **コンテナデプロイ**: Docker Engine 24.0+ および Docker Compose v2。
 - **ソースビルド / ベアメタル**: Node.js 24 LTS および pnpm 12.3.4。
 - **アウトバウンド通信**: Microsoft Edge TTS アップストリームノードへの HTTPS（TCP 443 ポート）外向き接続が必要です。
 
----
-
 ## 方法 1: Docker Compose ビルド済みイメージデプロイ（推奨）
 
-本番環境で最も推奨される、メンテナンスの容易な運用方法です。リポジトリ全体をクローンする必要はなく、GitHub Container Registry (GHCR) から提供されるマルチアーキテクチャイメージを直接使用します。
-
-### 1. 作業ディレクトリの作成
-
-```bash
-mkdir -p ~/edgetts && cd ~/edgetts
-```
-
-### 2. `compose.yaml` の作成
-
-作業ディレクトリ内に `compose.yaml` ファイルを作成します：
-
-```yaml
-services:
-  edgetts:
-    image: ghcr.io/dejavumoe/edgetts:0.5.0
-    container_name: edgetts
-    restart: unless-stopped
-    init: true
-    read_only: true
-    cap_drop:
-      - ALL
-    security_opt:
-      - no-new-privileges:true
-    tmpfs:
-      - /tmp
-    stop_grace_period: 35s
-    ports:
-      - "127.0.0.1:8080:8080"
-    environment:
-      - NODE_ENV=production
-      - HOST=0.0.0.0
-      - PORT=8080
-      - API_KEY=${API_KEY:?Set API_KEY in .env}
-      - REQUIRE_API_KEY=true
-      - SPEECH_RATE_LIMIT_MAX=12
-      - SPEECH_RATE_LIMIT_WINDOW_MS=10000
-```
-
-> [!NOTE]
-> 別のローカルポートにバインドする場合は、`"127.0.0.1:8080:8080"` を `"127.0.0.1:<PORT>:8080"` に変更してください。パブリックネットワークへの意図しない公開を防ぐため、常に `127.0.0.1:` プレフィックスを維持してください。
-
-### 3. API キーの生成と設定
-
-暗号学的に安全なランダム API キー（16 文字以上、空白文字不可）を生成します：
-
-```bash
-(umask 077; printf 'API_KEY=%s\n' "$(openssl rand -hex 32)" > .env)
-chmod 600 .env
-```
-
-### 4. サービスの起動
-
-```bash
-docker compose up -d
-```
-
-### 5. ヘルスチェックの確認
-
-```bash
-curl -i http://127.0.0.1:8080/health
-```
-
-期待されるレスポンス: `HTTP/1.1 200 OK`、レスポンスボディ `{"status":"ok"}`。
-
-### コンテナ管理コマンド
-
-```bash
-# 実行ステータスの確認
-docker compose ps
-
-# ログの確認
-docker compose logs -f
-
-# サービスの停止
-docker compose stop
-
-# コンテナの停止と削除
-docker compose down
-```
-
----
+Compose 設定と初回起動は [README](../README.ja.md) を参照してください。
 
 ## 方法 2: 単一 Docker コンテナ実行 (`docker run`)
 
@@ -161,8 +74,6 @@ docker run -d \
 | `--init`                           | 軽量 init プロセス（tini）を使用しゾンビプロセスを確実に回収         |
 | `--stop-timeout 35`                | サーバーの 30 秒停止期限と終了余裕を含め、35 秒待機                  |
 
----
-
 ## イメージタグとダイジェストの固定
 
 公式マルチアーキテクチャイメージは `linux/amd64` および `linux/arm64` をネイティブサポートしています。
@@ -175,8 +86,6 @@ docker run -d \
 | `ghcr.io/dejavumoe/edgetts@sha256:<digest>` | コンテンツアドレス指定による不変ダイジェスト | 厳格な再現性を求める本番環境 |
 
 各リリースの検証済み OCI インデックスダイジェストは [GitHub Release ページ](https://github.com/DejavuMoe/edgeTTS/releases) に記載されています。
-
----
 
 ## 方法 3: ソースコードからのビルドと Docker Compose
 
@@ -197,8 +106,6 @@ sed -i "s/^# API_KEY=.*/API_KEY=$(openssl rand -hex 32)/" .env
 # 4. ビルドと起動
 docker compose up -d --build
 ```
-
----
 
 ## 方法 4: Linux ベアメタル / Systemd サービス
 
@@ -230,7 +137,7 @@ pnpm build
 ```bash
 sudo useradd --system --no-create-home --shell /usr/sbin/nologin edgetts
 sudo chown -R root:root /opt/edgetts
-sudo sh -c 'umask 077; printf "API_KEY=%s\n" "$(openssl rand -hex 32)" > /etc/edgetts.env'
+sudo sh -c 'umask 077; set -C; printf "API_KEY=%s\n" "$(openssl rand -hex 32)" > /etc/edgetts.env'
 ```
 
 ### 4. Systemd ユニットファイルの作成
@@ -280,8 +187,6 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now edgetts
 sudo systemctl status edgetts
 ```
-
----
 
 ## アップグレードと保守
 

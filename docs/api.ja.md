@@ -2,8 +2,6 @@
 
 このドキュメントでは、`edgeTTS` の全 HTTP API エンドポイント、リクエスト/レスポンス仕様、および主要クライアントとの連携例を解説します。
 
----
-
 ## エンドポイント一覧
 
 | メソッド | パス               | 認証要否         | 説明                                                      |
@@ -13,8 +11,6 @@
 | `GET`    | `/api/voices`      | 要（認証有効時） | 利用可能な Edge TTS 音色一覧を取得                        |
 | `POST`   | `/v1/audio/speech` | 要（認証有効時） | OpenAI 互換ストリーミング音声合成                         |
 | `POST`   | `/api/speech`      | 要（認証有効時） | ネイティブ長文分割ストリーミング音声合成                  |
-
----
 
 ## 認証方式
 
@@ -34,8 +30,6 @@ Authorization: Bearer <API_KEY>
   }
 }
 ```
-
----
 
 ## 1. OpenAI 互換音声合成 API (`POST /v1/audio/speech`)
 
@@ -67,36 +61,11 @@ curl -X POST http://127.0.0.1:8080/v1/audio/speech \
   --output speech.mp3
 ```
 
-### Python 公式 OpenAI SDK での利用例
-
-```python
-from openai import OpenAI
-
-client = OpenAI(
-    base_url="http://127.0.0.1:8080/v1",
-    api_key="your-secret-api-key",
-)
-
-with client.audio.speech.with_streaming_response.create(
-    model="tts-1",
-    voice="ja-JP-NanamiNeural",
-    input="Python OpenAI SDK からストリーミング再生を行っています。",
-) as response:
-    response.stream_to_file("output.mp3")
-```
-
----
-
 ## 2. ネイティブ長文ストリーミング API (`POST /api/speech`)
 
 1 回の HTTP リクエストで最大 **20,000 Unicode コードポイント** までの長文（ドキュメント、小説等）をストリーミング合成します。
 
-### サーバーサイド可逆階層分割
-
-入力テキストが 300 コードポイントを超える場合、サーバー側で以下の規則に従い自動分割されます：
-`段落 (\n\n) > 改行 (\n) > 文末記号 (. ! ? 。 ！？) > 空白 > 強制切断`
-
-各チャンクはシリアルに合成され、1 つの HTTP レスポンスストリームとして結合されてクライアントに送信されます。
+両音声 API は段落、改行、文末、空白の優先順で分割し、1 チャンクは最大 300 Unicode コードポイントです。分割器は元のテキストを保持し、合成時は空白のみのチャンクを省略します。各チャンクを順番に合成し、1 本の HTTP 音声応答として返します。
 
 ### リクエストパラメータ（JSON）
 
@@ -113,10 +82,8 @@ with client.audio.speech.with_streaming_response.create(
 
 - `Content-Type`: `audio/mpeg`
 - `Cache-Control`: `no-store`
-- `X-EdgeTTS-Segment-Count`: 計画された分割総数
+- `X-EdgeTTS-Segment-Count`: 合成予定の非空白チャンク数。完了チャンク数ではありません。
 - `X-EdgeTTS-Segment-Max-Code-Points`: 1 チャンクあたりの最大コードポイント（`300`）
-
----
 
 ## 3. 音色一覧取得 API (`GET /api/voices`)
 
@@ -129,46 +96,30 @@ curl -s http://127.0.0.1:8080/api/voices \
   -H "Authorization: Bearer $API_KEY"
 ```
 
----
+## 4. ヘルスチェック API (`GET /health`, `GET /api/health`)
 
-## 4. ヘルスチェック API (`GET /health`)
-
-```bash
-curl -i http://127.0.0.1:8080/health
-```
+ヘルスチェックは HTTP プロセスの生存のみを確認し、Microsoft 接続や合成の準備完了は確認しません。
 
 返却値: `HTTP/1.1 200 OK`、`{"status":"ok"}`。
 
----
-
 ## エラーレスポンスとステータスコード
 
-すべてのエラーは以下の形式で返却されます：
+音声ヘッダー送信前のエラーは以下の JSON 形式です。送信開始後のエラーは接続終了になります。200 はダウンロード完了を保証しません。中断した音声を破棄し、明示的に再試行してください。
 
 ```json
-{
-  "error": {
-    "code": "エラー識別子",
-    "message": "エラー説明文"
-  }
-}
+{ "error": { "code": "INVALID_REQUEST", "message": "Invalid request" } }
 ```
 
-| ステータス                | コード            | 発生原因                                                           |
-| :------------------------ | :---------------- | :----------------------------------------------------------------- |
-| `400 Bad Request`         | `INVALID_REQUEST` | バリデーション失敗（テキスト長上限超過、不正文字、不正な音色名等） |
-| `401 Unauthorized`        | `UNAUTHORIZED`    | API キーの指定漏れまたはキー不一致                                 |
-| `404 Not Found`           | —                 | エンドポイントが存在しない                                         |
-| `429 Too Many Requests`   | `RATE_LIMITED`    | レート制限の超過（単一プロセスあたり 10 秒 12 回上限）             |
-| `502 Bad Gateway`         | `UPSTREAM_ERROR`  | アップストリーム（Microsoft）への接続失敗または合成拒絶            |
-| `503 Service Unavailable` | `SERVER_BUSY`     | 並行合成キューが満杯（実行中 4 件 + 待機 16 件超過）               |
+| HTTP | Code                     | 原因                             |
+| ---- | ------------------------ | -------------------------------- |
+| 400  | `INVALID_REQUEST`        | リクエスト検証失敗               |
+| 401  | `UNAUTHORIZED`           | キーが未指定または不正           |
+| 404  | `NOT_FOUND`              | ルートやリソースが存在しない     |
+| 429  | `RATE_LIMITED`           | 受付枠の超過                     |
+| 413  | `PAYLOAD_TOO_LARGE`      | リクエスト本文が大きすぎる       |
+| 415  | `UNSUPPORTED_MEDIA_TYPE` | 非対応の Content-Type            |
+| 500  | `INTERNAL_ERROR`         | 内部エラー                       |
+| 502  | `UPSTREAM_ERROR`         | 上流接続または合成失敗           |
+| 503  | `SERVER_BUSY`            | キュー満杯または 30 秒の待機超過 |
 
-分割処理は元のテキストを保持しますが、合成では空白のみのチャンクを省略します。`X-EdgeTTS-Segment-Count` は実際に合成へ送信するチャンク数です。ヘルスチェックはプロセスの応答のみを示し、Microsoft 接続、音色一覧や合成を検証しません。
-
-JSON エラーは音声レスポンスヘッダー送信前に適用します。送信後の上流エラーは音声接続を終了するため、`200` やチャンク数だけでは完了を確認できません。中断したダウンロードは破棄し、明示的に再試行します。音色一覧はプロセスあたり毎分 60 回、合成キューは 30 秒で期限切れとなり `503 SERVER_BUSY` を返します。
-
-| HTTP | Code                     |
-| ---- | ------------------------ |
-| 413  | `PAYLOAD_TOO_LARGE`      |
-| 415  | `UNSUPPORTED_MEDIA_TYPE` |
-| 500  | `INTERNAL_ERROR`         |
+両音声 API はプロセスあたり 12 件/10 秒の枠を共有し、音声一覧は毎分 60 件です。[設定](configuration.ja.md)を参照してください。

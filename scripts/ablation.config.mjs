@@ -78,7 +78,6 @@ export const variants = [
     "void setupAbandoned;",
     2,
   ],
-  ["no-group-id", "http", "rate-limit.ts", 'groupId: "speech-admission",', ""],
   [
     "no-cross-route-budget",
     "http",

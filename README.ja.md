@@ -15,8 +15,6 @@ edgeTTS は Microsoft Edge のオンライン音声サービスを利用する�
 
 > 合成時は本サーバー経由でテキストを TLS 通信により Microsoft に送信します。edgeTTS は合成テキストや音声を永続保存しませんが、オフラインエンジンではありません。TXT 読み込みはローカルで行い、合成時にテキストを送信します。Microsoft 側のデータ処理は本プロジェクトの管理外です。
 
----
-
 ## 主な機能
 
 - **音声 API**：`/v1/audio/speech` は OpenAI 音声リクエスト形式の一部に対応し、Edge 音色 ID と MP3 出力を使用します。`/api/speech` は長文と速度・ピッチ・音量調整に対応します。
@@ -25,11 +23,9 @@ edgeTTS は Microsoft Edge のオンライン音声サービスを利用する�
 - **Web ワークベンチ**：4 言語 UI、音色検索・お気に入り、ローカル TXT 読み込み、MP3 再生・ダウンロード。MediaSource 対応ブラウザーでは順次再生し、その他では Blob 全体の受信後に再生します。
 - **簡単な配備**：単一 Fastify プロセスで UI と API を配信し、Bearer 認証とコンテナ保護設定を提供します。
 
----
-
 ## クイックスタート
 
-### 方法 A: Docker Compose ビルド済みイメージ（推奨）
+### Docker Compose ビルド済みイメージ（推奨）
 
 ディレクトリを作成し、`compose.yaml` を用意します：
 
@@ -65,7 +61,7 @@ services:
 ランダムな API キーを生成してサービスを起動します：
 
 ```bash
-(umask 077; printf 'API_KEY=%s\n' "$(openssl rand -hex 32)" > .env)
+(umask 077; set -C; printf 'API_KEY=%s\n' "$(openssl rand -hex 32)" > .env)
 docker compose up -d
 ```
 
@@ -81,27 +77,11 @@ curl -i http://127.0.0.1:8080/health
 
 `.env` は初回だけ生成し、更新時に保持します。`/health` は HTTP プロセスのみを確認します。ローカルでは `http://127.0.0.1:8080`、リモートでは HTTPS プロキシの URL を開き、同じ API キーを入力します。シェル API 例を使う前に `set -a; . ./.env; set +a` でローカル生成キーを読み込みます。その他の配備方法と更新は[配備ガイド](docs/deployment.ja.md)を参照してください。
 
----
-
 ## API 利用例
 
-### 1. OpenAI 互換音声合成 (`POST /v1/audio/speech`)
+### ネイティブ長文ストリーミング合成 (`POST /api/speech`)
 
-```bash
-curl -X POST http://127.0.0.1:8080/v1/audio/speech \
-  -H "Authorization: Bearer $API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "tts-1",
-    "voice": "ja-JP-NanamiNeural",
-    "input": "こんにちは。edgeTTS の音声合成テストです。",
-    "response_format": "mp3",
-    "speed": 1.0
-  }' \
-  --output speech.mp3
-```
-
-### 2. ネイティブ長文ストリーミング合成 (`POST /api/speech`)
+両音声 API は最大 300 Unicode コードポイントのチャンクを順番に合成します。ネイティブ API の上限は 20,000 コードポイント、互換 API は 4,096 UTF-16 コード単位です。ブラウザーはダウンロード用に音声を保持するため、メモリ使用量は音声サイズに応じて増加します。
 
 ```bash
 curl -X POST http://127.0.0.1:8080/api/speech \
@@ -118,8 +98,6 @@ curl -X POST http://127.0.0.1:8080/api/speech \
   --output long-speech.mp3
 ```
 
----
-
 ## ドキュメント一覧
 
 [`docs/`](docs/) ディレクトリにて詳細なドキュメントを提供しています：
@@ -132,30 +110,33 @@ curl -X POST http://127.0.0.1:8080/api/speech \
 | [**API リファレンス & 連携ガイド**](docs/api.ja.md)         | エンドポイント仕様、スキーマ、エラーコード一覧、外部クライアント設定方法。     |
 | [**リリースガバナンス & セキュリティ**](docs/releasing.md)  | 厳格な SemVer 方針、OCI 署名検証、不変ダイジェスト固定の仕組み。               |
 
----
+- [アブレーション結果（中国語）](docs/ablation.zh-CN.md)
 
 ## アーキテクチャ
 
-```text
-HTTP ルート (apps/server)
-       ↓
-  TtsService (packages/tts-service)
-       ↓
-  TtsProvider (packages/tts-core)
-       ↓
-EdgeTtsProvider (packages/edge-provider)
-       ↓
-   msedge-tts (アップストリーム WebSocket)
+```mermaid
+flowchart TD
+  UI["React Web ワークベンチ"] --> HTTP["Fastify HTTP ルート"]
+  Client["外部 API クライアント"] --> HTTP
+  HTTP --> Service[TtsService]
+  Service --> Port["TtsProvider ドメイン契約"]
+  Port --> Edge[EdgeTtsProvider]
+  Edge --> Library[msedge-tts]
+  Library --> Microsoft["Microsoft Edge オンラインサービス"]
+  Shared["shared: Zod リクエスト・レスポンス契約"] -.-> UI
+  Shared -.-> HTTP
+  Composition["server composition.ts: 実装を注入"] -.-> Service
+  Composition -.-> Edge
 ```
 
+実線は呼び出し、破線は共有契約と依存性注入を示します。
+
 - `apps/server`: Fastify によるサービス統合、HTTP ルーティング、レート制限、静的アセット配信。
-- `apps/web`: React + Vite によるモダンな SPA ワークベンチ（自研アクセシブル UI プリミティブ搭載）。
+- `apps/web`: React + Vite ワークベンチ、アクセシブルな UI と音声再生。
 - `packages/tts-service`: プロバイダー非依存のビジネスロジック（音色キャッシュ、並行リミッター、長文可逆分割）。
 - `packages/tts-core`: ドメイン層の抽象定義とポート契約。
 - `packages/edge-provider`: Microsoft Edge 音声読み上げ WebSocket アダプター。
 - `packages/shared`: 共有バリデーションスキーマ、型定義、Unicode テキスト処理ユーティリティ。
-
----
 
 ## ライセンス
 

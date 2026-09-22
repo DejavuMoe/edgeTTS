@@ -2,8 +2,6 @@
 
 This guide details all HTTP API endpoints, request/response contracts, and client integration examples for `edgeTTS`.
 
----
-
 ## Endpoints Overview
 
 | Method | Path               | Auth Required      | Description                                       |
@@ -13,8 +11,6 @@ This guide details all HTTP API endpoints, request/response contracts, and clien
 | `GET`  | `/api/voices`      | Yes (when enabled) | List available Edge TTS voices                    |
 | `POST` | `/v1/audio/speech` | Yes (when enabled) | OpenAI-compatible streaming speech synthesis      |
 | `POST` | `/api/speech`      | Yes (when enabled) | Native segmented long-text streaming synthesis    |
-
----
 
 ## Authentication
 
@@ -34,8 +30,6 @@ If the key is missing or invalid, the server responds with HTTP `401 Unauthorize
   }
 }
 ```
-
----
 
 ## 1. OpenAI-Compatible Speech API (`POST /v1/audio/speech`)
 
@@ -67,59 +61,11 @@ curl -X POST http://127.0.0.1:8080/v1/audio/speech \
   --output speech.mp3
 ```
 
-### Official OpenAI Python SDK
-
-```python
-from openai import OpenAI
-
-client = OpenAI(
-    base_url="http://127.0.0.1:8080/v1",
-    api_key="your-secret-api-key",
-)
-
-with client.audio.speech.with_streaming_response.create(
-    model="tts-1",
-    voice="zh-CN-XiaoxiaoNeural",
-    input="Hello from the OpenAI Python SDK streaming through edgeTTS!",
-) as response:
-    response.stream_to_file("output.mp3")
-```
-
-### Official OpenAI Node.js / TypeScript SDK
-
-```typescript
-import fs from "node:fs";
-import OpenAI from "openai";
-
-const openai = new OpenAI({
-  baseURL: "http://127.0.0.1:8080/v1",
-  apiKey: "your-secret-api-key",
-});
-
-async function main() {
-  const response = await openai.audio.speech.create({
-    model: "tts-1",
-    voice: "en-US-JennyNeural",
-    input: "Streaming speech directly from Node.js.",
-  });
-
-  const buffer = Buffer.from(await response.arrayBuffer());
-  await fs.promises.writeFile("output.mp3", buffer);
-}
-
-void main();
-```
-
 ## 2. Native Long-Text Streaming API (`POST /api/speech`)
 
 This endpoint is tailored for long-form content (documents, articles, audiobooks) up to **20,000 Unicode code points** in a single HTTP streaming request.
 
-### Server-Side Lossless Segmentation
-
-When texts exceed 300 code points, the server automatically segments the input using a deterministic hierarchical boundary rule:
-`Paragraph (\n\n) > Line Break (\n) > Sentence Boundary (. ! ? 。 ！？) > Whitespace > Hard Cut`
-
-Segments are synthesized sequentially and concatenated over a continuous HTTP response stream. Rejoining the chunks produces the exact original text with zero character loss or mutation.
+Both speech endpoints split text at paragraph, line, sentence or whitespace boundaries, with a hard limit of 300 Unicode code points. The segmenter preserves the original text; synthesis skips whitespace-only segments. Segments are synthesized sequentially over one HTTP audio response.
 
 ### Request Body (JSON)
 
@@ -136,7 +82,7 @@ Segments are synthesized sequentially and concatenated over a continuous HTTP re
 
 - `Content-Type`: `audio/mpeg`
 - `Cache-Control`: `no-store`
-- `X-EdgeTTS-Segment-Count`: Total number of planned synthesis segments.
+- `X-EdgeTTS-Segment-Count`: Number of nonblank segments scheduled for synthesis, not completed segments.
 - `X-EdgeTTS-Segment-Max-Code-Points`: Maximum code point limit per segment (`300`).
 
 ### cURL Example
@@ -155,8 +101,6 @@ curl -X POST http://127.0.0.1:8080/api/speech \
   }' \
   --output long-speech.mp3
 ```
-
----
 
 ## 3. Voice Discovery API (`GET /api/voices`)
 
@@ -194,11 +138,9 @@ curl -s http://127.0.0.1:8080/api/voices \
 }
 ```
 
----
-
 ## 4. Health Check API (`GET /health`, `GET /api/health`)
 
-Lightweight probes for Docker container healthchecks, Kubernetes liveness/readiness probes, and reverse proxy upstream monitoring.
+The health endpoints only confirm HTTP process liveness. They do not contact Microsoft or establish synthesis readiness.
 
 ### cURL Example
 
@@ -215,36 +157,24 @@ Content-Type: application/json; charset=utf-8
 {"status":"ok"}
 ```
 
----
-
 ## Error Handling & Status Codes
 
-All errors return standard JSON payloads adhering to the `ApiError` schema:
+Errors before audio headers use the JSON shape below. Later errors terminate the connection; an initial 200 does not prove a complete download. Discard interrupted audio and retry explicitly.
 
 ```json
-{
-  "error": {
-    "code": "ERROR_CODE_STRING",
-    "message": "Human readable error message"
-  }
-}
+{ "error": { "code": "INVALID_REQUEST", "message": "Invalid request" } }
 ```
 
-| HTTP Status               | Code              | Cause                                                                                         |
-| :------------------------ | :---------------- | :-------------------------------------------------------------------------------------------- |
-| `400 Bad Request`         | `INVALID_REQUEST` | Validation error (e.g. text exceeds length bounds, invalid characters, invalid voice format). |
-| `401 Unauthorized`        | `UNAUTHORIZED`    | Missing or invalid API key in `Authorization: Bearer` header.                                 |
-| `404 Not Found`           | —                 | Route or asset does not exist.                                                                |
-| `429 Too Many Requests`   | `RATE_LIMITED`    | Exceeded admission rate limit (default 12 requests per 10s per process).                      |
-| `502 Bad Gateway`         | `UPSTREAM_ERROR`  | Upstream Microsoft Edge TTS WebSocket connection failure or synthesis rejection.              |
-| `503 Service Unavailable` | `SERVER_BUSY`     | Synthesis concurrency queue is full (exceeded 4 active + 16 queued requests).                 |
+| HTTP | Code                     | Cause                                        |
+| ---- | ------------------------ | -------------------------------------------- |
+| 400  | `INVALID_REQUEST`        | Request validation failed                    |
+| 401  | `UNAUTHORIZED`           | Missing or invalid key                       |
+| 404  | `NOT_FOUND`              | Route or asset not found                     |
+| 429  | `RATE_LIMITED`           | Admission quota exceeded                     |
+| 413  | `PAYLOAD_TOO_LARGE`      | Request body too large                       |
+| 415  | `UNSUPPORTED_MEDIA_TYPE` | Unsupported Content-Type                     |
+| 500  | `INTERNAL_ERROR`         | Internal error                               |
+| 502  | `UPSTREAM_ERROR`         | Upstream connection or synthesis failed      |
+| 503  | `SERVER_BUSY`            | Queue full or queue wait exceeded 30 seconds |
 
-The segmenter preserves the original text, but synthesis skips whitespace-only segments; `X-EdgeTTS-Segment-Count` counts segments actually submitted. The health endpoints only report process liveness. They do not probe Microsoft, validate the voice catalog, or synthesize audio.
-
-JSON errors apply before audio response headers are sent. A later upstream error terminates the audio connection; a prior `200` or segment count does not prove all audio was received. Discard interrupted downloads and retry explicitly. Voice discovery is limited to 60 requests/minute per process; speech queue waits expire after 30 seconds with `503 SERVER_BUSY`.
-
-| HTTP | Code                     |
-| ---- | ------------------------ |
-| 413  | `PAYLOAD_TOO_LARGE`      |
-| 415  | `UNSUPPORTED_MEDIA_TYPE` |
-| 500  | `INTERNAL_ERROR`         |
+Both speech APIs share 12 requests/10 seconds per process. Voice discovery has a separate 60 requests/minute budget. See [configuration](configuration.md).

@@ -15,8 +15,6 @@ edgeTTS 是基于微软 Edge 在线语音服务的自托管 API 和 Web 工作�
 
 > 合成时，文本会通过本服务经 TLS 发送至微软。edgeTTS 不持久化合成文本或音频，但并非离线语音引擎。TXT 导入阶段仅在本地读取，点击合成后才提交文本；微软如何处理已提交数据不由本项目控制。
 
----
-
 ## 核心特性
 
 - **语音接口**：`/v1/audio/speech` 支持 OpenAI 语音请求格式的子集，使用 Edge 音色 ID，输出 MP3；`/api/speech` 支持长文本及语速、音调、音量调节。
@@ -25,11 +23,9 @@ edgeTTS 是基于微软 Edge 在线语音服务的自托管 API 和 Web 工作�
 - **Web 工作台**：四种界面语言、音色检索与收藏、本地 TXT 导入、MP3 播放与下载。支持 MediaSource 的浏览器渐进播放，其他浏览器等待完整 Blob 后播放。
 - **简单部署**：一个 Fastify 进程托管前端和 API，提供 Bearer 认证及容器加固配置。
 
----
-
 ## 快速上手
 
-### 方案 A：Docker Compose 预构建镜像（推荐）
+### Docker Compose 预构建镜像（推荐）
 
 创建部署目录并编写 `compose.yaml`：
 
@@ -65,7 +61,7 @@ services:
 生成强随机 API Key 并启动服务：
 
 ```bash
-(umask 077; printf 'API_KEY=%s\n' "$(openssl rand -hex 32)" > .env)
+(umask 077; set -C; printf 'API_KEY=%s\n' "$(openssl rand -hex 32)" > .env)
 docker compose up -d
 ```
 
@@ -81,27 +77,11 @@ curl -i http://127.0.0.1:8080/health
 
 `.env` 只生成一次，升级时保留。`/health` 只确认 HTTP 进程可用。浏览器在本机访问 `http://127.0.0.1:8080`，远程服务器则使用反向代理的 HTTPS 地址，并输入同一个 API Key。执行下方 shell 示例前，用 `set -a; . ./.env; set +a` 导入本地生成的密钥。其他部署方式和升级步骤见[部署指南](docs/deployment.zh-CN.md)。
 
----
-
 ## 接口调用示例
 
-### 1. OpenAI 兼容接口 (`POST /v1/audio/speech`)
+### 原生长文本流式接口 (`POST /api/speech`)
 
-```bash
-curl -X POST http://127.0.0.1:8080/v1/audio/speech \
-  -H "Authorization: Bearer $API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "tts-1",
-    "voice": "zh-CN-XiaoxiaoNeural",
-    "input": "你好，世界！这是一段测试文本。",
-    "response_format": "mp3",
-    "speed": 1.0
-  }' \
-  --output speech.mp3
-```
-
-### 2. 原生长文本流式接口 (`POST /api/speech`)
+两条合成接口都按最多 300 Unicode 码点串行分段。原生接口上限为 20,000 码点；兼容接口上限为 4,096 UTF-16 代码单元。浏览器保留音频用于下载，内存占用随音频大小增长。
 
 ```bash
 curl -X POST http://127.0.0.1:8080/api/speech \
@@ -118,11 +98,7 @@ curl -X POST http://127.0.0.1:8080/api/speech \
   --output long-speech.mp3
 ```
 
----
-
 ## 详细文档指南
-
-我们在 [`docs/`](docs/) 目录中提供了完整的专项文档：
 
 | 文档导航                                               | 内容说明                                                               |
 | :----------------------------------------------------- | :--------------------------------------------------------------------- |
@@ -132,30 +108,33 @@ curl -X POST http://127.0.0.1:8080/api/speech \
 | [**API 参考与客户端集成**](docs/api.zh-CN.md)          | 完整端点协议、请求响应结构体、错误代码说明及常见第三方客户端对接。     |
 | [**发布治理与安全供应链**](docs/releasing.md)          | 严格 SemVer 规范、OCI 镜像供应链多架构证明检查及不可变摘要锁定。       |
 
----
+- [消融实验](docs/ablation.zh-CN.md)
 
 ## 项目架构
 
-```text
-HTTP 路由 (apps/server)
-       ↓
-  TtsService (packages/tts-service)
-       ↓
-  TtsProvider (packages/tts-core)
-       ↓
-EdgeTtsProvider (packages/edge-provider)
-       ↓
-   msedge-tts (上游 WebSocket)
+```mermaid
+flowchart TD
+  UI["React Web 工作台"] --> HTTP["Fastify HTTP 路由"]
+  Client["外部 API 客户端"] --> HTTP
+  HTTP --> Service[TtsService]
+  Service --> Port["TtsProvider 领域契约"]
+  Port --> Edge[EdgeTtsProvider]
+  Edge --> Library[msedge-tts]
+  Library --> Microsoft["Microsoft Edge 在线服务"]
+  Shared["shared: Zod 请求与响应契约"] -.-> UI
+  Shared -.-> HTTP
+  Composition["server composition.ts 注入具体实现"] -.-> Service
+  Composition -.-> Edge
 ```
 
+实线表示调用链，虚线表示共享契约与依赖注入。
+
 - `apps/server`：Fastify 服务组合根、HTTP 路由注册、速率限制及前端静态资产托管。
-- `apps/web`：基于 React + Vite 的前端 Web 工作台，包含全套自研无障碍 UI 原语。
+- `apps/web`：React + Vite 工作台、无障碍控件与音频播放。
 - `packages/tts-service`：中立业务编排层（音色缓存管理、并发限制器、长文本无损分段）。
 - `packages/tts-core`：领域核心抽象与 Provider 端口契约。
 - `packages/edge-provider`：微软 Edge 大声朗读服务 WebSocket 适配器。
 - `packages/shared`：跨包共享的数据校验 Schema、通用类型及 Unicode 码点处理工具。
-
----
 
 ## 开源协议
 
