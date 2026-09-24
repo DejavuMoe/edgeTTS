@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import type { ApiError } from "@edgetts/shared";
+import type { Environment } from "./env.js";
 
 export const MIN_API_KEY_LENGTH = 16;
 
@@ -11,12 +12,15 @@ export const UNAUTHORIZED_ERROR: ApiError = {
   },
 };
 
-export function resolveApiKey(configuredKey?: string | null): string | null {
+export function resolveApiKey(
+  configuredKey?: string | null,
+  env: Environment = process.env,
+): string | null {
   if (configuredKey === null) {
     return null;
   }
 
-  const rawKey = configuredKey !== undefined ? configuredKey : process.env["API_KEY"];
+  const rawKey = configuredKey !== undefined ? configuredKey : env["API_KEY"];
 
   if (rawKey === undefined) {
     return null;
@@ -39,16 +43,18 @@ export function resolveApiKey(configuredKey?: string | null): string | null {
   return rawKey;
 }
 
-export function resolveRequireApiKey(configured?: boolean | string | null): boolean {
+export function resolveRequireApiKey(
+  configured?: boolean | string | null,
+  env: Environment = process.env,
+): boolean {
   if (typeof configured === "boolean") {
     return configured;
   }
 
-  const raw =
-    configured !== undefined && configured !== null ? configured : process.env["REQUIRE_API_KEY"];
+  const raw = configured !== undefined && configured !== null ? configured : env["REQUIRE_API_KEY"];
 
   if (raw === undefined || raw === null) {
-    return process.env["NODE_ENV"] === "production";
+    return env["NODE_ENV"] === "production";
   }
 
   if (typeof raw !== "string") {
@@ -66,15 +72,18 @@ export function resolveRequireApiKey(configured?: boolean | string | null): bool
   throw new RangeError("REQUIRE_API_KEY must be either 'true' or 'false'");
 }
 
-export function resolveAuthConfiguration(options?: {
-  readonly apiKey?: string | null | undefined;
-  readonly requireApiKey?: boolean | string | undefined;
-}): string | null {
-  const requireApiKey = resolveRequireApiKey(options?.requireApiKey);
+export function resolveAuthConfiguration(
+  options?: {
+    readonly apiKey?: string | null | undefined;
+    readonly requireApiKey?: boolean | string | undefined;
+  },
+  env: Environment = process.env,
+): string | null {
+  const requireApiKey = resolveRequireApiKey(options?.requireApiKey, env);
 
   let apiKey: string | null = null;
   try {
-    apiKey = resolveApiKey(options?.apiKey);
+    apiKey = resolveApiKey(options?.apiKey, env);
   } catch (err) {
     if (requireApiKey) {
       throw new RangeError("API_KEY is required when REQUIRE_API_KEY=true", { cause: err });

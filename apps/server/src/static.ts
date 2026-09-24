@@ -3,35 +3,39 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import fastifyStatic from "@fastify/static";
+import type { Environment } from "./env.js";
 
 export interface StaticHostingOptions {
   readonly webDistDir?: string | undefined;
   readonly serveStatic?: boolean | undefined;
 }
 
-export function resolveWebDistDir(customDir?: string): string {
+export function resolveWebDistDir(customDir?: string, env: Environment = process.env): string {
   if (customDir) {
     return path.resolve(customDir);
   }
-  const envDir = process.env["WEB_DIST_DIR"];
+  const envDir = env["WEB_DIST_DIR"];
   if (envDir) {
     return path.resolve(envDir);
   }
   return fileURLToPath(new URL("../../web/dist", import.meta.url));
 }
 
-export function shouldEnableStaticHosting(options?: StaticHostingOptions): boolean {
+export function shouldEnableStaticHosting(
+  options?: StaticHostingOptions,
+  env: Environment = process.env,
+): boolean {
   if (options?.serveStatic !== undefined) {
     return options.serveStatic;
   }
-  const envServeStatic = process.env["SERVE_STATIC"];
+  const envServeStatic = env["SERVE_STATIC"];
   if (envServeStatic === "true") {
     return true;
   }
   if (envServeStatic === "false") {
     return false;
   }
-  if (process.env["NODE_ENV"] === "production") {
+  if (env["NODE_ENV"] === "production") {
     return true;
   }
   return false;

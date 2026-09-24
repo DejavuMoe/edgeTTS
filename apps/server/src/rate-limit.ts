@@ -1,5 +1,8 @@
 import type { FastifyInstance } from "fastify";
 import type { ApiError } from "@edgetts/shared";
+import { type Environment, parseStrictInteger } from "./env.js";
+
+export { parseStrictInteger };
 
 export const DEFAULT_SPEECH_RATE_LIMIT_MAX = 12;
 export const DEFAULT_SPEECH_RATE_LIMIT_WINDOW_MS = 10000;
@@ -25,57 +28,12 @@ export interface SpeechRateLimitConfig {
   readonly timeWindowMs: number;
 }
 
-export function parseStrictInteger(
-  value: unknown,
-  varName: string,
-  min: number,
-  max: number,
-  defaultValue: number,
-): number {
-  if (value === undefined || value === null) {
-    return defaultValue;
-  }
-
-  let str: string;
-  if (typeof value === "number") {
-    if (!Number.isInteger(value)) {
-      throw new RangeError(`${varName} must be an integer (got ${value})`);
-    }
-    if (value < min || value > max) {
-      throw new RangeError(`${varName} must be between ${min} and ${max} (got ${value})`);
-    }
-    return value;
-  } else if (typeof value === "string") {
-    str = value;
-  } else {
-    throw new TypeError(`${varName} must be an integer string or number`);
-  }
-
-  if (str.trim().length === 0) {
-    throw new RangeError(`${varName} must not be empty or whitespace only`);
-  }
-
-  if (!/^\d+$/.test(str) || str !== str.trim()) {
-    throw new RangeError(`${varName} must be an integer`);
-  }
-
-  const num = Number(str);
-  if (!Number.isSafeInteger(num)) {
-    throw new RangeError(`${varName} must be a safe integer`);
-  }
-
-  if (num < min || num > max) {
-    throw new RangeError(`${varName} must be between ${min} and ${max} (got ${num})`);
-  }
-
-  return num;
-}
-
 export function resolveSpeechRateLimitConfig(
   options?: SpeechRateLimitOptions,
+  env: Environment = process.env,
 ): SpeechRateLimitConfig {
   const max = parseStrictInteger(
-    options?.max ?? process.env["SPEECH_RATE_LIMIT_MAX"],
+    options?.max ?? env["SPEECH_RATE_LIMIT_MAX"],
     "SPEECH_RATE_LIMIT_MAX",
     MIN_SPEECH_RATE_LIMIT_MAX,
     MAX_SPEECH_RATE_LIMIT_MAX,
@@ -83,7 +41,7 @@ export function resolveSpeechRateLimitConfig(
   );
 
   const timeWindowMs = parseStrictInteger(
-    options?.timeWindowMs ?? process.env["SPEECH_RATE_LIMIT_WINDOW_MS"],
+    options?.timeWindowMs ?? env["SPEECH_RATE_LIMIT_WINDOW_MS"],
     "SPEECH_RATE_LIMIT_WINDOW_MS",
     MIN_SPEECH_RATE_LIMIT_WINDOW_MS,
     MAX_SPEECH_RATE_LIMIT_WINDOW_MS,
