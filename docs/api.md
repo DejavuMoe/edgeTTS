@@ -4,13 +4,14 @@ This guide details all HTTP API endpoints, request/response contracts, and clien
 
 ## Endpoints Overview
 
-| Method | Path               | Auth Required      | Description                                       |
-| :----- | :----------------- | :----------------- | :------------------------------------------------ |
-| `GET`  | `/health`          | No                 | Basic health check returning `{"status":"ok"}`    |
-| `GET`  | `/api/health`      | No                 | Prefixed health check returning `{"status":"ok"}` |
-| `GET`  | `/api/voices`      | Yes (when enabled) | List available Edge TTS voices                    |
-| `POST` | `/v1/audio/speech` | Yes (when enabled) | OpenAI-compatible streaming speech synthesis      |
-| `POST` | `/api/speech`      | Yes (when enabled) | Native segmented long-text streaming synthesis    |
+| Method | Path               | Auth Required      | Description                                          |
+| :----- | :----------------- | :----------------- | :--------------------------------------------------- |
+| `GET`  | `/health`          | No                 | Basic health check returning `{"status":"ok"}`       |
+| `GET`  | `/api/health`      | No                 | Prefixed health check returning `{"status":"ok"}`    |
+| `GET`  | `/api/voices`      | Yes (when enabled) | List available Edge TTS voices                       |
+| `POST` | `/v1/audio/speech` | Yes (when enabled) | OpenAI-compatible streaming speech synthesis         |
+| `POST` | `/api/speech`      | Yes (when enabled) | Native segmented long-text streaming synthesis       |
+| `GET`  | `/api/metrics`     | Yes (when enabled) | Prometheus metrics, only when `METRICS_ENABLED=true` |
 
 ## Authentication
 
@@ -155,6 +156,20 @@ HTTP/1.1 200 OK
 Content-Type: application/json; charset=utf-8
 
 {"status":"ok"}
+```
+
+## 5. Metrics API (`GET /api/metrics`)
+
+Served only when `METRICS_ENABLED=true`, in the Prometheus text format, with the same Bearer authentication as the other protected routes. The metrics are listed in the [configuration reference](configuration.md#metrics).
+
+```yaml
+scrape_configs:
+  - job_name: edgetts
+    metrics_path: /api/metrics
+    authorization:
+      credentials_file: /etc/prometheus/edgetts-api-key
+    static_configs:
+      - targets: ["127.0.0.1:8080"]
 ```
 
 ## Error Handling & Status Codes

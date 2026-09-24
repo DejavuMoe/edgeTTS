@@ -13,6 +13,11 @@ export interface SynthesisLimiterOptions {
   readonly maxQueued: number;
 }
 
+export interface SynthesisRejectionCounts {
+  readonly queueFull: number;
+  readonly queueTimeout: number;
+}
+
 export interface Permit {
   release(): void;
 }
@@ -30,6 +35,8 @@ export class SynthesisLimiter {
   private readonly maxQueued: number;
   private activeCount = 0;
   private readonly queue: QueueItem[] = [];
+  private queueFullRejections = 0;
+  private queueTimeoutRejections = 0;
 
   constructor(options: SynthesisLimiterOptions) {
     if (!Number.isInteger(options.maxConcurrent) || options.maxConcurrent < 1) {
@@ -50,6 +57,10 @@ export class SynthesisLimiter {
     return this.queue.length;
   }
 
+  get rejections(): SynthesisRejectionCounts {
+    return { queueFull: this.queueFullRejections, queueTimeout: this.queueTimeoutRejections };
+  }
+
   async acquire(signal: AbortSignal): Promise<Permit> {
     if (signal.aborted) {
       throw createAbortError(signal.reason);
@@ -61,6 +72,7 @@ export class SynthesisLimiter {
     }
 
     if (this.queue.length >= this.maxQueued) {
+      this.queueFullRejections++;
       throw new SynthesisQueueFullError("Speech synthesis capacity is full");
     }
 
@@ -81,6 +93,7 @@ export class SynthesisLimiter {
         },
         timer: setTimeout(() => {
           remove();
+          this.queueTimeoutRejections++;
           reject(new SynthesisQueueFullError("Speech synthesis queue wait timed out"));
         }, 30_000),
       };

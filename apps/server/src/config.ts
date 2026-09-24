@@ -40,6 +40,7 @@ export interface ResolvedAppOptions extends AppOptions {
   readonly serveStatic: boolean;
   readonly webDistDir: string;
   readonly trustProxy: TrustProxySetting;
+  readonly metrics: boolean;
   readonly logger: boolean;
 }
 
@@ -90,6 +91,7 @@ export function loadServerConfig(env: Environment = process.env): ServerConfig {
       serveStatic: attempt(() => resolveServeStatic(env)),
       webDistDir: resolveWebDistDir(undefined, env),
       trustProxy: attempt(() => parseTrustProxy(env["TRUST_PROXY"])),
+      metrics: attempt(() => parseOptionalFlag(env["METRICS_ENABLED"], "METRICS_ENABLED", false)),
       logger: env["NODE_ENV"] !== "test",
     },
     tts: {
@@ -118,6 +120,10 @@ function parseHost(value: string | undefined): string {
     throw new RangeError("HOST must be a non-empty address without whitespace");
   }
   return value;
+}
+
+function parseOptionalFlag(value: string | undefined, name: string, fallback: boolean): boolean {
+  return value === undefined ? fallback : parseBooleanFlag(value, name);
 }
 
 function resolveServeStatic(env: Environment): boolean {

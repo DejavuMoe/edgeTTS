@@ -6,6 +6,7 @@ export {
   type ListVoicesOptions,
   type SegmentedSynthesisOptions,
   type SegmentedSynthesisResult,
+  type TtsServiceStats,
 } from "./tts-service.js";
 export {
   DEFAULT_VOICE_CACHE_TTL_MS,

@@ -4,13 +4,14 @@
 
 ## 接口总览
 
-| 请求方法 | 路由路径           | 需携带认证       | 说明                                            |
-| :------- | :----------------- | :--------------- | :---------------------------------------------- |
-| `GET`    | `/health`          | 否               | 基础健康检查，返回 `{"status":"ok"}`            |
-| `GET`    | `/api/health`      | 否               | 带有 API 前缀的健康检查，返回 `{"status":"ok"}` |
-| `GET`    | `/api/voices`      | 是（若启用认证） | 获取可用的 Edge TTS 音色列表                    |
-| `POST`   | `/v1/audio/speech` | 是（若启用认证） | 兼容 OpenAI TTS 协议的流式语音合成接口          |
-| `POST`   | `/api/speech`      | 是（若启用认证） | 原生分段长文本流式语音合成接口                  |
+| 请求方法 | 路由路径           | 需携带认证       | 说明                                                |
+| :------- | :----------------- | :--------------- | :-------------------------------------------------- |
+| `GET`    | `/health`          | 否               | 基础健康检查，返回 `{"status":"ok"}`                |
+| `GET`    | `/api/health`      | 否               | 带有 API 前缀的健康检查，返回 `{"status":"ok"}`     |
+| `GET`    | `/api/voices`      | 是（若启用认证） | 获取可用的 Edge TTS 音色列表                        |
+| `POST`   | `/v1/audio/speech` | 是（若启用认证） | 兼容 OpenAI TTS 协议的流式语音合成接口              |
+| `POST`   | `/api/speech`      | 是（若启用认证） | 原生分段长文本流式语音合成接口                      |
+| `GET`    | `/api/metrics`     | 是（若启用认证） | Prometheus 指标，仅在 `METRICS_ENABLED=true` 时提供 |
 
 ## 认证方式
 
@@ -155,6 +156,20 @@ HTTP/1.1 200 OK
 Content-Type: application/json; charset=utf-8
 
 {"status":"ok"}
+```
+
+## 5. 指标接口 (`GET /api/metrics`)
+
+仅在 `METRICS_ENABLED=true` 时提供，输出 Prometheus 文本格式，并与其他受保护路由使用相同的 Bearer 认证。指标列表见[配置参考](configuration.zh-CN.md#运行指标)。
+
+```yaml
+scrape_configs:
+  - job_name: edgetts
+    metrics_path: /api/metrics
+    authorization:
+      credentials_file: /etc/prometheus/edgetts-api-key
+    static_configs:
+      - targets: ["127.0.0.1:8080"]
 ```
 
 ## 错误代码与状态码说明

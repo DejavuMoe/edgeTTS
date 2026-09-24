@@ -33,6 +33,19 @@ export interface SegmentedSynthesisResult extends SynthesisResult {
   readonly segmentCount: number;
 }
 
+/** Point-in-time counters for monitoring; totals are cumulative since the service started. */
+export interface TtsServiceStats {
+  readonly activeSyntheses: number;
+  readonly queuedSyntheses: number;
+  readonly rejectedSyntheses: {
+    readonly queueFull: number;
+    readonly queueTimeout: number;
+    readonly unknownVoice: number;
+  };
+  /** Null until the voice catalog has been fetched successfully once. */
+  readonly voiceCatalog: { readonly voices: number; readonly ageMs: number } | null;
+}
+
 class ManagedAudioStream implements AsyncIterableIterator<Uint8Array> {
   private readonly upstreamIterator: AsyncIterator<Uint8Array>;
   private readonly signal: AbortSignal;
@@ -293,6 +306,7 @@ export class TtsService {
   private readonly provider: TtsProvider;
   private readonly voiceCache: VoiceCache;
   private readonly limiter: SynthesisLimiter;
+  private unknownVoiceRejections = 0;
 
   constructor(provider: TtsProvider, options?: TtsServiceOptions) {
     this.provider = provider;
@@ -307,6 +321,15 @@ export class TtsService {
       maxConcurrent: options?.maxConcurrentSyntheses ?? DEFAULT_MAX_CONCURRENT_SYNTHESES,
       maxQueued: options?.maxQueuedSyntheses ?? DEFAULT_MAX_QUEUED_SYNTHESES,
     });
+  }
+
+  getStats(): TtsServiceStats {
+    return {
+      activeSyntheses: this.limiter.active,
+      queuedSyntheses: this.limiter.queued,
+      rejectedSyntheses: { ...this.limiter.rejections, unknownVoice: this.unknownVoiceRejections },
+      voiceCatalog: this.voiceCache.snapshotInfo(),
+    };
   }
 
   async listVoices(options?: ListVoicesOptions): Promise<readonly TtsVoice[]> {
@@ -416,6 +439,7 @@ export class TtsService {
     }
     const wanted = voice.toLowerCase();
     if (!catalog.some((candidate) => candidate.id.toLowerCase() === wanted)) {
+      this.unknownVoiceRejections++;
       throw new TtsError("unknown_voice", "Requested voice is not in the voice catalog");
     }
   }

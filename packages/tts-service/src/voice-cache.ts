@@ -42,6 +42,14 @@ export class VoiceCache {
     this.now = options?.now ?? Date.now;
   }
 
+  /** Size and age of the cached catalog, or null before the first successful fetch. */
+  snapshotInfo(): { readonly voices: number; readonly ageMs: number } | null {
+    if (this.cachedVoices === null || this.cachedAt === null) {
+      return null;
+    }
+    return { voices: this.cachedVoices.length, ageMs: this.now() - this.cachedAt };
+  }
+
   /** The cached catalog while it is within its TTL. Never triggers an upstream fetch. */
   peekFresh(): readonly TtsVoice[] | null {
     if (this.cachedVoices === null || this.cachedAt === null) {
