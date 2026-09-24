@@ -4,6 +4,7 @@ import fastifyRateLimit from "@fastify/rate-limit";
 import { createAuthPreHandler, resolveAuthConfiguration } from "./auth.js";
 import type { AppDependencies } from "./dependencies.js";
 import type { TrustProxySetting } from "./env.js";
+import { createMetricsRoutes, HttpResponseCounter } from "./metrics.js";
 import {
   createSpeechRateLimiter,
   RateLimitedError,
@@ -23,6 +24,8 @@ export interface AppOptions extends StaticHostingOptions {
   readonly logger?: FastifyServerOptions["logger"] | undefined;
   /** Reverse proxies whose forwarded client address is trusted; defaults to none. */
   readonly trustProxy?: TrustProxySetting | undefined;
+  /** Serves Prometheus metrics at /api/metrics behind API key auth; defaults to disabled. */
+  readonly metrics?: boolean | undefined;
 }
 
 // The largest valid native request carries 20,000 astral code points, each JSON-escaped as a
@@ -53,6 +56,17 @@ export function createApp(dependencies: AppDependencies, options?: AppOptions): 
   });
 
   void app.register(fastifyRateLimit, { global: false });
+
+  const httpResponses = options?.metrics ? new HttpResponseCounter() : null;
+  if (httpResponses) {
+    app.addHook("onResponse", async (request, reply) => {
+      httpResponses.record(
+        request.method,
+        request.routeOptions.url ?? "unmatched",
+        reply.statusCode,
+      );
+    });
+  }
 
   app.setErrorHandler((error, request, reply) => {
     const candidate =
@@ -102,6 +116,12 @@ export function createApp(dependencies: AppDependencies, options?: AppOptions): 
     void scope.register(
       createSpeechRoutes(dependencies.ttsService, { rateLimiter: speechLimiter }),
     );
+
+    if (httpResponses) {
+      void scope.register(createMetricsRoutes(httpResponses, dependencies.serviceStats), {
+        prefix: "/api",
+      });
+    }
   });
 
   if (!registerStaticHosting(app, options)) {

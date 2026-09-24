@@ -12,19 +12,20 @@
 
 以下环境变量作用于 Fastify 应用服务端（`apps/server`）：
 
-| 变量名                        | 说明                               | 可选值                                                 | 默认值                                             |
-| :---------------------------- | :--------------------------------- | :----------------------------------------------------- | :------------------------------------------------- |
-| `HOST`                        | HTTP 服务监听的绑定 IP 地址        | 有效的 IPv4 / IPv6 地址                                | `127.0.0.1` (裸机 Node)<br>`0.0.0.0` (Docker 容器) |
-| `PORT`                        | HTTP 服务监听端口                  | `1`–`65535`                                            | `8080`                                             |
-| `NODE_ENV`                    | 运行环境模式                       | `production`, `development`, `test`                    | `production` (Docker)                              |
-| `API_KEY`                     | Bearer 认证访问密钥                | 字符串（不少于 16 字符，无空白符）                     | 无                                                 |
-| `REQUIRE_API_KEY`             | 是否要求启动时必须配置密钥         | `true` 或 `false`                                      | `true`（production / Compose）；其他环境 `false`   |
-| `SPEECH_RATE_LIMIT_MAX`       | 单个时间窗口内允许的最大语音请求数 | 整数（`1`–`10000`）                                    | `12`                                               |
-| `SPEECH_RATE_LIMIT_WINDOW_MS` | 限流固定时间窗口大小（毫秒）       | 整数（`100`–`3600000`）                                | `10000`（10 秒）                                   |
-| `SPEECH_RATE_LIMIT_SCOPE`     | 语音限额的共享范围                 | `global` 或 `ip`                                       | `global`                                           |
-| `SERVE_STATIC`                | 是否启用 Fastify 前端静态资源托管  | `true` 或 `false`                                      | `production` 环境下默认开启                        |
-| `WEB_DIST_DIR`                | 前端编译产物存放的文件系统路径     | 绝对路径或相对路径                                     | `/app/web-dist` (Docker)<br>`apps/web/dist` (Node) |
-| `TRUST_PROXY`                 | 受信任、可提供客户端地址的反向代理 | `false`、`true`、跳数（`1`–`16`）或逗号分隔的地址/CIDR | `false`                                            |
+| 变量名                        | 说明                                       | 可选值                                                 | 默认值                                             |
+| :---------------------------- | :----------------------------------------- | :----------------------------------------------------- | :------------------------------------------------- |
+| `HOST`                        | HTTP 服务监听的绑定 IP 地址                | 有效的 IPv4 / IPv6 地址                                | `127.0.0.1` (裸机 Node)<br>`0.0.0.0` (Docker 容器) |
+| `PORT`                        | HTTP 服务监听端口                          | `1`–`65535`                                            | `8080`                                             |
+| `NODE_ENV`                    | 运行环境模式                               | `production`, `development`, `test`                    | `production` (Docker)                              |
+| `API_KEY`                     | Bearer 认证访问密钥                        | 字符串（不少于 16 字符，无空白符）                     | 无                                                 |
+| `REQUIRE_API_KEY`             | 是否要求启动时必须配置密钥                 | `true` 或 `false`                                      | `true`（production / Compose）；其他环境 `false`   |
+| `SPEECH_RATE_LIMIT_MAX`       | 单个时间窗口内允许的最大语音请求数         | 整数（`1`–`10000`）                                    | `12`                                               |
+| `SPEECH_RATE_LIMIT_WINDOW_MS` | 限流固定时间窗口大小（毫秒）               | 整数（`100`–`3600000`）                                | `10000`（10 秒）                                   |
+| `SPEECH_RATE_LIMIT_SCOPE`     | 语音限额的共享范围                         | `global` 或 `ip`                                       | `global`                                           |
+| `SERVE_STATIC`                | 是否启用 Fastify 前端静态资源托管          | `true` 或 `false`                                      | `production` 环境下默认开启                        |
+| `WEB_DIST_DIR`                | 前端编译产物存放的文件系统路径             | 绝对路径或相对路径                                     | `/app/web-dist` (Docker)<br>`apps/web/dist` (Node) |
+| `TRUST_PROXY`                 | 受信任、可提供客户端地址的反向代理         | `false`、`true`、跳数（`1`–`16`）或逗号分隔的地址/CIDR | `false`                                            |
+| `METRICS_ENABLED`             | 是否在 `/api/metrics` 提供 Prometheus 指标 | `true` 或 `false`                                      | `false`                                            |
 
 ### 容量与超时调优
 
@@ -113,6 +114,20 @@ Authorization: Bearer <API_KEY>
 - 跳数表示信任相应数量的代理。`true` 信任所有对端，仅在代理是访问 edgeTTS 的唯一网络路径时使用，否则任何客户端都能伪造 `X-Forwarded-For`。
 
 `TRUST_PROXY` 影响请求元数据和日志；在 `SPEECH_RATE_LIMIT_SCOPE=ip` 时，也决定语音限流使用的客户端地址。
+
+## 运行指标
+
+设置 `METRICS_ENABLED=true` 后，`GET /api/metrics` 以 Prometheus 文本格式输出指标，使用与其他受保护路由相同的 API 密钥。标签只包含路由模板和固定原因，不含 URL、声音或请求文本。计数器在进程重启后清零。音频开始流式返回后才发生的失败不会改变已记录的状态码。
+
+| 指标                                                          | 类型    | 含义                                             |
+| :------------------------------------------------------------ | :------ | :----------------------------------------------- |
+| `edgetts_http_responses_total{method,route,status}`           | counter | 按路由模板统计的 HTTP 响应                       |
+| `edgetts_synthesis_active`                                    | gauge   | 占用并发许可的会话数                             |
+| `edgetts_synthesis_queued`                                    | gauge   | 等待并发许可的请求数                             |
+| `edgetts_synthesis_rejected_total{reason}`                    | counter | `queue_full`、`queue_timeout` 或 `unknown_voice` |
+| `edgetts_voice_catalog_voices`                                | gauge   | 缓存的声音数量；首次获取前为 `0`                 |
+| `edgetts_voice_catalog_age_seconds`                           | gauge   | 声音列表缓存时长；首次获取前不输出               |
+| `process_resident_memory_bytes`, `process_start_time_seconds` | gauge   | 进程内存与启动时间                               |
 
 ## 音色元数据缓存
 

@@ -12,19 +12,20 @@
 
 以下の環境変数は Fastify アプリケーションサーバー（`apps/server`）で読み込まれます：
 
-| 変数名                        | 説明                                           | 設定可能値                                                               | デフォルト値                                        |
-| :---------------------------- | :--------------------------------------------- | :----------------------------------------------------------------------- | :-------------------------------------------------- |
-| `HOST`                        | HTTP サーバーがバインドする IP アドレス        | 有効な IPv4 / IPv6 アドレス                                              | `127.0.0.1` (ベアメタル Node)<br>`0.0.0.0` (Docker) |
-| `PORT`                        | HTTP 待受ポート                                | `1`–`65535`                                                              | `8080`                                              |
-| `NODE_ENV`                    | 実行環境モード                                 | `production`, `development`, `test`                                      | `production` (Docker)                               |
-| `API_KEY`                     | Bearer 認証用シークレットキー                  | 16 文字以上の文字列（空白不可）                                          | なし                                                |
-| `REQUIRE_API_KEY`             | 起動時にキー設定を必須にする                   | `true` または `false`                                                    | `true`（production / Compose）、他は `false`        |
-| `SPEECH_RATE_LIMIT_MAX`       | 時間枠内の最大リクエスト許容量                 | 整数（`1`–`10000`）                                                      | `12`                                                |
-| `SPEECH_RATE_LIMIT_WINDOW_MS` | レート制限固定時間枠（ミリ秒）                 | 整数（`100`–`3600000`）                                                  | `10000`（10 秒）                                    |
-| `SPEECH_RATE_LIMIT_SCOPE`     | 音声の制限枠を共有する範囲                     | `global` または `ip`                                                     | `global`                                            |
-| `SERVE_STATIC`                | WebUI 静的アセット配信の有効化                 | `true` または `false`                                                    | `production` で自動有効                             |
-| `WEB_DIST_DIR`                | フロントエンド成果物ディレクトリパス           | 絶対パスまたは相対パス                                                   | `/app/web-dist` (Docker)<br>`apps/web/dist` (Node)  |
-| `TRUST_PROXY`                 | クライアントアドレスを信頼するリバースプロキシ | `false`、`true`、ホップ数（`1`–`16`）、またはカンマ区切りのアドレス/CIDR | `false`                                             |
+| 変数名                        | 説明                                                | 設定可能値                                                               | デフォルト値                                        |
+| :---------------------------- | :-------------------------------------------------- | :----------------------------------------------------------------------- | :-------------------------------------------------- |
+| `HOST`                        | HTTP サーバーがバインドする IP アドレス             | 有効な IPv4 / IPv6 アドレス                                              | `127.0.0.1` (ベアメタル Node)<br>`0.0.0.0` (Docker) |
+| `PORT`                        | HTTP 待受ポート                                     | `1`–`65535`                                                              | `8080`                                              |
+| `NODE_ENV`                    | 実行環境モード                                      | `production`, `development`, `test`                                      | `production` (Docker)                               |
+| `API_KEY`                     | Bearer 認証用シークレットキー                       | 16 文字以上の文字列（空白不可）                                          | なし                                                |
+| `REQUIRE_API_KEY`             | 起動時にキー設定を必須にする                        | `true` または `false`                                                    | `true`（production / Compose）、他は `false`        |
+| `SPEECH_RATE_LIMIT_MAX`       | 時間枠内の最大リクエスト許容量                      | 整数（`1`–`10000`）                                                      | `12`                                                |
+| `SPEECH_RATE_LIMIT_WINDOW_MS` | レート制限固定時間枠（ミリ秒）                      | 整数（`100`–`3600000`）                                                  | `10000`（10 秒）                                    |
+| `SPEECH_RATE_LIMIT_SCOPE`     | 音声の制限枠を共有する範囲                          | `global` または `ip`                                                     | `global`                                            |
+| `SERVE_STATIC`                | WebUI 静的アセット配信の有効化                      | `true` または `false`                                                    | `production` で自動有効                             |
+| `WEB_DIST_DIR`                | フロントエンド成果物ディレクトリパス                | 絶対パスまたは相対パス                                                   | `/app/web-dist` (Docker)<br>`apps/web/dist` (Node)  |
+| `TRUST_PROXY`                 | クライアントアドレスを信頼するリバースプロキシ      | `false`、`true`、ホップ数（`1`–`16`）、またはカンマ区切りのアドレス/CIDR | `false`                                             |
+| `METRICS_ENABLED`             | `/api/metrics` で Prometheus メトリクスを提供するか | `true` または `false`                                                    | `false`                                             |
 
 ### 容量とタイムアウトの調整
 
@@ -113,6 +114,20 @@ Authorization: Bearer <API_KEY>
 - ホップ数を指定すると、その数のプロキシを信頼します。`true` はすべての接続元を信頼するため、プロキシが edgeTTS への唯一の経路である場合に限って使用してください。そうでなければ任意のクライアントが `X-Forwarded-For` を偽装できます。
 
 `TRUST_PROXY` はリクエストのメタデータとログに影響し、`SPEECH_RATE_LIMIT_SCOPE=ip` の場合は音声のレート制限に使うアドレスも決定します。
+
+## メトリクス
+
+`METRICS_ENABLED=true` の場合、`GET /api/metrics` が Prometheus テキスト形式でメトリクスを提供します。認証には他の保護対象ルートと同じ API キーを使います。ラベルにはルートテンプレートと固定の理由のみを含み、URL、音声、リクエスト本文は含みません。カウンターはプロセス再起動時にリセットされます。音声のストリーミング開始後に発生した失敗は、記録済みのステータスを変更しません。
+
+| メトリクス                                                    | 種類    | 意味                                                  |
+| :------------------------------------------------------------ | :------ | :---------------------------------------------------- |
+| `edgetts_http_responses_total{method,route,status}`           | counter | ルートテンプレート別の HTTP レスポンス数              |
+| `edgetts_synthesis_active`                                    | gauge   | 並行許可を保持しているセッション数                    |
+| `edgetts_synthesis_queued`                                    | gauge   | 並行許可を待っているリクエスト数                      |
+| `edgetts_synthesis_rejected_total{reason}`                    | counter | `queue_full`、`queue_timeout`、または `unknown_voice` |
+| `edgetts_voice_catalog_voices`                                | gauge   | キャッシュ済みの音声数。初回取得前は `0`              |
+| `edgetts_voice_catalog_age_seconds`                           | gauge   | 音声一覧キャッシュの経過時間。初回取得前は出力しない  |
+| `process_resident_memory_bytes`, `process_start_time_seconds` | gauge   | プロセスのメモリと起動時刻                            |
 
 ## 音色キャッシュ
 

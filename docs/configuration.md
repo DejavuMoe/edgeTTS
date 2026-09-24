@@ -25,6 +25,7 @@ These variables configure the Fastify application server (`apps/server`):
 | `SERVE_STATIC`                | Enable Fastify static web asset hosting    | `true` or `false`                                                         | Enabled in `production`                            |
 | `WEB_DIST_DIR`                | Filesystem path to compiled web UI bundle  | Absolute or relative directory path                                       | `/app/web-dist` (Docker)<br>`apps/web/dist` (Node) |
 | `TRUST_PROXY`                 | Reverse proxies trusted for client address | `false`, `true`, hop count (`1`–`16`), or comma-separated addresses/CIDRs | `false`                                            |
+| `METRICS_ENABLED`             | Serve Prometheus metrics at `/api/metrics` | `true` or `false`                                                         | `false`                                            |
 
 ### Capacity & Timeout Tuning
 
@@ -113,6 +114,20 @@ By default edgeTTS ignores `X-Forwarded-*` headers, so logs record the proxy's a
 - A hop count trusts that many proxies. `true` trusts every peer; use it only when the proxy is the sole network path to edgeTTS, because any other client can forge `X-Forwarded-For`.
 
 `TRUST_PROXY` affects request metadata, logs and, with `SPEECH_RATE_LIMIT_SCOPE=ip`, the address used for speech limits.
+
+## Metrics
+
+With `METRICS_ENABLED=true`, `GET /api/metrics` serves the Prometheus text format behind the same API key as the other protected routes. Labels contain route templates and fixed reasons only, never URLs, voices or request text. Counters reset when the process restarts. A failure after audio has started streaming does not change the recorded status.
+
+| Metric                                                        | Type    | Meaning                                                     |
+| :------------------------------------------------------------ | :------ | :---------------------------------------------------------- |
+| `edgetts_http_responses_total{method,route,status}`           | counter | HTTP responses by route template                            |
+| `edgetts_synthesis_active`                                    | gauge   | Sessions holding a concurrency permit                       |
+| `edgetts_synthesis_queued`                                    | gauge   | Requests waiting for a permit                               |
+| `edgetts_synthesis_rejected_total{reason}`                    | counter | `queue_full`, `queue_timeout` or `unknown_voice`            |
+| `edgetts_voice_catalog_voices`                                | gauge   | Cached voices; `0` before the first fetch                   |
+| `edgetts_voice_catalog_age_seconds`                           | gauge   | Age of the cached voice list; absent before the first fetch |
+| `process_resident_memory_bytes`, `process_start_time_seconds` | gauge   | Process memory and start time                               |
 
 ## Voice Metadata Caching
 

@@ -6,5 +6,5 @@ import type { AppDependencies } from "./dependencies.js";
 export function createProductionDependencies(tuning?: TtsTuning): AppDependencies {
   const provider = new EdgeTtsProvider(tuning?.provider);
   const ttsService = new TtsService(provider, tuning?.service);
-  return { ttsService };
+  return { ttsService, serviceStats: ttsService };
 }

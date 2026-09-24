@@ -36,6 +36,7 @@ describe("loadServerConfig", () => {
         serveStatic: false,
         webDistDir: resolveWebDistDir(undefined, {}),
         trustProxy: false,
+        metrics: false,
         logger: true,
       },
       tts: { service: {}, provider: {} },
@@ -77,6 +78,7 @@ describe("loadServerConfig", () => {
       SERVE_STATIC: "true",
       WEB_DIST_DIR: "/srv/web",
       TRUST_PROXY: "127.0.0.1, 10.0.0.0/8",
+      METRICS_ENABLED: "true",
       SYNTHESIS_MAX_CONCURRENT: "8",
       SYNTHESIS_MAX_QUEUED: "0",
       VOICE_CACHE_TTL_MS: "3600000",
@@ -94,6 +96,7 @@ describe("loadServerConfig", () => {
         serveStatic: true,
         webDistDir: resolveWebDistDir("/srv/web"),
         trustProxy: ["127.0.0.1", "10.0.0.0/8"],
+        metrics: true,
         logger: false,
       },
       tts: {
@@ -176,6 +179,12 @@ describe("loadServerConfig", () => {
     expect(error.message).toContain("TRUST_PROXY");
     expect(error.message).toContain("SYNTHESIS_MAX_QUEUED");
     expect(error.message).not.toContain(secret);
+  });
+
+  it("rejects a non-boolean METRICS_ENABLED", () => {
+    expect(configError({ METRICS_ENABLED: "1" }).issues).toEqual([
+      "METRICS_ENABLED must be either 'true' or 'false'",
+    ]);
   });
 
   it("rejects an unknown SPEECH_RATE_LIMIT_SCOPE", () => {
