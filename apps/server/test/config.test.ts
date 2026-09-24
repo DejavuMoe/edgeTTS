@@ -32,7 +32,7 @@ describe("loadServerConfig", () => {
       app: {
         apiKey: null,
         requireApiKey: false,
-        speechRateLimit: { max: 12, timeWindowMs: 10_000 },
+        speechRateLimit: { max: 12, timeWindowMs: 10_000, scope: "global" },
         serveStatic: false,
         webDistDir: resolveWebDistDir(undefined, {}),
         trustProxy: false,
@@ -73,6 +73,7 @@ describe("loadServerConfig", () => {
       REQUIRE_API_KEY: "true",
       SPEECH_RATE_LIMIT_MAX: "30",
       SPEECH_RATE_LIMIT_WINDOW_MS: "60000",
+      SPEECH_RATE_LIMIT_SCOPE: "ip",
       SERVE_STATIC: "true",
       WEB_DIST_DIR: "/srv/web",
       TRUST_PROXY: "127.0.0.1, 10.0.0.0/8",
@@ -89,7 +90,7 @@ describe("loadServerConfig", () => {
       app: {
         apiKey: VALID_KEY,
         requireApiKey: true,
-        speechRateLimit: { max: 30, timeWindowMs: 60_000 },
+        speechRateLimit: { max: 30, timeWindowMs: 60_000, scope: "ip" },
         serveStatic: true,
         webDistDir: resolveWebDistDir("/srv/web"),
         trustProxy: ["127.0.0.1", "10.0.0.0/8"],
@@ -175,6 +176,12 @@ describe("loadServerConfig", () => {
     expect(error.message).toContain("TRUST_PROXY");
     expect(error.message).toContain("SYNTHESIS_MAX_QUEUED");
     expect(error.message).not.toContain(secret);
+  });
+
+  it("rejects an unknown SPEECH_RATE_LIMIT_SCOPE", () => {
+    expect(configError({ SPEECH_RATE_LIMIT_SCOPE: "tenant" }).issues).toEqual([
+      "SPEECH_RATE_LIMIT_SCOPE must be either 'global' or 'ip'",
+    ]);
   });
 
   it("reports an invalid REQUIRE_API_KEY once", () => {

@@ -1,4 +1,4 @@
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { ApiError } from "@edgetts/shared";
 import { type Environment, parseStrictInteger } from "./env.js";
 
@@ -18,14 +18,21 @@ export const RATE_LIMITED_ERROR: ApiError = {
   },
 };
 
+/** Who shares a speech budget: every caller, or each client address. Both routes always share. */
+export type SpeechRateLimitScope = "global" | "ip";
+
+export const DEFAULT_SPEECH_RATE_LIMIT_SCOPE: SpeechRateLimitScope = "global";
+
 export interface SpeechRateLimitOptions {
   readonly max?: number | string | undefined;
   readonly timeWindowMs?: number | string | undefined;
+  readonly scope?: SpeechRateLimitScope | undefined;
 }
 
 export interface SpeechRateLimitConfig {
   readonly max: number;
   readonly timeWindowMs: number;
+  readonly scope: SpeechRateLimitScope;
 }
 
 export function resolveSpeechRateLimitConfig(
@@ -48,8 +55,22 @@ export function resolveSpeechRateLimitConfig(
     DEFAULT_SPEECH_RATE_LIMIT_WINDOW_MS,
   );
 
-  return { max, timeWindowMs };
+  const scope = parseSpeechRateLimitScope(options?.scope ?? env["SPEECH_RATE_LIMIT_SCOPE"]);
+
+  return { max, timeWindowMs, scope };
 }
+
+function parseSpeechRateLimitScope(value: string | undefined): SpeechRateLimitScope {
+  if (value === undefined) return DEFAULT_SPEECH_RATE_LIMIT_SCOPE;
+  if (value === "global" || value === "ip") return value;
+  throw new RangeError("SPEECH_RATE_LIMIT_SCOPE must be either 'global' or 'ip'");
+}
+
+const SPEECH_RATE_LIMIT_KEYS: Record<SpeechRateLimitScope, (request: FastifyRequest) => string> = {
+  global: () => "speech-global",
+  // request.ip honors TRUST_PROXY, so forwarded addresses count only from trusted proxies.
+  ip: (request) => `speech-ip:${request.ip}`,
+};
 
 export class RateLimitedError extends Error {
   public statusCode: number;
@@ -65,7 +86,7 @@ export function createSpeechRateLimiter(scope: FastifyInstance, config: SpeechRa
   return scope.rateLimit({
     max: config.max,
     timeWindow: config.timeWindowMs,
-    keyGenerator: () => "speech-global",
+    keyGenerator: SPEECH_RATE_LIMIT_KEYS[config.scope],
     errorResponseBuilder: (_req, context) => {
       return new RateLimitedError(RATE_LIMITED_ERROR.error.message, context.statusCode);
     },
