@@ -165,16 +165,17 @@ Content-Type: application/json; charset=utf-8
 { "error": { "code": "INVALID_REQUEST", "message": "Invalid request" } }
 ```
 
-| HTTP | Code                     | 原因                   |
-| ---- | ------------------------ | ---------------------- |
-| 400  | `INVALID_REQUEST`        | 请求校验失败           |
-| 401  | `UNAUTHORIZED`           | 密钥缺失或无效         |
-| 404  | `NOT_FOUND`              | 路由或资源不存在       |
-| 429  | `RATE_LIMITED`           | 准入配额耗尽           |
-| 413  | `PAYLOAD_TOO_LARGE`      | 请求体过大             |
-| 415  | `UNSUPPORTED_MEDIA_TYPE` | 不支持的 Content-Type  |
-| 500  | `INTERNAL_ERROR`         | 内部错误               |
-| 502  | `UPSTREAM_ERROR`         | 上游连接或合成失败     |
-| 503  | `SERVER_BUSY`            | 队列满或排队超过 30 秒 |
+| HTTP | Code                     | 原因                       |
+| ---- | ------------------------ | -------------------------- |
+| 400  | `INVALID_REQUEST`        | 请求校验失败               |
+| 400  | `UNKNOWN_VOICE`          | 声音不在已缓存的音色列表中 |
+| 401  | `UNAUTHORIZED`           | 密钥缺失或无效             |
+| 404  | `NOT_FOUND`              | 路由或资源不存在           |
+| 429  | `RATE_LIMITED`           | 准入配额耗尽               |
+| 413  | `PAYLOAD_TOO_LARGE`      | 请求体过大                 |
+| 415  | `UNSUPPORTED_MEDIA_TYPE` | 不支持的 Content-Type      |
+| 500  | `INTERNAL_ERROR`         | 内部错误                   |
+| 502  | `UPSTREAM_ERROR`         | 上游连接或合成失败         |
+| 503  | `SERVER_BUSY`            | 队列满或排队超过 30 秒     |
 
 两条语音接口共享单进程 12 次/10 秒配额，音色查询为单进程每分钟 60 次。详见[配置参考](configuration.zh-CN.md)。

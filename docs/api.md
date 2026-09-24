@@ -168,6 +168,7 @@ Errors before audio headers use the JSON shape below. Later errors terminate the
 | HTTP | Code                     | Cause                                        |
 | ---- | ------------------------ | -------------------------------------------- |
 | 400  | `INVALID_REQUEST`        | Request validation failed                    |
+| 400  | `UNKNOWN_VOICE`          | Voice absent from the cached voice catalog   |
 | 401  | `UNAUTHORIZED`           | Missing or invalid key                       |
 | 404  | `NOT_FOUND`              | Route or asset not found                     |
 | 429  | `RATE_LIMITED`           | Admission quota exceeded                     |

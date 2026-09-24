@@ -122,6 +122,8 @@ By default edgeTTS ignores `X-Forwarded-*` headers, so logs record the proxy's a
 
 A stale list has no separate maximum age.
 
+While a cached list is within its TTL, speech requests for a voice absent from it return `400 UNKNOWN_VOICE` before using capacity. Matching ignores case. Synthesis never fetches the list: with a cold or expired cache, requests proceed and the upstream service decides.
+
 ## Container Security Hardening
 
 The image runs as `node`. The recommended Compose / `docker run` options add a read-only root, `cap_drop=ALL`, `no-new-privileges`, a `/tmp` tmpfs, and Docker’s injected init process (`init: true` / `--init`). These runtime restrictions are not embedded in the image.

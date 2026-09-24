@@ -40,6 +40,15 @@ describe("speech route domain error mapping", () => {
     });
   });
 
+  it.each(REQUESTS)("maps unknown_voice to 400 UNKNOWN_VOICE on $url", async (request) => {
+    app = createApp({ ttsService: failingService(new TtsError("unknown_voice", "missing")) });
+
+    const response = await app.inject({ method: "POST", ...request });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toEqual({ error: { code: "UNKNOWN_VOICE", message: "Unknown voice" } });
+  });
+
   it.each(REQUESTS)("maps other failures to UPSTREAM_ERROR on $url", async (request) => {
     app = createApp({ ttsService: failingService(new Error("upstream exploded")) });
 

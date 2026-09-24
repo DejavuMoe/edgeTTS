@@ -110,16 +110,17 @@ curl -s http://127.0.0.1:8080/api/voices \
 { "error": { "code": "INVALID_REQUEST", "message": "Invalid request" } }
 ```
 
-| HTTP | Code                     | 原因                             |
-| ---- | ------------------------ | -------------------------------- |
-| 400  | `INVALID_REQUEST`        | リクエスト検証失敗               |
-| 401  | `UNAUTHORIZED`           | キーが未指定または不正           |
-| 404  | `NOT_FOUND`              | ルートやリソースが存在しない     |
-| 429  | `RATE_LIMITED`           | 受付枠の超過                     |
-| 413  | `PAYLOAD_TOO_LARGE`      | リクエスト本文が大きすぎる       |
-| 415  | `UNSUPPORTED_MEDIA_TYPE` | 非対応の Content-Type            |
-| 500  | `INTERNAL_ERROR`         | 内部エラー                       |
-| 502  | `UPSTREAM_ERROR`         | 上流接続または合成失敗           |
-| 503  | `SERVER_BUSY`            | キュー満杯または 30 秒の待機超過 |
+| HTTP | Code                     | 原因                                     |
+| ---- | ------------------------ | ---------------------------------------- |
+| 400  | `INVALID_REQUEST`        | リクエスト検証失敗                       |
+| 400  | `UNKNOWN_VOICE`          | キャッシュ済みの音声一覧に存在しない音声 |
+| 401  | `UNAUTHORIZED`           | キーが未指定または不正                   |
+| 404  | `NOT_FOUND`              | ルートやリソースが存在しない             |
+| 429  | `RATE_LIMITED`           | 受付枠の超過                             |
+| 413  | `PAYLOAD_TOO_LARGE`      | リクエスト本文が大きすぎる               |
+| 415  | `UNSUPPORTED_MEDIA_TYPE` | 非対応の Content-Type                    |
+| 500  | `INTERNAL_ERROR`         | 内部エラー                               |
+| 502  | `UPSTREAM_ERROR`         | 上流接続または合成失敗                   |
+| 503  | `SERVER_BUSY`            | キュー満杯または 30 秒の待機超過         |
 
 両音声 API はプロセスあたり 12 件/10 秒の枠を共有し、音声一覧は毎分 60 件です。[設定](configuration.ja.md)を参照してください。

@@ -50,6 +50,11 @@ const TTS_ERROR_RESPONSES: Record<TtsErrorCode, TtsErrorResponse> = {
     body: { error: { code: "SERVER_BUSY", message: "Speech synthesis capacity is full" } },
     logMessage: "Speech synthesis capacity full",
   },
+  unknown_voice: {
+    status: 400,
+    body: { error: { code: "UNKNOWN_VOICE", message: "Unknown voice" } },
+    logMessage: "Unknown voice requested",
+  },
 };
 
 type ParseResult<Body> =

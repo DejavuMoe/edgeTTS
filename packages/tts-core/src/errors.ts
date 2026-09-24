@@ -2,7 +2,7 @@
  * Failures that callers are expected to handle distinctly. Anything else from a provider is
  * an upstream failure. Adding a code obliges every exhaustive mapping to handle it.
  */
-export type TtsErrorCode = "capacity_exceeded";
+export type TtsErrorCode = "capacity_exceeded" | "unknown_voice";
 
 export class TtsError extends Error {
   readonly code: TtsErrorCode;
