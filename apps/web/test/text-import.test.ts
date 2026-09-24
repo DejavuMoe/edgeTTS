@@ -48,9 +48,8 @@ describe("decodeUtf8Text", () => {
 });
 
 describe("readImportedTextFile", () => {
-  function makeTxtFile(content: string | Uint8Array, filename = "test.txt"): File {
-    const parts = typeof content === "string" ? [content] : [content];
-    return new File(parts, filename, { type: "text/plain" });
+  function makeTxtFile(content: string | Uint8Array<ArrayBuffer>, filename = "test.txt"): File {
+    return new File([content], filename, { type: "text/plain" });
   }
 
   it("accepts valid UTF-8 .txt files", async () => {

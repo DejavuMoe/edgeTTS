@@ -1,11 +1,16 @@
 import React from "react";
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from "vitest";
 import { render, screen, waitFor, fireEvent, cleanup } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { VoiceDto } from "@edgetts/shared";
 import { App, isValidApiKeyFormat, MIN_API_KEY_LENGTH } from "../src/App.js";
 import { WORKBENCH_PREFERENCES_KEY } from "../src/preferences.js";
 import { WORKBENCH_FAVORITES_KEY } from "../src/voice-favorites.js";
+
+function requestUrl(input: RequestInfo | URL): string {
+  if (typeof input === "string") return input;
+  return input instanceof URL ? input.href : input.url;
+}
 
 const mockVoices: readonly VoiceDto[] = [
   {
@@ -73,7 +78,7 @@ async function getComboboxOptions(
 describe("EdgeTTS Web Workbench", () => {
   let createdUrls: string[] = [];
   let revokedUrls: string[] = [];
-  let fetchMock: ReturnType<typeof vi.fn>;
+  let fetchMock: Mock<typeof fetch>;
 
   beforeEach(() => {
     window.localStorage.clear();
@@ -96,8 +101,8 @@ describe("EdgeTTS Web Workbench", () => {
     window.HTMLMediaElement.prototype.play = vi.fn().mockResolvedValue(undefined);
 
     // Default fetch handler
-    fetchMock = vi.fn(async (input: RequestInfo | URL) => {
-      const url = typeof input === "string" ? input : input.toString();
+    fetchMock = vi.fn<typeof fetch>(async (input: RequestInfo | URL) => {
+      const url = requestUrl(input);
 
       if (url === "/api/health") {
         return new Response(JSON.stringify({ status: "ok" }), {
@@ -153,7 +158,7 @@ describe("EdgeTTS Web Workbench", () => {
 
     it("falls back to first zh-CN voice when Xiaoxiao is not present", async () => {
       fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
-        const url = typeof input === "string" ? input : input.toString();
+        const url = requestUrl(input);
         if (url === "/api/health") {
           return new Response(JSON.stringify({ status: "ok" }));
         }
@@ -182,7 +187,7 @@ describe("EdgeTTS Web Workbench", () => {
 
     it("falls back to first available voice when no zh-CN voice exists", async () => {
       fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
-        const url = typeof input === "string" ? input : input.toString();
+        const url = requestUrl(input);
         if (url === "/api/health") {
           return new Response(JSON.stringify({ status: "ok" }));
         }
@@ -216,7 +221,7 @@ describe("EdgeTTS Web Workbench", () => {
 
     it("displays error message when voice fetching fails", async () => {
       fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
-        const url = typeof input === "string" ? input : input.toString();
+        const url = requestUrl(input);
         if (url === "/api/health") {
           return new Response(JSON.stringify({ status: "ok" }));
         }
@@ -407,7 +412,7 @@ describe("EdgeTTS Web Workbench", () => {
 
       // Create a deferred speech request that remains pending
       fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
-        const url = typeof input === "string" ? input : input.toString();
+        const url = requestUrl(input);
         if (url === "/api/health") return new Response(JSON.stringify({ status: "ok" }));
         if (url === "/api/voices") return new Response(JSON.stringify({ voices: mockVoices }));
         if (url === "/api/speech") {
@@ -451,7 +456,7 @@ describe("EdgeTTS Web Workbench", () => {
 
       let speechCallCount = 0;
       fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
-        const url = typeof input === "string" ? input : input.toString();
+        const url = requestUrl(input);
         if (url === "/api/health") return new Response(JSON.stringify({ status: "ok" }));
         if (url === "/api/voices") return new Response(JSON.stringify({ voices: mockVoices }));
         if (url === "/api/speech") {
@@ -520,7 +525,7 @@ describe("EdgeTTS Web Workbench", () => {
 
       let speechCallCount = 0;
       fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
-        const url = typeof input === "string" ? input : input.toString();
+        const url = requestUrl(input);
         if (url === "/api/health") return new Response(JSON.stringify({ status: "ok" }));
         if (url === "/api/voices") return new Response(JSON.stringify({ voices: mockVoices }));
         if (url === "/api/speech") {
@@ -581,7 +586,7 @@ describe("EdgeTTS Web Workbench", () => {
     it("displays friendly message for 400 invalid request", async () => {
       const user = userEvent.setup();
       fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
-        const url = typeof input === "string" ? input : input.toString();
+        const url = requestUrl(input);
         if (url === "/api/health") return new Response(JSON.stringify({ status: "ok" }));
         if (url === "/api/voices") return new Response(JSON.stringify({ voices: mockVoices }));
         if (url === "/api/speech") return new Response(null, { status: 400 });
@@ -601,7 +606,7 @@ describe("EdgeTTS Web Workbench", () => {
     it("displays friendly message for 503 server busy", async () => {
       const user = userEvent.setup();
       fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
-        const url = typeof input === "string" ? input : input.toString();
+        const url = requestUrl(input);
         if (url === "/api/health") return new Response(JSON.stringify({ status: "ok" }));
         if (url === "/api/voices") return new Response(JSON.stringify({ voices: mockVoices }));
         if (url === "/api/speech") return new Response(null, { status: 503 });
@@ -621,7 +626,7 @@ describe("EdgeTTS Web Workbench", () => {
     it("displays friendly message for 502 upstream error", async () => {
       const user = userEvent.setup();
       fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
-        const url = typeof input === "string" ? input : input.toString();
+        const url = requestUrl(input);
         if (url === "/api/health") return new Response(JSON.stringify({ status: "ok" }));
         if (url === "/api/voices") return new Response(JSON.stringify({ voices: mockVoices }));
         if (url === "/api/speech") return new Response(null, { status: 502 });
@@ -641,7 +646,7 @@ describe("EdgeTTS Web Workbench", () => {
     it("exits generating state and displays stable error message when playback stream fails", async () => {
       const user = userEvent.setup();
       fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
-        const url = typeof input === "string" ? input : input.toString();
+        const url = requestUrl(input);
         if (url === "/api/health") return new Response(JSON.stringify({ status: "ok" }));
         if (url === "/api/voices") return new Response(JSON.stringify({ voices: mockVoices }));
         if (url === "/api/speech") {
@@ -773,7 +778,7 @@ describe("EdgeTTS Web Workbench", () => {
 
     it("initial voices 401 triggers auth requirement UI without showing generic fetch error", async () => {
       fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
-        const url = typeof input === "string" ? input : input.toString();
+        const url = requestUrl(input);
         if (url === "/api/health") return new Response(JSON.stringify({ status: "ok" }));
         if (url === "/api/voices") {
           return new Response(
@@ -815,7 +820,7 @@ describe("EdgeTTS Web Workbench", () => {
       const user = userEvent.setup();
 
       fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
-        const url = typeof input === "string" ? input : input.toString();
+        const url = requestUrl(input);
         if (url === "/api/health") return new Response(JSON.stringify({ status: "ok" }));
         if (url === "/api/voices") {
           const auth = (init?.headers as Record<string, string> | undefined)?.["Authorization"];
@@ -859,7 +864,7 @@ describe("EdgeTTS Web Workbench", () => {
       let lastSpeechBody: string | undefined;
 
       fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
-        const url = typeof input === "string" ? input : input.toString();
+        const url = requestUrl(input);
         if (url === "/api/health") return new Response(JSON.stringify({ status: "ok" }));
         if (url === "/api/voices") {
           const auth = (init?.headers as Record<string, string> | undefined)?.["Authorization"];
@@ -925,7 +930,7 @@ describe("EdgeTTS Web Workbench", () => {
       const user = userEvent.setup();
 
       fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
-        const url = typeof input === "string" ? input : input.toString();
+        const url = requestUrl(input);
         if (url === "/api/health") return new Response(JSON.stringify({ status: "ok" }));
         if (url === "/api/voices") {
           const auth = (init?.headers as Record<string, string> | undefined)?.["Authorization"];
@@ -983,7 +988,7 @@ describe("EdgeTTS Web Workbench", () => {
       const localSetSpy = vi.spyOn(Storage.prototype, "setItem");
 
       fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
-        const url = typeof input === "string" ? input : input.toString();
+        const url = requestUrl(input);
         if (url === "/api/health") return new Response(JSON.stringify({ status: "ok" }));
         if (url === "/api/voices") {
           const auth = (init?.headers as Record<string, string> | undefined)?.["Authorization"];
@@ -1032,7 +1037,7 @@ describe("EdgeTTS Web Workbench", () => {
       const user = userEvent.setup();
 
       fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
-        const url = typeof input === "string" ? input : input.toString();
+        const url = requestUrl(input);
         if (url === "/api/health") return new Response(JSON.stringify({ status: "ok" }));
         if (url === "/api/voices") {
           const auth = (init?.headers as Record<string, string> | undefined)?.["Authorization"];
@@ -1068,7 +1073,7 @@ describe("EdgeTTS Web Workbench", () => {
       let fetchVoicesCalls = 0;
 
       fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
-        const url = typeof input === "string" ? input : input.toString();
+        const url = requestUrl(input);
         if (url === "/api/health") return new Response(JSON.stringify({ status: "ok" }));
         if (url === "/api/voices") {
           fetchVoicesCalls++;
@@ -1104,7 +1109,7 @@ describe("EdgeTTS Web Workbench", () => {
       let fetchVoicesCalls = 0;
 
       fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
-        const url = typeof input === "string" ? input : input.toString();
+        const url = requestUrl(input);
         if (url === "/api/health") return new Response(JSON.stringify({ status: "ok" }));
         if (url === "/api/voices") {
           fetchVoicesCalls++;
@@ -1133,7 +1138,7 @@ describe("EdgeTTS Web Workbench", () => {
       let fetchVoicesCalls = 0;
 
       fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
-        const url = typeof input === "string" ? input : input.toString();
+        const url = requestUrl(input);
         if (url === "/api/health") return new Response(JSON.stringify({ status: "ok" }));
         if (url === "/api/voices") {
           fetchVoicesCalls++;
@@ -1162,7 +1167,7 @@ describe("EdgeTTS Web Workbench", () => {
       let fetchVoicesCalls = 0;
 
       fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
-        const url = typeof input === "string" ? input : input.toString();
+        const url = requestUrl(input);
         if (url === "/api/health") return new Response(JSON.stringify({ status: "ok" }));
         if (url === "/api/voices") {
           fetchVoicesCalls++;
@@ -1191,7 +1196,7 @@ describe("EdgeTTS Web Workbench", () => {
       let fetchVoicesCalls = 0;
 
       fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
-        const url = typeof input === "string" ? input : input.toString();
+        const url = requestUrl(input);
         if (url === "/api/health") return new Response(JSON.stringify({ status: "ok" }));
         if (url === "/api/voices") {
           fetchVoicesCalls++;
@@ -1221,7 +1226,7 @@ describe("EdgeTTS Web Workbench", () => {
       let receivedAuthHeader: string | undefined;
 
       fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
-        const url = typeof input === "string" ? input : input.toString();
+        const url = requestUrl(input);
         if (url === "/api/health") return new Response(JSON.stringify({ status: "ok" }));
         if (url === "/api/voices") {
           const auth = (init?.headers as Record<string, string> | undefined)?.["Authorization"];
@@ -1260,7 +1265,7 @@ describe("EdgeTTS Web Workbench", () => {
       let speechAuthHeader: string | undefined;
 
       fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
-        const url = typeof input === "string" ? input : input.toString();
+        const url = requestUrl(input);
         if (url === "/api/health") return new Response(JSON.stringify({ status: "ok" }));
         if (url === "/api/voices") {
           const auth = (init?.headers as Record<string, string> | undefined)?.["Authorization"];
@@ -1316,7 +1321,7 @@ describe("EdgeTTS Web Workbench", () => {
       const user = userEvent.setup();
 
       fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
-        const url = typeof input === "string" ? input : input.toString();
+        const url = requestUrl(input);
         if (url === "/api/health") return new Response(JSON.stringify({ status: "ok" }));
         if (url === "/api/voices") {
           return new Response(JSON.stringify({ error: { code: "UNAUTHORIZED" } }), { status: 401 });
@@ -1456,7 +1461,7 @@ describe("EdgeTTS Web Workbench", () => {
       );
 
       fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
-        const url = typeof input === "string" ? input : input.toString();
+        const url = requestUrl(input);
         if (url === "/api/health") return new Response(JSON.stringify({ status: "ok" }));
         if (url === "/api/voices") {
           const auth = (init?.headers as Record<string, string> | undefined)?.["Authorization"];
@@ -1857,7 +1862,7 @@ describe("EdgeTTS Web Workbench", () => {
     it("supports discovery and favorites correctly when unlocked via API key auth flow", async () => {
       const user = userEvent.setup();
       fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
-        const url = typeof input === "string" ? input : input.toString();
+        const url = requestUrl(input);
         if (url === "/api/health") return new Response(JSON.stringify({ status: "ok" }));
         if (url === "/api/voices") {
           const auth = (init?.headers as Record<string, string> | undefined)?.Authorization;
@@ -1892,9 +1897,8 @@ describe("EdgeTTS Web Workbench", () => {
   });
 
   describe("Phase 23: Text Workspace Ergonomics & Local TXT Import", () => {
-    function createTxtFile(content: string | Uint8Array, name = "import.txt"): File {
-      const blobPart = typeof content === "string" ? content : content;
-      return new File([blobPart], name, { type: "text/plain" });
+    function createTxtFile(content: string | Uint8Array<ArrayBuffer>, name = "import.txt"): File {
+      return new File([content], name, { type: "text/plain" });
     }
 
     it("displays Import TXT button and sets accept attribute on hidden file input", async () => {
@@ -2015,7 +2019,7 @@ describe("EdgeTTS Web Workbench", () => {
 
     it("disables import while generating, but allows import while auth is locked", async () => {
       fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
-        const url = typeof input === "string" ? input : input.toString();
+        const url = requestUrl(input);
         if (url === "/api/health") return new Response(JSON.stringify({ status: "ok" }));
         if (url === "/api/voices") return new Response(JSON.stringify({ voices: mockVoices }));
         if (url === "/api/speech") {
@@ -2052,7 +2056,7 @@ describe("EdgeTTS Web Workbench", () => {
 
     it("allows importing while auth is required", async () => {
       fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
-        const url = typeof input === "string" ? input : input.toString();
+        const url = requestUrl(input);
         if (url === "/api/health") return new Response(JSON.stringify({ status: "ok" }));
         if (url === "/api/voices") {
           return new Response(JSON.stringify({ error: { code: "UNAUTHORIZED" } }), { status: 401 });
@@ -2191,7 +2195,7 @@ describe("EdgeTTS Web Workbench", () => {
     it("triggers synthesis on Ctrl+Enter and Meta+Enter in textarea, but not in other inputs", async () => {
       let speechCalls = 0;
       fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
-        const url = typeof input === "string" ? input : input.toString();
+        const url = requestUrl(input);
         if (url === "/api/health") return new Response(JSON.stringify({ status: "ok" }));
         if (url === "/api/voices") return new Response(JSON.stringify({ voices: mockVoices }));
         if (url === "/api/speech") {
@@ -2239,7 +2243,7 @@ describe("EdgeTTS Web Workbench", () => {
     it("Escape key cancels active synthesis once, but does nothing when idle", async () => {
       let abortCount = 0;
       fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
-        const url = typeof input === "string" ? input : input.toString();
+        const url = requestUrl(input);
         if (url === "/api/health") return new Response(JSON.stringify({ status: "ok" }));
         if (url === "/api/voices") return new Response(JSON.stringify({ voices: mockVoices }));
         if (url === "/api/speech") {
@@ -2315,7 +2319,7 @@ describe("EdgeTTS Web Workbench", () => {
         await user.click(clearBtn);
         expect(screen.getByRole("dialog", { name: "清空当前文本" })).toBeDefined();
         expect(screen.getByText("确定清空当前文本吗？此操作无法撤销。")).toBeDefined();
-        await user.click(screen.getByRole("button", { name: "取消", exact: true }));
+        await user.click(screen.getByRole("button", { name: "取消" }));
         expect(dialog.open).toBe(false);
         expect(confirmSpy).not.toHaveBeenCalled();
         expect(textarea.value).toBe("Text to clear");
@@ -2380,7 +2384,7 @@ describe("EdgeTTS Web Workbench", () => {
       });
 
       fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
-        const url = typeof input === "string" ? input : input.toString();
+        const url = requestUrl(input);
         if (url === "/api/health") return new Response(JSON.stringify({ status: "ok" }));
         if (url === "/api/voices") return new Response(JSON.stringify({ voices: mockVoices }));
         if (url === "/api/speech") return delayedResponsePromise;
@@ -2453,7 +2457,7 @@ describe("EdgeTTS Web Workbench", () => {
         });
 
         fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
-          const url = typeof input === "string" ? input : input.toString();
+          const url = requestUrl(input);
           if (url === "/api/health") return new Response(JSON.stringify({ status: "ok" }));
           if (url === "/api/voices") return new Response(JSON.stringify({ voices: mockVoices }));
           if (url === "/api/speech") {
@@ -2504,7 +2508,7 @@ describe("EdgeTTS Web Workbench", () => {
 
     it("handles missing segment headers gracefully and still displays bytes", async () => {
       fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
-        const url = typeof input === "string" ? input : input.toString();
+        const url = requestUrl(input);
         if (url === "/api/health") return new Response(JSON.stringify({ status: "ok" }));
         if (url === "/api/voices") return new Response(JSON.stringify({ voices: mockVoices }));
         if (url === "/api/speech") {
@@ -2539,7 +2543,7 @@ describe("EdgeTTS Web Workbench", () => {
 
     it("handles malformed segment headers gracefully without rejecting synthesis", async () => {
       fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
-        const url = typeof input === "string" ? input : input.toString();
+        const url = requestUrl(input);
         if (url === "/api/health") return new Response(JSON.stringify({ status: "ok" }));
         if (url === "/api/voices") return new Response(JSON.stringify({ voices: mockVoices }));
         if (url === "/api/speech") {
@@ -2579,7 +2583,7 @@ describe("EdgeTTS Web Workbench", () => {
     it("later control changes do not mutate completed result metadata", async () => {
       const user = userEvent.setup();
       fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
-        const url = typeof input === "string" ? input : input.toString();
+        const url = requestUrl(input);
         if (url === "/api/health") return new Response(JSON.stringify({ status: "ok" }));
         if (url === "/api/voices") return new Response(JSON.stringify({ voices: mockVoices }));
         if (url === "/api/speech") {
@@ -2627,7 +2631,7 @@ describe("EdgeTTS Web Workbench", () => {
 
     it("error responses clear active telemetry indicator", async () => {
       fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
-        const url = typeof input === "string" ? input : input.toString();
+        const url = requestUrl(input);
         if (url === "/api/health") return new Response(JSON.stringify({ status: "ok" }));
         if (url === "/api/voices") return new Response(JSON.stringify({ voices: mockVoices }));
         if (url === "/api/speech") return new Response(null, { status: 502 });
@@ -2648,7 +2652,7 @@ describe("EdgeTTS Web Workbench", () => {
 
     it("cancel clears active telemetry indicator", async () => {
       fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
-        const url = typeof input === "string" ? input : input.toString();
+        const url = requestUrl(input);
         if (url === "/api/health") return new Response(JSON.stringify({ status: "ok" }));
         if (url === "/api/voices") return new Response(JSON.stringify({ voices: mockVoices }));
         if (url === "/api/speech") {
@@ -2687,7 +2691,7 @@ describe("EdgeTTS Web Workbench", () => {
       });
 
       fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
-        const url = typeof input === "string" ? input : input.toString();
+        const url = requestUrl(input);
         if (url === "/api/health") return delayedHealthPromise;
         if (url === "/api/voices") return new Response(JSON.stringify({ voices: mockVoices }));
         return new Response(null, { status: 404 });
@@ -2714,7 +2718,7 @@ describe("EdgeTTS Web Workbench", () => {
 
     it("API health failure politely announces unavailable status", async () => {
       fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
-        const url = typeof input === "string" ? input : input.toString();
+        const url = requestUrl(input);
         if (url === "/api/health") return new Response(null, { status: 500 });
         if (url === "/api/voices") return new Response(JSON.stringify({ voices: mockVoices }));
         return new Response(null, { status: 404 });
@@ -2779,7 +2783,7 @@ describe("EdgeTTS Web Workbench", () => {
 
     it("completed result audio player exposes custom controls and accessible download link", async () => {
       fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
-        const url = typeof input === "string" ? input : input.toString();
+        const url = requestUrl(input);
         if (url === "/api/health") return new Response(JSON.stringify({ status: "ok" }));
         if (url === "/api/voices") return new Response(JSON.stringify({ voices: mockVoices }));
         if (url === "/api/speech") {

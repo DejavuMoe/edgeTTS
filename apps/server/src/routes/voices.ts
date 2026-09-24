@@ -1,10 +1,14 @@
-import type { FastifyPluginAsync, preHandlerHookHandler } from "fastify";
+import type {
+  FastifyPluginAsync,
+  preHandlerAsyncHookHandler,
+  preHandlerHookHandler,
+} from "fastify";
 import type { ApiError, VoiceDto, VoicesResponse } from "@edgetts/shared";
 import type { TtsServicePort } from "../dependencies.js";
 
 export function createVoicesRoutes(
   ttsService: TtsServicePort,
-  rateLimiter?: preHandlerHookHandler,
+  rateLimiter?: preHandlerAsyncHookHandler | preHandlerHookHandler,
 ): FastifyPluginAsync {
   return async (fastify) => {
     fastify.get(

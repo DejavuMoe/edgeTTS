@@ -1,5 +1,5 @@
 import Fastify from "fastify";
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyServerOptions } from "fastify";
 import fastifyRateLimit from "@fastify/rate-limit";
 import { createAuthPreHandler, resolveAuthConfiguration } from "./auth.js";
 import type { AppDependencies } from "./dependencies.js";
@@ -18,11 +18,13 @@ export interface AppOptions extends StaticHostingOptions {
   readonly apiKey?: string | null | undefined;
   readonly requireApiKey?: boolean | string | undefined;
   readonly speechRateLimit?: SpeechRateLimitOptions | undefined;
+  /** Defaults to disabled under NODE_ENV=test and enabled otherwise. */
+  readonly logger?: FastifyServerOptions["logger"] | undefined;
 }
 
 export function createApp(dependencies: AppDependencies, options?: AppOptions): FastifyInstance {
   const app = Fastify({
-    logger: process.env["NODE_ENV"] === "test" ? false : true,
+    logger: options?.logger ?? process.env["NODE_ENV"] !== "test",
   });
 
   const validatedKey = resolveAuthConfiguration(options);

@@ -38,6 +38,8 @@ Strict boundaries:
 - **Provider-independent service**: `packages/tts-service` must depend only on `@edgetts/tts-core` interfaces, never on `@edgetts/edge-provider`. Concrete provider implementations are injected at the server composition root (`apps/server/src/composition.ts`).
 - **No provider-specific types in domain**: Upstream provider types must never leak across domain boundaries.
 
+These import boundaries are enforced by `no-restricted-imports` in `eslint.config.js` and verified by `pnpm test:architecture`. Update both when a boundary changes.
+
 ## Agent Execution Rules
 
 - **Direct Execution Only (No Subagents)**: Agents must work directly and must not create or invoke subagents unless the user explicitly overrides this repository rule.

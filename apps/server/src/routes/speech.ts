@@ -8,6 +8,7 @@ import { type ApiError, NativeSpeechRequestSchema, SpeechRequestSchema } from "@
 import type { SynthesisRequest, TtsAudioFormat, TtsProsody } from "@edgetts/tts-core";
 import { SynthesisQueueFullError } from "@edgetts/tts-service";
 import type { TtsServicePort } from "../dependencies.js";
+import { summarizeValidationIssues } from "../validation-log.js";
 
 export const SPEECH_SEGMENT_CODE_POINTS = 300;
 
@@ -49,7 +50,10 @@ export function createSpeechRoutes(
       async (request, reply) => {
         const parsed = SpeechRequestSchema.safeParse(request.body);
         if (!parsed.success) {
-          request.log.warn({ issues: parsed.error.issues }, "Invalid speech request");
+          request.log.warn(
+            { issues: summarizeValidationIssues(parsed.error.issues) },
+            "Invalid speech request",
+          );
           const errorPayload: ApiError = {
             error: {
               code: "INVALID_REQUEST",
@@ -160,7 +164,10 @@ export function createSpeechRoutes(
       async (request, reply) => {
         const parsed = NativeSpeechRequestSchema.safeParse(request.body);
         if (!parsed.success) {
-          request.log.warn({ issues: parsed.error.issues }, "Invalid native speech request");
+          request.log.warn(
+            { issues: summarizeValidationIssues(parsed.error.issues) },
+            "Invalid native speech request",
+          );
           const errorPayload: ApiError = {
             error: {
               code: "INVALID_REQUEST",

@@ -5,12 +5,16 @@
   "license": "MIT",
   "type": "module",
   "packageManager": "pnpm@12.3.4",
+  "engines": {
+    "node": ">=24"
+  },
   "scripts": {
     "dev": "concurrently --kill-others-on-fail -n \"server,web\" \"pnpm --filter @edgetts/server dev\" \"pnpm --filter @edgetts/web dev\"",
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
     "lint": "eslint .",
-    "test": "pnpm -r test && bash scripts/test-release-guard.sh",
+    "test": "pnpm -r test && pnpm test:architecture && bash scripts/test-release-guard.sh",
+    "test:architecture": "node --test scripts/architecture-boundaries.test.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },
@@ -18,6 +22,7 @@
     "@eslint/js": "^9.21.0",
     "concurrently": "^9.1.2",
     "eslint": "^9.21.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
     "prettier": "^3.5.3",
     "typescript": "^5.8.2",
     "typescript-eslint": "^8.26.0"
