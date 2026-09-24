@@ -1,6 +1,9 @@
+import { MAX_VOICE_ID_LENGTH } from "@edgetts/shared";
+
+export { MAX_VOICE_ID_LENGTH };
+
 export const WORKBENCH_FAVORITES_KEY = "edgetts.workbench.favoriteVoices.v1";
 export const MAX_FAVORITES_COUNT = 128;
-export const MAX_VOICE_ID_LENGTH = 128;
 
 export interface StoredFavoritesV1 {
   readonly voiceIds: readonly string[];

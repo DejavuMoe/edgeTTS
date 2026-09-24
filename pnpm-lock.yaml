@@ -235,6 +235,9 @@ importers:
 
   packages/shared:
     dependencies:
+      '@edgetts/tts-core':
+        specifier: workspace:*
+        version: link:../tts-core
       zod:
         specifier: ^3.24.2
         version: 3.25.76

@@ -1,4 +1,7 @@
+import { countCodePoints, MAX_VOICE_ID_LENGTH, VOICE_ID_REGEX } from "@edgetts/tts-core";
 import { z } from "zod";
+
+export { countCodePoints, MAX_VOICE_ID_LENGTH, VOICE_ID_REGEX };
 
 export const HealthResponseSchema = z.object({
   status: z.literal("ok"),
@@ -31,9 +34,6 @@ export const ApiErrorSchema = z.object({
 });
 
 export type ApiError = z.infer<typeof ApiErrorSchema>;
-
-export const MAX_VOICE_ID_LENGTH = 128;
-export const VOICE_ID_REGEX = /^[A-Za-z0-9_-]+$/;
 
 export const VoiceIdSchema = z
   .string()
@@ -85,16 +85,6 @@ export function isValidXmlText(text: string): boolean {
     index += codePoint > 0xffff ? 2 : 1;
   }
   return true;
-}
-
-export function countCodePoints(str: string): number {
-  let count = 0;
-  for (let i = 0; i < str.length;) {
-    const cp = str.codePointAt(i)!;
-    i += cp > 0xffff ? 2 : 1;
-    count++;
-  }
-  return count;
 }
 
 export const NativeSpeechRequestSchema = z

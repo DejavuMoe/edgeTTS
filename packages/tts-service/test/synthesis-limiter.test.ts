@@ -1,7 +1,19 @@
 import { afterEach, expect, it, vi } from "vitest";
+import { isTtsError, TtsError } from "@edgetts/tts-core";
 import { SynthesisLimiter, SynthesisQueueFullError } from "../src/synthesis-limiter.js";
 
 afterEach(() => vi.useRealTimers());
+
+it("reports capacity rejections as the capacity_exceeded domain error", async () => {
+  const limiter = new SynthesisLimiter({ maxConcurrent: 1, maxQueued: 0 });
+  const signal = new AbortController().signal;
+  await limiter.acquire(signal);
+  const error: unknown = await limiter.acquire(signal).catch((rejection: unknown) => rejection);
+  expect(error).toBeInstanceOf(SynthesisQueueFullError);
+  expect(error).toBeInstanceOf(TtsError);
+  expect(isTtsError(error) && error.code).toBe("capacity_exceeded");
+  expect((error as Error).name).toBe("SynthesisQueueFullError");
+});
 
 it("expires queued requests without releasing active permits and admits the next FIFO waiter", async () => {
   vi.useFakeTimers();
