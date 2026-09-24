@@ -1,18 +1,11 @@
-export class SynthesisQueueFullError extends Error {
+import { createAbortError, TtsError } from "@edgetts/tts-core";
+
+/** Raised when no permit is free and the queue is full, or a queued wait times out. */
+export class SynthesisQueueFullError extends TtsError {
   constructor(message = "Speech synthesis capacity is full") {
-    super(message);
+    super("capacity_exceeded", message);
     this.name = "SynthesisQueueFullError";
   }
-}
-
-export function createAbortError(reason?: unknown): Error {
-  if (reason instanceof Error) {
-    return reason;
-  }
-  return new DOMException(
-    typeof reason === "string" ? reason : "The operation was aborted",
-    "AbortError",
-  );
 }
 
 export interface SynthesisLimiterOptions {

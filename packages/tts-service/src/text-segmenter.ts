@@ -8,19 +8,6 @@ const SENTENCE_REGEX = /[.!?。！？;；]["'”’»›》」』】）)\]]*/gu;
 const WHITESPACE_CHAR_REGEX = /[^\S\r\n]/gu;
 
 /**
- * Counts the number of Unicode code points in a string.
- */
-export function countCodePoints(str: string): number {
-  let count = 0;
-  for (let i = 0; i < str.length;) {
-    const cp = str.codePointAt(i)!;
-    i += cp > 0xffff ? 2 : 1;
-    count++;
-  }
-  return count;
-}
-
-/**
  * Losslessly segments text into bounded chunks based on Unicode code points
  * using hierarchical natural boundaries (paragraph > line > sentence > whitespace > hard split).
  *

@@ -13,4 +13,5 @@ export {
   type VoiceCacheOptions,
 } from "./voice-cache.js";
 export { SynthesisQueueFullError } from "./synthesis-limiter.js";
-export { segmentText, countCodePoints, type TextSegmentationOptions } from "./text-segmenter.js";
+export { segmentText, type TextSegmentationOptions } from "./text-segmenter.js";
+export { countCodePoints } from "@edgetts/tts-core";

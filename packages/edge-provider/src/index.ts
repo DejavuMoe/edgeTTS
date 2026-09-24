@@ -1,8 +1,6 @@
+export { MAX_VOICE_ID_LENGTH, VOICE_ID_REGEX, isValidVoiceId } from "@edgetts/tts-core";
 export {
   EdgeTtsProvider,
-  MAX_VOICE_ID_LENGTH,
-  VOICE_ID_REGEX,
-  isValidVoiceId,
   DEFAULT_LIST_VOICES_TIMEOUT_MS,
   DEFAULT_SETUP_TIMEOUT_MS,
   type EdgeTtsProviderOptions,

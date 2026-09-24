@@ -1,11 +1,13 @@
 import type { Readable } from "node:stream";
 import { OUTPUT_FORMAT } from "msedge-tts";
-import type {
-  SynthesisRequest,
-  SynthesisResult,
-  TtsAudioFormat,
-  TtsProvider,
-  TtsVoice,
+import {
+  createAbortError,
+  isValidVoiceId,
+  type SynthesisRequest,
+  type SynthesisResult,
+  type TtsAudioFormat,
+  type TtsProvider,
+  type TtsVoice,
 } from "@edgetts/tts-core";
 import { defaultEdgeClientFactory, type EdgeClient, type EdgeClientFactory } from "./client.js";
 import { toEdgeProsody } from "./prosody.js";
@@ -30,28 +32,6 @@ const FORMAT_CONFIG: Record<TtsAudioFormat, FormatDetails> = {
     contentType: "audio/webm",
   },
 };
-
-function createAbortError(reason?: unknown): Error {
-  if (reason instanceof Error) {
-    return reason;
-  }
-  return new DOMException(
-    typeof reason === "string" ? reason : "The operation was aborted",
-    "AbortError",
-  );
-}
-
-export const MAX_VOICE_ID_LENGTH = 128;
-export const VOICE_ID_REGEX = /^[A-Za-z0-9_-]+$/;
-
-export function isValidVoiceId(voice: unknown): voice is string {
-  return (
-    typeof voice === "string" &&
-    voice.length > 0 &&
-    voice.length <= MAX_VOICE_ID_LENGTH &&
-    VOICE_ID_REGEX.test(voice)
-  );
-}
 
 export const DEFAULT_LIST_VOICES_TIMEOUT_MS = 10_000;
 export const DEFAULT_SETUP_TIMEOUT_MS = 10_000;

@@ -1,5 +1,11 @@
-import type { SynthesisRequest, SynthesisResult, TtsProvider, TtsVoice } from "@edgetts/tts-core";
-import { createAbortError, type Permit, SynthesisLimiter } from "./synthesis-limiter.js";
+import {
+  createAbortError,
+  type SynthesisRequest,
+  type SynthesisResult,
+  type TtsProvider,
+  type TtsVoice,
+} from "@edgetts/tts-core";
+import { type Permit, SynthesisLimiter } from "./synthesis-limiter.js";
 import { segmentText } from "./text-segmenter.js";
 import { VoiceCache } from "./voice-cache.js";
 
