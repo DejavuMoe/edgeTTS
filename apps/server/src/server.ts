@@ -1,14 +1,14 @@
+import type { FastifyInstance } from "fastify";
 import { createApp } from "./app.js";
 import { createProductionDependencies } from "./composition.js";
+import { loadServerConfig, type ServerConfig } from "./config.js";
 import { registerGracefulShutdown } from "./shutdown.js";
 
-const host = process.env["HOST"] ?? "127.0.0.1";
-const port = Number(process.env["PORT"] ?? "8080");
-
-let app;
+let config: ServerConfig;
+let app: FastifyInstance;
 try {
-  const dependencies = createProductionDependencies();
-  app = createApp(dependencies);
+  config = loadServerConfig();
+  app = createApp(createProductionDependencies(config.tts), config.app);
 } catch (error) {
   console.error(error instanceof Error ? error.message : error);
   process.exit(1);
@@ -17,7 +17,7 @@ try {
 registerGracefulShutdown(app);
 
 try {
-  await app.listen({ host, port });
+  await app.listen({ host: config.host, port: config.port });
 } catch (error) {
   app.log.error(error);
   process.exit(1);

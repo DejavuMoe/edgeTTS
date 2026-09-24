@@ -3,6 +3,7 @@ import type { FastifyInstance, FastifyServerOptions } from "fastify";
 import fastifyRateLimit from "@fastify/rate-limit";
 import { createAuthPreHandler, resolveAuthConfiguration } from "./auth.js";
 import type { AppDependencies } from "./dependencies.js";
+import type { TrustProxySetting } from "./env.js";
 import {
   createSpeechRateLimiter,
   RateLimitedError,
@@ -20,11 +21,20 @@ export interface AppOptions extends StaticHostingOptions {
   readonly speechRateLimit?: SpeechRateLimitOptions | undefined;
   /** Defaults to disabled under NODE_ENV=test and enabled otherwise. */
   readonly logger?: FastifyServerOptions["logger"] | undefined;
+  /** Reverse proxies whose forwarded client address is trusted; defaults to none. */
+  readonly trustProxy?: TrustProxySetting | undefined;
 }
+
+// The largest valid native request carries 20,000 astral code points, each JSON-escaped as a
+// 12-byte surrogate-pair escape such as "\ud83d\ude00"; 256 KiB covers that plus
+// the remaining fields.
+export const MAX_REQUEST_BODY_BYTES = 256 * 1024;
 
 export function createApp(dependencies: AppDependencies, options?: AppOptions): FastifyInstance {
   const app = Fastify({
     logger: options?.logger ?? process.env["NODE_ENV"] !== "test",
+    bodyLimit: MAX_REQUEST_BODY_BYTES,
+    trustProxy: toFastifyTrustProxy(options?.trustProxy ?? false),
   });
 
   const validatedKey = resolveAuthConfiguration(options);
@@ -101,4 +111,13 @@ export function createApp(dependencies: AppDependencies, options?: AppOptions): 
   }
 
   return app;
+}
+
+function toFastifyTrustProxy(
+  setting: TrustProxySetting,
+): NonNullable<FastifyServerOptions["trustProxy"]> {
+  if (typeof setting === "boolean") return setting;
+  // Fastify accepts a hop count at runtime but not in its types; this is its own equivalent.
+  if (typeof setting === "number") return (_address, hop) => hop < setting;
+  return [...setting];
 }

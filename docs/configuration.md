@@ -4,23 +4,41 @@ This document details all configuration options, authentication behaviors, concu
 
 `REQUIRE_API_KEY` controls whether missing credentials prevent startup; it does not disable verification of a configured key. External authentication requires both `REQUIRE_API_KEY=false` and an unset `API_KEY`. Production defaults to requiring a key; local development remains optional. Node does not load `.env` automatically: use exported variables, `node --env-file=...`, or the systemd `EnvironmentFile`. Compose only forwards variables listed in its `environment` section.
 
+The server validates every variable at startup and exits with a list of all invalid values. Unrecognized values are errors; they never fall back to a default silently. Unset variables use the defaults below.
+
 ## Environment Variables
 
 ### Application Server Configuration
 
 These variables configure the Fastify application server (`apps/server`):
 
-| Variable                      | Description                                | Valid Values                        | Default                                            |
-| :---------------------------- | :----------------------------------------- | :---------------------------------- | :------------------------------------------------- |
-| `HOST`                        | IP address for HTTP server binding         | Valid IPv4 / IPv6 address           | `127.0.0.1` (bare Node)<br>`0.0.0.0` (Docker)      |
-| `PORT`                        | Listening port for HTTP traffic            | `1`–`65535`                         | `8080`                                             |
-| `NODE_ENV`                    | Runtime environment mode                   | `production`, `development`, `test` | `production` (Docker)                              |
-| `API_KEY`                     | Secret token for Bearer authentication     | String (>= 16 chars, no whitespace) | None                                               |
-| `REQUIRE_API_KEY`             | Require a key at startup                   | `true` or `false`                   | `true` in production / Compose; otherwise `false`  |
-| `SPEECH_RATE_LIMIT_MAX`       | Max speech requests allowed per window     | Integer (`1`–`10000`)               | `12`                                               |
-| `SPEECH_RATE_LIMIT_WINDOW_MS` | Rate limit window duration in milliseconds | Integer (`100`–`3600000`)           | `10000` (10 seconds)                               |
-| `SERVE_STATIC`                | Enable Fastify static web asset hosting    | `true` or `false`                   | Enabled in `production`                            |
-| `WEB_DIST_DIR`                | Filesystem path to compiled web UI bundle  | Absolute or relative directory path | `/app/web-dist` (Docker)<br>`apps/web/dist` (Node) |
+| Variable                      | Description                                | Valid Values                                                              | Default                                            |
+| :---------------------------- | :----------------------------------------- | :------------------------------------------------------------------------ | :------------------------------------------------- |
+| `HOST`                        | IP address for HTTP server binding         | Valid IPv4 / IPv6 address                                                 | `127.0.0.1` (bare Node)<br>`0.0.0.0` (Docker)      |
+| `PORT`                        | Listening port for HTTP traffic            | `1`–`65535`                                                               | `8080`                                             |
+| `NODE_ENV`                    | Runtime environment mode                   | `production`, `development`, `test`                                       | `production` (Docker)                              |
+| `API_KEY`                     | Secret token for Bearer authentication     | String (>= 16 chars, no whitespace)                                       | None                                               |
+| `REQUIRE_API_KEY`             | Require a key at startup                   | `true` or `false`                                                         | `true` in production / Compose; otherwise `false`  |
+| `SPEECH_RATE_LIMIT_MAX`       | Max speech requests allowed per window     | Integer (`1`–`10000`)                                                     | `12`                                               |
+| `SPEECH_RATE_LIMIT_WINDOW_MS` | Rate limit window duration in milliseconds | Integer (`100`–`3600000`)                                                 | `10000` (10 seconds)                               |
+| `SERVE_STATIC`                | Enable Fastify static web asset hosting    | `true` or `false`                                                         | Enabled in `production`                            |
+| `WEB_DIST_DIR`                | Filesystem path to compiled web UI bundle  | Absolute or relative directory path                                       | `/app/web-dist` (Docker)<br>`apps/web/dist` (Node) |
+| `TRUST_PROXY`                 | Reverse proxies trusted for client address | `false`, `true`, hop count (`1`–`16`), or comma-separated addresses/CIDRs | `false`                                            |
+
+### Capacity & Timeout Tuning
+
+The defaults suit a single self-hosted instance. Change them only after measuring real load.
+
+| Variable                     | Description                                     | Valid Values                  | Default              |
+| :--------------------------- | :---------------------------------------------- | :---------------------------- | :------------------- |
+| `SYNTHESIS_MAX_CONCURRENT`   | Active synthesis streams per process            | Integer (`1`–`64`)            | `4`                  |
+| `SYNTHESIS_MAX_QUEUED`       | FIFO waiters before returning `503 SERVER_BUSY` | Integer (`0`–`1024`)          | `16`                 |
+| `VOICE_CACHE_TTL_MS`         | Voice list cache lifetime in milliseconds       | Integer (`60000`–`604800000`) | `21600000` (6 hours) |
+| `EDGE_VOICES_TIMEOUT_MS`     | Upstream voice discovery timeout                | Integer (`1000`–`600000`)     | `10000` (10 seconds) |
+| `EDGE_SETUP_TIMEOUT_MS`      | Upstream synthesis setup timeout                | Integer (`1000`–`600000`)     | `10000` (10 seconds) |
+| `EDGE_AUDIO_IDLE_TIMEOUT_MS` | Longest wait for the next upstream audio chunk  | Integer (`1000`–`600000`)     | `120000` (2 minutes) |
+
+To set any of these with Compose, add them to the service's `environment` section.
 
 ### Docker Compose Host Variables (`.env`)
 
@@ -51,7 +69,7 @@ Authorization: Bearer <API_KEY>
 
 ## Concurrency Limiting & Queue Management
 
-Each process permits four active streams and sixteen FIFO waiters. A full queue returns `503 SERVER_BUSY`.
+By default each process permits four active streams (`SYNTHESIS_MAX_CONCURRENT`) and sixteen FIFO waiters (`SYNTHESIS_MAX_QUEUED`). A full queue returns `503 SERVER_BUSY`.
 
 edgeTTS enforces strict in-memory concurrency controls via `TtsService`:
 
@@ -77,16 +95,30 @@ A windowed rate limiter protects synthesis routes (`/api/speech` and `/v1/audio/
   }
   ```
 
-Queued synthesis requests wait at most **30 seconds**, then return `503 SERVER_BUSY`; the deadline does not limit an admitted audio stream. The provider allows 10 seconds for setup and 120 seconds without audio data. These limits do not guarantee a total synthesis duration.
+Queued synthesis requests wait at most **30 seconds**, then return `503 SERVER_BUSY`; the deadline does not limit an admitted audio stream. By default the provider allows 10 seconds for setup (`EDGE_SETUP_TIMEOUT_MS`) and 120 seconds without audio data (`EDGE_AUDIO_IDLE_TIMEOUT_MS`). These limits do not guarantee a total synthesis duration.
 
 Speech limits are global per process, shared by both endpoints and all callers. This single-key service does not provide tenant isolation. For independently trusted clients, apply per-client authentication and quotas at a trusted gateway; do not use an untrusted forwarded IP as identity. Voice discovery has a separate **60 requests/minute per process** limit, after authentication. Health probes remain public and outside these quotas.
 
+## Request Size
+
+Request bodies are limited to 256 KiB and larger bodies return `413 PAYLOAD_TOO_LARGE`. This fits the largest valid native request: 20,000 code points, even when every code point is JSON-escaped as a surrogate pair.
+
+## Trusted Proxies
+
+By default edgeTTS ignores `X-Forwarded-*` headers, so logs record the proxy's address as the client. Set `TRUST_PROXY` to the proxy's own address to record the forwarded client address and protocol instead:
+
+- `loopback`: a proxy on the same host in front of a bare Node process.
+- The Docker network gateway address or CIDR: a host proxy in front of the container, because the container sees the gateway as the peer.
+- A hop count trusts that many proxies. `true` trusts every peer; use it only when the proxy is the sole network path to edgeTTS, because any other client can forge `X-Forwarded-For`.
+
+`TRUST_PROXY` affects request metadata and logs only. Rate limits remain global per process.
+
 ## Voice Metadata Caching
 
-- `GET /api/voices` caches voice lists in server memory with a **6-hour TTL**.
+- `GET /api/voices` caches voice lists in server memory with a **6-hour TTL** by default (`VOICE_CACHE_TTL_MS`).
 - Voice discovery starts lazily on the first request and concurrent fetches share one promise.
 - On a refresh failure, a previously cached list remains available with a fixed 5-second retry backoff. A cold cache has no stale fallback or backoff.
-- Upstream discovery has a 10-second logical timeout; the dependency cannot cancel its underlying HTTP request.
+- Upstream discovery has a 10-second logical timeout by default (`EDGE_VOICES_TIMEOUT_MS`); the dependency cannot cancel its underlying HTTP request.
 
 A stale list has no separate maximum age.
 
