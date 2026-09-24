@@ -21,6 +21,7 @@ These variables configure the Fastify application server (`apps/server`):
 | `REQUIRE_API_KEY`             | Require a key at startup                   | `true` or `false`                                                         | `true` in production / Compose; otherwise `false`  |
 | `SPEECH_RATE_LIMIT_MAX`       | Max speech requests allowed per window     | Integer (`1`–`10000`)                                                     | `12`                                               |
 | `SPEECH_RATE_LIMIT_WINDOW_MS` | Rate limit window duration in milliseconds | Integer (`100`–`3600000`)                                                 | `10000` (10 seconds)                               |
+| `SPEECH_RATE_LIMIT_SCOPE`     | Who shares the speech budget               | `global` or `ip`                                                          | `global`                                           |
 | `SERVE_STATIC`                | Enable Fastify static web asset hosting    | `true` or `false`                                                         | Enabled in `production`                            |
 | `WEB_DIST_DIR`                | Filesystem path to compiled web UI bundle  | Absolute or relative directory path                                       | `/app/web-dist` (Docker)<br>`apps/web/dist` (Node) |
 | `TRUST_PROXY`                 | Reverse proxies trusted for client address | `false`, `true`, hop count (`1`–`16`), or comma-separated addresses/CIDRs | `false`                                            |
@@ -97,7 +98,7 @@ A windowed rate limiter protects synthesis routes (`/api/speech` and `/v1/audio/
 
 Queued synthesis requests wait at most **30 seconds**, then return `503 SERVER_BUSY`; the deadline does not limit an admitted audio stream. By default the provider allows 10 seconds for setup (`EDGE_SETUP_TIMEOUT_MS`) and 120 seconds without audio data (`EDGE_AUDIO_IDLE_TIMEOUT_MS`). These limits do not guarantee a total synthesis duration.
 
-Speech limits are global per process, shared by both endpoints and all callers. This single-key service does not provide tenant isolation. For independently trusted clients, apply per-client authentication and quotas at a trusted gateway; do not use an untrusted forwarded IP as identity. Voice discovery has a separate **60 requests/minute per process** limit, after authentication. Health probes remain public and outside these quotas.
+By default speech limits are global per process, shared by both endpoints and all callers. With `SPEECH_RATE_LIMIT_SCOPE=ip`, each client address gets its own budget, still shared by both endpoints. Behind a reverse proxy this needs `TRUST_PROXY`; otherwise every client appears as the proxy and shares one budget. Address-based limits curb accidental overload, not a determined client that can change address. This single-key service does not provide tenant isolation. For independently trusted clients, apply per-client authentication and quotas at a trusted gateway; do not use an untrusted forwarded IP as identity. Voice discovery has a separate **60 requests/minute per process** limit, after authentication. Health probes remain public and outside these quotas.
 
 ## Request Size
 
@@ -111,7 +112,7 @@ By default edgeTTS ignores `X-Forwarded-*` headers, so logs record the proxy's a
 - The Docker network gateway address or CIDR: a host proxy in front of the container, because the container sees the gateway as the peer.
 - A hop count trusts that many proxies. `true` trusts every peer; use it only when the proxy is the sole network path to edgeTTS, because any other client can forge `X-Forwarded-For`.
 
-`TRUST_PROXY` affects request metadata and logs only. Rate limits remain global per process.
+`TRUST_PROXY` affects request metadata, logs and, with `SPEECH_RATE_LIMIT_SCOPE=ip`, the address used for speech limits.
 
 ## Voice Metadata Caching
 

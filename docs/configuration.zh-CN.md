@@ -21,6 +21,7 @@
 | `REQUIRE_API_KEY`             | 是否要求启动时必须配置密钥         | `true` 或 `false`                                      | `true`（production / Compose）；其他环境 `false`   |
 | `SPEECH_RATE_LIMIT_MAX`       | 单个时间窗口内允许的最大语音请求数 | 整数（`1`–`10000`）                                    | `12`                                               |
 | `SPEECH_RATE_LIMIT_WINDOW_MS` | 限流固定时间窗口大小（毫秒）       | 整数（`100`–`3600000`）                                | `10000`（10 秒）                                   |
+| `SPEECH_RATE_LIMIT_SCOPE`     | 语音限额的共享范围                 | `global` 或 `ip`                                       | `global`                                           |
 | `SERVE_STATIC`                | 是否启用 Fastify 前端静态资源托管  | `true` 或 `false`                                      | `production` 环境下默认开启                        |
 | `WEB_DIST_DIR`                | 前端编译产物存放的文件系统路径     | 绝对路径或相对路径                                     | `/app/web-dist` (Docker)<br>`apps/web/dist` (Node) |
 | `TRUST_PROXY`                 | 受信任、可提供客户端地址的反向代理 | `false`、`true`、跳数（`1`–`16`）或逗号分隔的地址/CIDR | `false`                                            |
@@ -97,7 +98,7 @@ Authorization: Bearer <API_KEY>
 
 合成请求最多排队 **30 秒**，超时返回 `503 SERVER_BUSY`；此期限不限制已经开始的音频流。提供者默认连接建立期限为 10 秒（`EDGE_SETUP_TIMEOUT_MS`）、音频无数据期限为 120 秒（`EDGE_AUDIO_IDLE_TIMEOUT_MS`），不保证总合成时长。
 
-语音准入限额由两条路由和所有调用者共享，作用于单进程。这是单密钥服务，不提供租户隔离。需要区分不同可信客户端时，在可信网关配置客户端认证及配额，不把未经验证的转发 IP 当作身份。音色查询另有 **单进程每分钟 60 次** 的限制，在认证通过后计数；健康检查公开且不占用上述配额。
+默认情况下，语音准入限额由两条路由和所有调用者共享，作用于单进程。设置 `SPEECH_RATE_LIMIT_SCOPE=ip` 后，每个客户端地址拥有独立额度，两条路由仍共享该额度。部署在反向代理后方时需要配置 `TRUST_PROXY`，否则所有客户端都显示为代理地址并共享同一额度。按地址限流用于抑制意外过载，无法约束可以更换地址的恶意客户端。这是单密钥服务，不提供租户隔离。需要区分不同可信客户端时，在可信网关配置客户端认证及配额，不把未经验证的转发 IP 当作身份。音色查询另有 **单进程每分钟 60 次** 的限制，在认证通过后计数；健康检查公开且不占用上述配额。
 
 ## 请求体大小
 
@@ -111,7 +112,7 @@ Authorization: Bearer <API_KEY>
 - Docker 网络网关地址或 CIDR：宿主机代理位于容器前方，此时容器看到的对端是网关。
 - 跳数表示信任相应数量的代理。`true` 信任所有对端，仅在代理是访问 edgeTTS 的唯一网络路径时使用，否则任何客户端都能伪造 `X-Forwarded-For`。
 
-`TRUST_PROXY` 只影响请求元数据和日志；限流仍是单进程全局共享。
+`TRUST_PROXY` 影响请求元数据和日志；在 `SPEECH_RATE_LIMIT_SCOPE=ip` 时，也决定语音限流使用的客户端地址。
 
 ## 音色元数据缓存
 

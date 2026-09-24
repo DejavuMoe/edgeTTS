@@ -82,8 +82,8 @@ export const variants = [
     "no-cross-route-budget",
     "http",
     "rate-limit.ts",
-    'keyGenerator: () => "speech-global",',
-    "keyGenerator: (request) => request.routeOptions.url,",
+    'global: () => "speech-global",',
+    "global: (request) => request.routeOptions.url,",
   ],
   [
     "no-blob-fallback",
