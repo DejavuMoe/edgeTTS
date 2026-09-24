@@ -1,5 +1,6 @@
 import {
   createAbortError,
+  TtsError,
   type SynthesisRequest,
   type SynthesisResult,
   type TtsProvider,
@@ -313,6 +314,7 @@ export class TtsService {
   }
 
   async synthesize(request: SynthesisRequest, signal: AbortSignal): Promise<SynthesisResult> {
+    this.assertKnownVoice(request.voice);
     const permit = await this.limiter.acquire(signal);
 
     if (signal.aborted) {
@@ -365,6 +367,7 @@ export class TtsService {
       throw new Error("Text must not be empty");
     }
 
+    this.assertKnownVoice(request.voice);
     const permit = await this.limiter.acquire(signal);
 
     if (signal.aborted) {
@@ -399,6 +402,22 @@ export class TtsService {
         permit,
       ),
     };
+  }
+
+  /**
+   * Rejects a voice missing from a fresh cached catalog before any capacity is used.
+   * Never fetches: without a fresh catalog the request proceeds and the provider decides.
+   * Matching ignores case so nothing the provider might accept is rejected here.
+   */
+  private assertKnownVoice(voice: string): void {
+    const catalog = this.voiceCache.peekFresh();
+    if (catalog === null || catalog.length === 0) {
+      return;
+    }
+    const wanted = voice.toLowerCase();
+    if (!catalog.some((candidate) => candidate.id.toLowerCase() === wanted)) {
+      throw new TtsError("unknown_voice", "Requested voice is not in the voice catalog");
+    }
   }
 
   private wrapSynthesisResult(

@@ -122,6 +122,8 @@ Authorization: Bearer <API_KEY>
 
 旧列表没有额外的最大陈旧期限。
 
+缓存列表在 TTL 内时，请求列表中不存在的声音会在占用并发容量前返回 `400 UNKNOWN_VOICE`，匹配时忽略大小写。合成过程从不主动获取列表：缓存为空或已过期时，请求照常进行，由上游服务判断。
+
 ## 容器运行时安全基线
 
 镜像默认以 `node` 用户运行。推荐的 Compose / `docker run` 参数额外启用只读根目录、`cap_drop=ALL`、禁止提权、`/tmp` tmpfs 和 Docker 注入的 init 进程（`init: true` / `--init`）。这些运行时限制不内置在镜像中。

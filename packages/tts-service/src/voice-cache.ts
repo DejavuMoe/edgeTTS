@@ -42,6 +42,14 @@ export class VoiceCache {
     this.now = options?.now ?? Date.now;
   }
 
+  /** The cached catalog while it is within its TTL. Never triggers an upstream fetch. */
+  peekFresh(): readonly TtsVoice[] | null {
+    if (this.cachedVoices === null || this.cachedAt === null) {
+      return null;
+    }
+    return this.now() - this.cachedAt < this.ttlMs ? this.cachedVoices : null;
+  }
+
   async getVoices(forceRefresh = false): Promise<readonly TtsVoice[]> {
     if (!forceRefresh && this.cachedVoices !== null && this.cachedAt !== null) {
       const age = this.now() - this.cachedAt;
