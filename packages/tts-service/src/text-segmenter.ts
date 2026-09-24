@@ -87,7 +87,7 @@ export function segmentText(text: string, options: TextSegmentationOptions): rea
     const windowEndCp = Math.min(startCp + options.maxCodePoints, cpCount);
 
     if (windowEndCp === cpCount) {
-      chunks.push(text.slice(cpToUtf16Offset[startCp]!));
+      chunks.push(text.slice(cpToUtf16Offset[startCp]));
       break;
     }
 
@@ -132,7 +132,7 @@ export function segmentText(text: string, options: TextSegmentationOptions): rea
       }
     }
 
-    chunks.push(text.slice(cpToUtf16Offset[startCp]!, cpToUtf16Offset[splitCp]!));
+    chunks.push(text.slice(cpToUtf16Offset[startCp], cpToUtf16Offset[splitCp]));
     startCp = splitCp;
   }
 

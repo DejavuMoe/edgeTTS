@@ -73,7 +73,7 @@ describe("Voice Catalog Pure Model (apps/web/src/voice-catalog.ts)", () => {
   });
 
   describe("matchesVoiceSearch", () => {
-    const sampleVoice = testVoices[0]; // Xiaoxiao (zh-CN, Female)
+    const sampleVoice = testVoices[0]!; // Xiaoxiao (zh-CN, Female)
 
     it("returns true for empty query or whitespace", () => {
       expect(matchesVoiceSearch(sampleVoice, "")).toBe(true);
@@ -98,7 +98,7 @@ describe("Voice Catalog Pure Model (apps/web/src/voice-catalog.ts)", () => {
     it("matches by gender case-insensitively", () => {
       expect(matchesVoiceSearch(sampleVoice, "female")).toBe(true);
       expect(matchesVoiceSearch(sampleVoice, "FEMALE")).toBe(true);
-      expect(matchesVoiceSearch(testVoices[1], "male")).toBe(true);
+      expect(matchesVoiceSearch(testVoices[1]!, "male")).toBe(true);
     });
 
     it("returns false for non-matching queries", () => {
@@ -168,8 +168,8 @@ describe("Voice Catalog Pure Model (apps/web/src/voice-catalog.ts)", () => {
       const groups = getGroupedVoices(testVoices, favorites);
 
       // First group must be "收藏"
-      expect(groups[0].label).toBe("收藏");
-      expect(groups[0].voices.map((v) => v.id)).toEqual(["zh-CN-XiaoxiaoNeural"]);
+      expect(groups[0]!.label).toBe("收藏");
+      expect(groups[0]!.voices.map((v) => v.id)).toEqual(["zh-CN-XiaoxiaoNeural"]);
 
       // Subsequent groups are sorted locales: en-GB, en-US, ja-JP, zh-CN
       const otherGroupLabels = groups.slice(1).map((g) => g.label);
@@ -189,7 +189,7 @@ describe("Voice Catalog Pure Model (apps/web/src/voice-catalog.ts)", () => {
     it("sorts favorites by locale -> displayName -> id", () => {
       const favorites = new Set(["zh-CN-XiaoxiaoNeural", "en-US-JennyNeural", "en-GB-SoniaNeural"]);
       const groups = getGroupedVoices(testVoices, favorites);
-      const favGroup = groups[0];
+      const favGroup = groups[0]!;
       expect(favGroup.label).toBe("收藏");
       // Sorted by locale: en-GB (Sonia) -> en-US (Jenny) -> zh-CN (Xiaoxiao)
       expect(favGroup.voices.map((v) => v.id)).toEqual([

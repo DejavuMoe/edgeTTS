@@ -40,10 +40,8 @@ async function runSmoke(): Promise<void> {
       throw new Error(`Health check returned status ${healthRes.status}`);
     }
     const healthJson: unknown = await healthRes.json();
-    const healthParsed = HealthResponseSchema.parse(healthJson);
-    if (healthParsed.status !== "ok") {
-      throw new Error(`Health check returned status: ${healthParsed.status}`);
-    }
+    // The schema only accepts { status: "ok" }, so parsing is the status assertion.
+    HealthResponseSchema.parse(healthJson);
 
     // 2. Check GET /api/voices
     const voicesRes = await fetch(`${baseUrl}/api/voices`);

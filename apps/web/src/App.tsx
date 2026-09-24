@@ -111,6 +111,8 @@ function Workbench() {
     isMountedRef.current = true;
     return () => {
       isMountedRef.current = false;
+      // Generation counter, not a DOM ref: unmount must invalidate the latest pending import.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
       ++importGenerationIdRef.current;
     };
   }, []);
@@ -346,6 +348,8 @@ function Workbench() {
   // Cleanup stream controller and abort controller on unmount
   useEffect(() => {
     return () => {
+      // Generation counter, not a DOM ref: unmount must invalidate the latest synthesis.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
       ++generationIdRef.current;
       streamControllerRef.current?.cleanup();
       if (abortControllerRef.current) {
@@ -670,7 +674,7 @@ function Workbench() {
                   className="hidden-file-input"
                   tabIndex={-1}
                   aria-hidden="true"
-                  onChange={handleFileChange}
+                  onChange={(e) => void handleFileChange(e)}
                 />
                 <button
                   type="button"

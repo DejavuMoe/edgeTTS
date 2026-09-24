@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc -p tsconfig.test.json --noEmit",
     "test": "vitest run"
   },
   "dependencies": {
