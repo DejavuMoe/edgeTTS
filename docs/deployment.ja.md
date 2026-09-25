@@ -32,7 +32,51 @@
 
 ## 方法 1: Docker Compose ビルド済みイメージデプロイ（推奨）
 
-Compose 設定と初回起動は [README](../README.ja.md) を参照してください。
+公開済みのマルチアーキテクチャイメージを、ソースのクローンやビルドなしで実行します。空のディレクトリ（例: `~/edgetts`）に `compose.yaml` を作成します：
+
+```yaml
+services:
+  edgetts:
+    image: ghcr.io/dejavumoe/edgetts:0.7.0
+    container_name: edgetts
+    restart: unless-stopped
+    init: true
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp
+    stop_grace_period: 35s
+    ports:
+      - "${EDGETTS_BIND_ADDRESS:-127.0.0.1}:${EDGETTS_HOST_PORT:-8080}:8080"
+    environment:
+      - NODE_ENV=production
+      - HOST=0.0.0.0
+      - PORT=8080
+      - API_KEY
+      - REQUIRE_API_KEY=${REQUIRE_API_KEY:-true}
+      - SPEECH_RATE_LIMIT_MAX
+      - SPEECH_RATE_LIMIT_WINDOW_MS
+```
+
+続いて `.env` を一度だけ作成し、サービスを起動します：
+
+```bash
+# 1. compose.yaml のあるディレクトリで作業する
+mkdir -p ~/edgetts && cd ~/edgetts
+
+# 2. ランダムな API キーを生成する。ファイルは本人のみ読み取り可能で、既存ファイルは上書きしない
+(umask 077; set -C; printf 'API_KEY=%s\n' "$(openssl rand -hex 32)" > .env)
+
+# 3. 公開イメージを取得して起動し、プロセスを確認する
+docker compose pull
+docker compose up -d
+curl --fail http://127.0.0.1:8080/health
+```
+
+アップグレード時も `.env` は保持してください。`REQUIRE_API_KEY` の既定値は `true` のため、`API_KEY` がないとコンテナは起動を拒否します。同じ `.env` では、ホスト側のバインドに使う `EDGETTS_BIND_ADDRESS` と `EDGETTS_HOST_PORT`（既定値 `127.0.0.1:8080`）、および `SPEECH_RATE_LIMIT_MAX`、`SPEECH_RATE_LIMIT_WINDOW_MS` も設定できます。Compose は `environment` に列挙した変数だけを渡します。[設定リファレンス](configuration.ja.md)にある他の変数（例: `TRUST_PROXY`、`METRICS_ENABLED`）を使う場合は、先にこの一覧へ追加してから `.env` に設定してください。再現性のあるデプロイには、タグをリリースノートのダイジェストに置き換えます（後述）。
 
 ## 方法 2: 単一 Docker コンテナ実行 (`docker run`)
 
@@ -87,9 +131,9 @@ docker run -d \
 
 各リリースの検証済み OCI インデックスダイジェストは [GitHub Release ページ](https://github.com/DejavuMoe/edgeTTS/releases) に記載されています。
 
-## 方法 3: ソースコードからのビルドと Docker Compose
+## 方法 3: ソースコードからのビルドと Docker Compose（開発向け）
 
-リポジトリのソースコードからローカルでビルドしてデプロイする場合：
+リポジトリの `compose.yaml` は、公開イメージを取得する代わりに、作業ツリーのソースから `edgetts:local` イメージをビルドします。ソースの変更を開発・テストする用途に適しており、本番デプロイには方法 1 を推奨します。
 
 ```bash
 # 1. リポジトリのクローン
@@ -111,6 +155,15 @@ docker compose up -d --build
 
 - `EDGETTS_BIND_ADDRESS`: ホスト側のバインドアドレス（既定値: `127.0.0.1`）。
 - `EDGETTS_HOST_PORT`: ホスト側のポート（既定値: `8080`）。
+
+ソースを変更した後は、イメージを再ビルドしてコンテナを置き換えます：
+
+```bash
+docker compose build
+docker compose up -d
+```
+
+`docker compose up -d --build` で両方を一度に実行することもできます。
 
 ## 方法 4: Linux ベアメタル / Systemd サービス
 
