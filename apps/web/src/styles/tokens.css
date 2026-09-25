@@ -14,6 +14,8 @@
   --rule-strong: #cbc6bb;
   --hover: rgb(28 27 24 / 4.5%);
   --selected: #ece8df;
+  /* A control lifted off its track, e.g. the checked segment. */
+  --raised: #fdfcfa;
 
   --accent: #c2410c;
   --accent-strong: #9a3412;
@@ -21,6 +23,7 @@
 
   --ok: #2f7d4f;
   --danger: #b42318;
+  --danger-ink: #fffaf5;
   --danger-soft: #fbeae7;
   --favorite-text: #8a5300;
   --favorite-bg: #f7eddb;
@@ -56,6 +59,7 @@
     --rule-strong: #3c3934;
     --hover: rgb(236 232 223 / 5%);
     --selected: #2a2824;
+    --raised: #3a3732;
 
     /* Lighter accent with dark text keeps the primary action above 4.5:1 contrast. */
     --accent: #f08a4f;
@@ -64,6 +68,7 @@
 
     --ok: #6cc28f;
     --danger: #f0938a;
+    --danger-ink: #1a120c;
     --danger-soft: #3a1f1c;
     --favorite-text: #e7b766;
     --favorite-bg: #2d2517;

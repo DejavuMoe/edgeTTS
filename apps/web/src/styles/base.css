@@ -10,6 +10,11 @@ body,
   height: 100%;
 }
 
+/* Inherited by every scroller: a quiet thumb instead of the platform's arrowed gutter. */
+html {
+  scrollbar-color: var(--rule-strong) transparent;
+}
+
 body {
   margin: 0;
   background: var(--paper);

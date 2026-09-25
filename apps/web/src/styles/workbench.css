@@ -67,18 +67,22 @@
   animation: pulse 1.4s ease-in-out infinite;
 }
 
-.language-control {
-  width: 128px;
-}
-
+/* A quiet control sized to its label; hover tints it like every other button. */
 .language-control .control-select {
-  min-height: 30px;
+  width: auto;
+  min-height: 32px;
+  padding: 0 8px;
   border-color: transparent;
   background: transparent;
+  color: var(--ink-2);
 }
 
-.language-control .control-select:hover {
-  border-color: var(--rule-strong);
+.language-control .control-select:hover:not(:disabled) {
+  color: var(--ink);
+}
+
+.language-control .ui-select-trigger-label {
+  overflow: visible;
 }
 
 /* Main grid ------------------------------------------------------------ */
@@ -118,11 +122,11 @@
 
 .inline-alert {
   padding: 8px 12px;
-  border-left: 2px solid var(--danger);
   border-radius: var(--radius-s);
   background: var(--danger-soft);
   color: var(--danger);
   font-size: 13px;
+  line-height: 20px;
 }
 
 /* Manuscript sheet ------------------------------------------------------- */
@@ -167,23 +171,24 @@
   font-size: 17px;
   line-height: 1.8;
   resize: none;
+  scrollbar-width: thin;
 }
 
 .text-editor::placeholder {
   color: var(--ink-3);
 }
 
-/* The whole sheet is the field, so focus is a line along its top edge rather than a box. */
+/*
+ * The whole sheet is the field: a box or rule around it would only frame the page. The caret
+ * shows where typing goes and the field's label darkens; over-limit text is flagged by the
+ * counter and an alert below the text.
+ */
 .text-editor:focus-visible {
   outline: none;
 }
 
-.sheet:has(.text-editor:focus-visible) {
-  box-shadow: inset 0 2px 0 var(--accent);
-}
-
-.sheet:has(.text-editor.editor-invalid) {
-  box-shadow: inset 0 2px 0 var(--danger);
+.sheet:has(.text-editor:focus-visible) .sheet-header .section-title {
+  color: var(--ink);
 }
 
 .text-editor:disabled {
@@ -228,6 +233,7 @@
   display: flex;
   flex-direction: column;
   overflow-y: auto;
+  scrollbar-width: thin;
 }
 
 .inspector-section {
@@ -245,28 +251,25 @@
 
 .delivery-section {
   flex: none;
+  gap: 10px;
   border-bottom: 0;
 }
 
-.delivery-section {
-  gap: 6px;
-}
-
-.delivery-section .section-header {
-  margin-bottom: 4px;
-}
-
+/* The header action's text lines up with the right edge of the controls below. */
 .delivery-section .btn-text {
   margin-right: -8px;
 }
 
-/* Matches the slider rows so all delivery controls share one set of columns. */
 .delivery-row {
-  display: grid;
-  grid-template-columns: var(--control-label-width, 72px) minmax(0, 1fr);
+  display: flex;
   align-items: center;
-  column-gap: 10px;
-  min-height: 36px;
+  gap: 12px;
+  margin-bottom: 2px;
+}
+
+.delivery-row .segmented {
+  flex: 1;
+  min-width: 0;
 }
 
 .field {
@@ -305,6 +308,11 @@
   font-size: 12px;
 }
 
+/* A long region name wraps before the separator, never inside a word. */
+.voice-current-meta > span {
+  white-space: nowrap;
+}
+
 .voice-current-id {
   overflow: hidden;
   color: var(--ink-3);
@@ -325,16 +333,30 @@
   background: transparent;
   color: var(--ink-2);
   font-size: 12px;
+  line-height: 20px;
   white-space: nowrap;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease;
+}
+
+.btn-favorite svg {
+  flex: none;
 }
 
 .btn-favorite:hover:not(:disabled) {
+  background: var(--hover);
   color: var(--ink);
 }
 
 .btn-favorite.is-favorite {
   border-color: var(--favorite-border);
   background: var(--favorite-bg);
+  color: var(--favorite-text);
+}
+
+.btn-favorite.is-favorite:hover:not(:disabled) {
+  background-image: linear-gradient(var(--hover), var(--hover));
   color: var(--favorite-text);
 }
 
@@ -347,7 +369,8 @@
 
 .voice-filters {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 136px;
+  /* The region label carries a count, e.g. "All regions (322)", so it gets the wider share. */
+  grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
   gap: 8px;
 }
 
@@ -361,18 +384,20 @@
 
 .voice-list {
   position: relative;
-  flex: 1 1 220px;
+  /* Sized by min-height alone, so the section never demands more than the screen can spare. */
+  flex: 1 1 0;
   min-height: 200px;
   overflow-y: auto;
   border: 1px solid var(--rule);
   border-radius: var(--radius-m);
   background: var(--sheet);
   overscroll-behavior: contain;
+  scrollbar-width: thin;
 }
 
 .voice-list:focus-visible {
   outline: 2px solid var(--focus-ring);
-  outline-offset: 2px;
+  outline-offset: -1px;
 }
 
 .voice-list-empty {
@@ -382,23 +407,19 @@
   text-align: center;
 }
 
+/*
+ * Groups hold a handful of voices, so their headers scroll with them: a sticky header would
+ * leave rows half covered at arbitrary scroll positions for little gain.
+ */
 .voice-group-header {
-  position: sticky;
-  top: 0;
-  z-index: 1;
   display: flex;
+  align-items: baseline;
   justify-content: space-between;
   gap: 8px;
-  padding: 8px 12px 4px;
-  background: var(--sheet);
+  padding: 10px 12px 4px;
   color: var(--ink-3);
-  font-size: 11px;
-  font-weight: 600;
-}
-
-.voice-group-code {
-  font-family: var(--font-mono);
-  font-weight: 400;
+  font-size: 11.5px;
+  line-height: 16px;
 }
 
 .voice-option {
@@ -406,8 +427,8 @@
   align-items: baseline;
   justify-content: space-between;
   gap: 12px;
-  padding: 6px 12px 6px 10px;
-  border-left: 2px solid transparent;
+  padding: 6px 12px;
+  line-height: 20px;
   cursor: pointer;
 }
 
@@ -416,7 +437,6 @@
 }
 
 .voice-option[aria-selected="true"] {
-  border-left-color: var(--accent);
   background: var(--selected);
 }
 
@@ -424,9 +444,17 @@
   font-weight: 600;
 }
 
+.voice-option[aria-selected="true"] .voice-option-meta {
+  color: var(--ink-2);
+}
+
 .voice-list[aria-disabled="true"] .voice-option {
   cursor: default;
   opacity: 0.55;
+}
+
+.voice-list[aria-disabled="true"] .voice-option:hover:not([aria-selected="true"]) {
+  background: transparent;
 }
 
 .voice-option-name {
@@ -439,7 +467,7 @@
 .voice-option-meta {
   flex: none;
   color: var(--ink-3);
-  font-size: 11.5px;
+  font-size: 12px;
 }
 
 /* Authentication */
@@ -451,8 +479,7 @@
   margin: 12px 20px 0;
   padding: 12px;
   border: 1px solid var(--rule-strong);
-  border-left: 3px solid var(--accent);
-  border-radius: var(--radius-s);
+  border-radius: var(--radius-m);
   background: var(--sheet);
 }
 
@@ -478,9 +505,14 @@
   font-size: 13px;
 }
 
+.auth-key-input::placeholder {
+  color: var(--ink-3);
+  font-family: var(--font-ui);
+}
+
 .auth-key-input:focus-visible {
   outline: 2px solid var(--focus-ring);
-  outline-offset: 0;
+  outline-offset: -1px;
 }
 
 .btn-unlock {
@@ -492,6 +524,11 @@
   color: var(--sheet);
   font-size: 13px;
   font-weight: 600;
+  transition: background-color 120ms ease;
+}
+
+.btn-unlock:hover:not(:disabled) {
+  background: var(--ink-2);
 }
 
 .btn-unlock:disabled {
@@ -516,10 +553,13 @@
   grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
   gap: 24px;
-  min-height: 72px;
   padding: 12px 20px;
-  border-top: 1px solid var(--rule-strong);
+  border-top: 1px solid var(--rule);
   background: var(--sheet);
+}
+
+.transport .control-slider {
+  --surface: var(--sheet);
 }
 
 .transport-actions {
@@ -531,11 +571,14 @@
   min-width: 132px;
 }
 
+/* Tall enough for the player and its metadata line, so the workbench never jumps between states. */
 .transport-body {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  justify-content: center;
+  gap: 4px;
   min-width: 0;
+  min-height: 58px;
 }
 
 .transport-status {
@@ -545,6 +588,7 @@
   color: var(--ink-2);
   font-size: 13px;
   font-variant-numeric: tabular-nums;
+  line-height: 20px;
 }
 
 .live-dot {
@@ -565,6 +609,7 @@
   overflow: hidden;
   color: var(--ink-3);
   font-size: 12px;
+  line-height: 18px;
   font-variant-numeric: tabular-nums;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -630,7 +675,7 @@
   }
 
   .delivery-section {
-    gap: 4px;
+    gap: 6px;
   }
 
   .voice-current {
@@ -646,8 +691,7 @@
   }
 
   .transport {
-    min-height: 60px;
-    padding: 10px 20px;
+    padding: 8px 20px;
   }
 }
 
@@ -708,6 +752,7 @@
   .transport {
     position: sticky;
     bottom: 0;
+    z-index: 2;
     grid-template-columns: 1fr;
     gap: 10px;
     padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
@@ -718,8 +763,12 @@
   }
 
   /* On a phone the idle hint only costs height in the pinned bar. */
-  .transport-empty {
+  .transport[data-state="idle"] .transport-body {
     display: none;
+  }
+
+  .transport-body {
+    min-height: 0;
   }
 
   .audio-player {

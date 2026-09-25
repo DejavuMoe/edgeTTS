@@ -79,6 +79,15 @@ describe("VoiceList", () => {
     expect(list.getAttribute("data-value")).toBe("zh-CN-XiaoxiaoNeural");
   });
 
+  it("repeats the locale only where the group does not already name it", () => {
+    render(<Harness />);
+    const [favorites, chinese] = screen.getAllByRole("group");
+    const metaOf = (group: HTMLElement) =>
+      [...group.querySelectorAll(".voice-option-meta")].map((meta) => meta.textContent);
+    expect(metaOf(favorites!)).toEqual(["en-US · 女性"]);
+    expect(metaOf(chinese!)).toEqual(["女性", "男性"]);
+  });
+
   it("selects on click and moves focus into the list", async () => {
     const user = userEvent.setup();
     const onSelect = vi.fn();

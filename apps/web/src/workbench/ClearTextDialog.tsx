@@ -27,7 +27,7 @@ export function ClearTextDialog({ dialogRef, onConfirm }: ClearTextDialogProps) 
         >
           {t("取消")}
         </button>
-        <button type="button" className="btn btn-primary" onClick={onConfirm}>
+        <button type="button" className="btn btn-danger" onClick={onConfirm}>
           {t("确认清空")}
         </button>
       </div>

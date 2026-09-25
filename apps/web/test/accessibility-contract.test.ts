@@ -69,7 +69,10 @@ describe("CSS accessibility and responsive layout contract", () => {
       ["ink-3", "sheet"],
       ["ink-3", "paper"],
       ["ink-3", "selected"],
+      ["ink", "raised"],
+      ["ink-2", "raised"],
       ["accent-ink", "accent"],
+      ["danger-ink", "danger"],
       ["danger", "danger-soft"],
       ["favorite-text", "favorite-bg"],
     ];
@@ -135,7 +138,22 @@ describe("CSS accessibility and responsive layout contract", () => {
     expect(mobile).toBeDefined();
     expect(mobile).toMatch(/\.workbench\s*\{[^}]*grid-template-columns:\s*1fr/);
     expect(mobile).toMatch(/\.transport\s*\{[^}]*position:\s*sticky/);
+    // The pinned bar must paint above the content scrolling beneath it.
+    expect(mobile).toMatch(/\.transport\s*\{[^}]*z-index:\s*[1-9]/);
     expect(mobile).toContain(".action-buttons");
     expect(mobile).toContain(".audio-player");
+  });
+
+  it("centres segmented option text on one line box instead of top-aligned flex baselines", () => {
+    const option = ruleBody(".segmented-option");
+    expect(option).toMatch(/line-height:\s*30px/);
+    expect(option).toMatch(/min-height:\s*32px/);
+    expect(option).not.toMatch(/display:\s*(?:inline-)?flex/);
+    expect(ruleBody(".segmented-detail")).not.toContain("--font-mono");
+  });
+
+  it("marks selection, focus and alerts without coloured side stripes or panel rules", () => {
+    expect(css).not.toMatch(/border-left:\s*\d+px solid var\(--(?:accent|danger)\)/);
+    expect(css).not.toMatch(/inset 0 2px 0 var\(--(?:accent|danger)\)/);
   });
 });

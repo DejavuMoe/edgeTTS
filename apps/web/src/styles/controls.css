@@ -1,3 +1,10 @@
+/*
+ * Controls. One interaction language throughout: anything clickable tints on hover (the tint is
+ * layered over the control's own surface), fields show focus as a 2px edge on their own border,
+ * buttons as a ring outside it. Text inside a control sits on one line box, so mixed scripts and
+ * sizes share a baseline and stay vertically centred.
+ */
+
 /* Buttons ---------------------------------------------------------------- */
 
 .btn {
@@ -10,6 +17,7 @@
   border: 1px solid transparent;
   border-radius: var(--radius-m);
   font-weight: 600;
+  line-height: 20px;
   text-decoration: none;
   white-space: nowrap;
   transition:
@@ -37,13 +45,22 @@
   color: var(--ink-3);
 }
 
+.btn-danger {
+  background: var(--danger);
+  color: var(--danger-ink);
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--danger) 86%, var(--ink));
+}
+
 .btn-secondary {
-  background: transparent;
   border-color: var(--rule-strong);
+  background: transparent;
   color: var(--ink);
 }
 
-.btn-secondary:hover {
+.btn-secondary:hover:not(:disabled) {
   background: var(--hover);
 }
 
@@ -58,6 +75,7 @@
   background: transparent;
   color: var(--ink-2);
   font-size: 13px;
+  line-height: 20px;
 }
 
 .btn-text:hover:not(:disabled) {
@@ -67,7 +85,7 @@
 
 .btn-text:disabled {
   color: var(--ink-3);
-  opacity: 0.55;
+  opacity: 0.5;
 }
 
 .btn-text:focus-visible {
@@ -87,17 +105,33 @@
   background: var(--sheet);
   color: var(--ink);
   font-size: 13px;
+  line-height: 20px;
 }
 
 .control-input::placeholder {
   color: var(--ink-3);
 }
 
+/* The platform clear button is a heavy glyph in dark mode; draw a quiet one in the ink colour. */
+.control-input::-webkit-search-cancel-button {
+  width: 14px;
+  height: 14px;
+  margin-left: 6px;
+  background: var(--ink-3);
+  cursor: pointer;
+  appearance: none;
+  mask: url("data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 16 16%27 fill=%27none%27 stroke=%27black%27 stroke-width=%271.6%27 stroke-linecap=%27round%27%3E%3Cpath d=%27M4 4l8 8M12 4l-8 8%27/%3E%3C/svg%3E")
+    center / contain no-repeat;
+}
+
+.control-input::-webkit-search-cancel-button:hover {
+  background: var(--ink);
+}
+
 .control-input:focus-visible,
 .control-select:focus-visible {
   outline: 2px solid var(--focus-ring);
-  outline-offset: 0;
-  border-color: var(--focus-ring);
+  outline-offset: -1px;
 }
 
 .control-input:disabled,
@@ -119,6 +153,10 @@
   justify-content: space-between;
   gap: 8px;
   text-align: left;
+}
+
+.ui-select-trigger:hover:not(:disabled) {
+  background-image: linear-gradient(var(--hover), var(--hover));
 }
 
 .ui-select-trigger-label {
@@ -146,6 +184,7 @@
   border-radius: var(--radius-m);
   background: var(--sheet);
   box-shadow: 0 12px 32px rgb(0 0 0 / 12%);
+  scrollbar-width: thin;
 }
 
 .ui-select-group-header {
@@ -196,7 +235,7 @@
   flex: none;
   width: 14px;
   height: 14px;
-  color: var(--accent);
+  color: var(--ink);
 }
 
 /* Checkbox --------------------------------------------------------------- */
@@ -207,6 +246,7 @@
   gap: 8px;
   min-height: 28px;
   font-size: 13px;
+  line-height: 20px;
   color: var(--ink-2);
   cursor: pointer;
 }
@@ -219,12 +259,18 @@
 .ui-checkbox-box {
   position: relative;
   display: inline-grid;
+  flex: none;
   place-items: center;
   width: 16px;
   height: 16px;
   border: 1.5px solid var(--rule-strong);
   border-radius: 3px;
   background: var(--sheet);
+  transition: border-color 120ms ease;
+}
+
+.ui-checkbox-label:not(.is-disabled):hover .ui-checkbox-box:not(.is-checked) {
+  border-color: var(--ink-3);
 }
 
 .ui-checkbox-box.is-checked {
@@ -258,30 +304,42 @@
 
 /* Segmented control -------------------------------------------------------- */
 
+/* Options share a recessed track; the checked one is lifted onto it. */
 .segmented {
   display: grid;
-  grid-auto-columns: 1fr;
+  grid-auto-columns: minmax(0, 1fr);
   grid-auto-flow: column;
-  gap: 6px;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--radius-m);
+  background: var(--selected);
 }
 
 .segmented-option {
-  display: flex;
-  align-items: baseline;
-  justify-content: center;
-  gap: 6px;
   min-height: 32px;
   padding: 0 8px;
-  border: 1px solid var(--rule-strong);
+  overflow: hidden;
+  border: 1px solid transparent;
   border-radius: var(--radius-s);
-  background: var(--sheet);
+  background: transparent;
   color: var(--ink-2);
-  text-align: left;
+  line-height: 30px;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease;
+}
+
+.segmented-option:hover:not(:disabled, [aria-checked="true"]) {
+  background: var(--hover);
+  color: var(--ink);
 }
 
 .segmented-option[aria-checked="true"] {
-  border-color: var(--ink);
-  box-shadow: inset 0 0 0 1px var(--ink);
+  border-color: var(--rule-strong);
+  background: var(--raised);
   color: var(--ink);
 }
 
@@ -291,7 +349,7 @@
 
 .segmented-option:focus-visible {
   outline: 2px solid var(--focus-ring);
-  outline-offset: 2px;
+  outline-offset: 1px;
 }
 
 .segmented-label {
@@ -300,73 +358,70 @@
 }
 
 .segmented-detail {
+  margin-left: 6px;
   color: var(--ink-3);
-  font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.segmented-option[aria-checked="true"] .segmented-detail {
+  color: var(--ink-2);
 }
 
 /* Slider ----------------------------------------------------------------- */
 
-/* One row per control: label | track | value | reset. */
+/* Label and value above a full-width track: every row starts and ends on the same edges. */
 .ui-slider-group {
-  display: grid;
-  grid-template-areas: "label track value reset";
-  grid-template-columns: var(--control-label-width, 72px) minmax(0, 1fr) 64px 32px;
-  align-items: center;
-  column-gap: 10px;
-  min-height: 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .control-header {
-  display: contents;
-}
-
-.ui-slider-group .control-label {
-  grid-area: label;
-}
-
-.ui-slider-group .control-value {
-  grid-area: value;
-  text-align: right;
-}
-
-.ui-slider-group .btn-reset {
-  grid-area: reset;
-}
-
-.ui-slider-track-wrap {
-  grid-area: track;
   display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 22px;
 }
 
 .control-label {
   font-size: 13px;
+  line-height: 20px;
+}
+
+.control-header .control-label {
+  flex: 1;
+  min-width: 0;
 }
 
 .control-value {
   color: var(--ink-2);
   font-size: 12.5px;
   font-variant-numeric: tabular-nums;
+  line-height: 20px;
 }
 
 .btn-reset {
-  min-height: 24px;
-  padding: 0 4px;
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
   border: 0;
   border-radius: var(--radius-s);
   background: transparent;
   color: var(--ink-3);
-  font-size: 11.5px;
-  transition: opacity 120ms ease;
 }
 
 .btn-reset:hover:not(:disabled) {
+  background: var(--hover);
   color: var(--ink);
 }
 
-/* At the default value the reset action has nothing to do; keep its space, hide the noise. */
+/* At the default value there is nothing to reset: keep the slot, drop the control. */
 .btn-reset:disabled {
-  opacity: 0;
+  visibility: hidden;
 }
 
 .btn-reset:focus-visible {
@@ -374,7 +429,13 @@
   outline-offset: 0;
 }
 
+.ui-slider-track-wrap {
+  display: flex;
+}
+
 .control-slider {
+  /* The surface the slider sits on, used to cut the focus ring away from the thumb. */
+  --surface: var(--paper);
   --track: var(--rule-strong);
   --fill: var(--ink);
   width: 100%;
@@ -416,7 +477,7 @@
   margin-top: -6px;
   border: 2px solid var(--fill);
   border-radius: 50%;
-  background: var(--sheet);
+  background: var(--raised);
   appearance: none;
 }
 
@@ -425,7 +486,7 @@
   height: 10px;
   border: 2px solid var(--fill);
   border-radius: 50%;
-  background: var(--sheet);
+  background: var(--raised);
 }
 
 .control-slider:focus-visible {
@@ -434,14 +495,14 @@
 
 .control-slider:focus-visible::-webkit-slider-thumb {
   box-shadow:
-    0 0 0 3px var(--sheet),
-    0 0 0 5px var(--focus-ring);
+    0 0 0 2px var(--surface),
+    0 0 0 4px var(--focus-ring);
 }
 
 .control-slider:focus-visible::-moz-range-thumb {
   box-shadow:
-    0 0 0 3px var(--sheet),
-    0 0 0 5px var(--focus-ring);
+    0 0 0 2px var(--surface),
+    0 0 0 4px var(--focus-ring);
 }
 
 /* Audio player ------------------------------------------------------------ */
@@ -471,12 +532,21 @@
   border-radius: 50%;
   background: transparent;
   color: var(--ink);
+  transition: background-color 120ms ease;
+}
+
+.ui-audio-btn:hover {
+  background: var(--hover);
 }
 
 .ui-audio-play-btn {
   border-color: var(--ink);
   background: var(--ink);
   color: var(--sheet);
+}
+
+.ui-audio-play-btn:hover {
+  background: var(--ink-2);
 }
 
 .ui-audio-btn:focus-visible {

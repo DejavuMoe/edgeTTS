@@ -7,6 +7,19 @@ the version being released.
 
 ## [Unreleased]
 
+### Fixed
+
+- Web workbench visual polish:
+  - Quality option labels are vertically centred.
+  - Speed, pitch and volume show their label and value above a full-width track, with a compact
+    reset icon.
+  - The editor focus line and coloured side stripes are gone, and hover and focus states now match
+    across all controls.
+  - On phones the voice list no longer paints over the pinned synthesize bar.
+  - The transport bar keeps one height across states.
+  - The voice list centres the restored voice and no longer repeats the region code on every row.
+- Clearing the text is confirmed with a danger-styled button.
+
 ## [0.8.0] - 2026-09-25
 
 ### Changed

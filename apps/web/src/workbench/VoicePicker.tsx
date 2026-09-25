@@ -69,8 +69,8 @@ export function VoicePicker({
           <div className="voice-current-text" title={activeVoice.displayName}>
             <span className="voice-current-name">{shortVoiceName(activeVoice)}</span>
             <span className="voice-current-meta">
-              {localeDisplayName(activeVoice.locale, locale) ?? activeVoice.locale} ·{" "}
-              {formatVoiceGender(activeVoice.gender, locale)}
+              <span>{localeDisplayName(activeVoice.locale, locale) ?? activeVoice.locale}</span>{" "}
+              <span>· {formatVoiceGender(activeVoice.gender, locale)}</span>
             </span>
             <span className="voice-current-id">{activeVoice.id}</span>
           </div>
