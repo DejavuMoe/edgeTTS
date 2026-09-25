@@ -12,7 +12,7 @@ Container images are published to GHCR as `ghcr.io/dejavumoe/edgetts`. The [CI w
 
 ## Create a release
 
-Start from a clean, synchronized `main` with successful CI. Update package versions and release examples consistently, then validate before creating the tag:
+Start from a clean, synchronized `main` with successful CI. Update package versions and release examples consistently, and move the `[Unreleased]` entries of [CHANGELOG.md](../CHANGELOG.md) under a `## [X.Y.Z] - YYYY-MM-DD` section. `pnpm test` fails if any documented image tag no longer matches the package version. Then validate before creating the tag:
 
 ```bash
 git fetch origin
@@ -22,7 +22,7 @@ git tag -a vX.Y.Z -m "edgeTTS X.Y.Z"
 git push origin vX.Y.Z
 ```
 
-The preflight script checks the version, repository state, tag availability and local validation. It does not create or push tags. On workstations with separate build runtimes, run the complete validation there and use `--skip-tests` for the Git preflight in the canonical checkout.
+The preflight script checks the version, repository state, tag availability, the package version and changelog section, and local validation. It does not create or push tags. On workstations with separate build runtimes, run the complete validation there and use `--skip-tests` for the Git preflight in the canonical checkout.
 
 After publishing:
 

@@ -240,6 +240,40 @@ git -C "$MOCK_REPO" tag -d v1.0.0 >/dev/null
 assert_exit_code "release-check.sh fails closed when origin fetch fails" 1 \
   "$MOCK_REPO/scripts/release-check.sh" "v1.0.0" --skip-tests
 
+# 5.3 Release metadata, behind a reachable origin so every earlier check passes
+ORIGIN_REPO=$(mktemp -d)
+trap 'rm -rf "$TEMP_GIT_DIR" "$MOCK_REPO" "$ORIGIN_REPO"' EXIT
+git init --bare --quiet "$ORIGIN_REPO"
+git -C "$MOCK_REPO" remote add origin "$ORIGIN_REPO"
+
+commit_and_push() {
+  git -C "$MOCK_REPO" add -A
+  git -C "$MOCK_REPO" commit -m "$1" --quiet
+  git -C "$MOCK_REPO" push --quiet origin main
+}
+
+printf '{\n  "version": "1.0.0"\n}\n' > "$MOCK_REPO/package.json"
+printf '# Changelog\n\n## [Unreleased]\n\n- Pending change\n' > "$MOCK_REPO/CHANGELOG.md"
+commit_and_push "prepare release without changelog section"
+assert_exit_code "release-check.sh rejects a version missing from CHANGELOG.md" 1 \
+  "$MOCK_REPO/scripts/release-check.sh" "v1.0.0" --skip-tests
+
+printf '# Changelog\n\n## [1.0.0]\n\n- Undated\n' > "$MOCK_REPO/CHANGELOG.md"
+commit_and_push "undated changelog section"
+assert_exit_code "release-check.sh rejects an undated CHANGELOG.md section" 1 \
+  "$MOCK_REPO/scripts/release-check.sh" "v1.0.0" --skip-tests
+
+printf '# Changelog\n\n## [1.0.0] - 2026-01-01\n\n- Released\n' > "$MOCK_REPO/CHANGELOG.md"
+printf '{\n  "version": "0.9.0"\n}\n' > "$MOCK_REPO/package.json"
+commit_and_push "stale package version"
+assert_exit_code "release-check.sh rejects a package.json version mismatch" 1 \
+  "$MOCK_REPO/scripts/release-check.sh" "v1.0.0" --skip-tests
+
+printf '{\n  "version": "1.0.0"\n}\n' > "$MOCK_REPO/package.json"
+commit_and_push "prepare 1.0.0"
+assert_exit_code "release-check.sh accepts a documented release" 0 \
+  "$MOCK_REPO/scripts/release-check.sh" "v1.0.0" --skip-tests
+
 # ------------------------------------------------------------------------------
 # Test Suite 6: Strict SemVer Version Ordering (sort -V)
 # ------------------------------------------------------------------------------
