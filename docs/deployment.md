@@ -22,7 +22,7 @@ Internet (Clients / Browsers / API Consumers)
 
 - **Loopback Isolation**: The application binds to `127.0.0.1` on the host, preventing direct exposure to external public networks.
 - **TLS Termination**: The reverse proxy terminates HTTPS, handles domain certificates, and forwards requests.
-- **Streaming Buffering Rule**: Reverse proxies **must** disable response buffering (`proxy_buffering off;`) for speech synthesis routes so audio streams progressively to clients without latency.
+- **Streaming Buffering Rule**: Reverse proxies **must** disable response buffering (`proxy_buffering off;`) for speech synthesis routes (`/api/speech` and `/v1/audio/speech`) so audio streams progressively to clients without latency.
 
 ## Prerequisites
 

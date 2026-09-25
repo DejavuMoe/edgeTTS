@@ -13,8 +13,9 @@
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
     "lint": "eslint .",
-    "test": "pnpm -r test && pnpm test:architecture && bash scripts/test-release-guard.sh",
+    "test": "pnpm -r test && pnpm test:architecture && pnpm test:docs && bash scripts/test-release-guard.sh",
     "test:architecture": "node --test scripts/architecture-boundaries.test.mjs",
+    "test:docs": "node --test scripts/docs-consistency.test.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },

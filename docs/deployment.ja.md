@@ -107,6 +107,11 @@ sed -i "s/^# API_KEY=.*/API_KEY=$(openssl rand -hex 32)/" .env
 docker compose up -d --build
 ```
 
+リポジトリの `compose.yaml` は、ホスト側ポートの割り当てに `.env` の変数を使います：
+
+- `EDGETTS_BIND_ADDRESS`: ホスト側のバインドアドレス（既定値: `127.0.0.1`）。
+- `EDGETTS_HOST_PORT`: ホスト側のポート（既定値: `8080`）。
+
 ## 方法 4: Linux ベアメタル / Systemd サービス
 
 `/opt` へのインストールは root または適切な sudo 権限で実行してください。`command -v node` でパスを確認し、必要に応じて `ExecStart` を変更します。プログラムは root が所有し、サービスのみ `edgetts` で実行します。キーは公開ユニットに書かず、root のみ読み取れる `/etc/edgetts.env` に初回だけ生成し、更新時は保持します。
