@@ -89,7 +89,7 @@ describe("CSS accessibility and responsive layout contract", () => {
   it("lets grid and flex children shrink to prevent narrow-viewport overflow", () => {
     expect(ruleBody(".workbench > *")).toMatch(/min-width:\s*0/);
     expect(ruleBody(".audio-player")).toMatch(/min-width:\s*0/);
-    expect(ruleBody(".transport-body")).toMatch(/min-width:\s*0/);
+    expect(ruleBody(".player-main")).toMatch(/min-width:\s*0/);
   });
 
   it("gives every interactive control a visible keyboard focus treatment", () => {
@@ -133,13 +133,24 @@ describe("CSS accessibility and responsive layout contract", () => {
     );
   });
 
-  it("stacks to a single column below 768px with a pinned transport bar", () => {
+  it("places the result below the text it was made from, beside a full-height inspector", () => {
+    expect(ruleBody(".workbench")).toMatch(
+      /grid-template-areas:\s*"sheet inspector"\s*"result inspector"/,
+    );
+    expect(ruleBody(".sheet")).toMatch(/grid-area:\s*sheet/);
+    expect(ruleBody(".result")).toMatch(/grid-area:\s*result/);
+    expect(ruleBody(".inspector")).toMatch(/grid-area:\s*inspector/);
+  });
+
+  it("stacks to a single column below 768px in working order: text, result, settings", () => {
     const mobile = css.match(/@media\s*\(\s*max-width:\s*767px\s*\)\s*\{([\s\S]*?)\n\}/)?.[1];
     expect(mobile).toBeDefined();
     expect(mobile).toMatch(/\.workbench\s*\{[^}]*grid-template-columns:\s*1fr/);
-    expect(mobile).toMatch(/\.transport\s*\{[^}]*position:\s*sticky/);
-    // The pinned bar must paint above the content scrolling beneath it.
-    expect(mobile).toMatch(/\.transport\s*\{[^}]*z-index:\s*[1-9]/);
+    expect(mobile).toMatch(
+      /\.workbench\s*\{[^}]*grid-template-areas:\s*"sheet"\s*"result"\s*"inspector"/,
+    );
+    // Nothing is pinned over the content, so nothing can paint over it either.
+    expect(mobile).not.toMatch(/position:\s*(?:sticky|fixed)/);
     expect(mobile).toContain(".action-buttons");
     expect(mobile).toContain(".audio-player");
   });

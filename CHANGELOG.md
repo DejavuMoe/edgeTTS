@@ -7,6 +7,14 @@ the version being released.
 
 ## [Unreleased]
 
+### Changed
+
+- The web workbench follows the order the work happens. The synthesize action ends the text, next
+  to the character count, and the result appears directly below it as a track: play button, voice,
+  settings and size, a full-width timeline and download. The full voice name and ID are in its
+  tooltip. The voice and delivery inspector runs the full height. On phones the page reads top to
+  bottom (text, synthesize, result, settings) with nothing pinned over the content.
+
 ### Fixed
 
 - Web workbench visual polish:

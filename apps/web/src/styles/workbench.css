@@ -1,11 +1,12 @@
 /*
- * Workbench layout: header, a manuscript sheet beside a narrow inspector, and a transport bar
- * pinned to the bottom so the primary action, progress and result are always in view.
+ * Workbench layout, in the order the work happens: the text on the left ends in its synthesize
+ * action, the result appears directly below it, and the voice and delivery settings sit in a
+ * full-height inspector on the right.
  */
 
 .app {
   display: grid;
-  grid-template-rows: var(--header-height) minmax(0, 1fr) auto;
+  grid-template-rows: var(--header-height) minmax(0, 1fr);
   height: 100dvh;
 }
 
@@ -89,7 +90,11 @@
 
 .workbench {
   display: grid;
+  grid-template-areas:
+    "sheet inspector"
+    "result inspector";
   grid-template-columns: minmax(0, 1fr) var(--inspector-width);
+  grid-template-rows: minmax(0, 1fr) auto;
   min-height: 0;
 }
 
@@ -133,8 +138,8 @@
 
 .sheet {
   display: flex;
+  grid-area: sheet;
   flex-direction: column;
-  border-right: 1px solid var(--rule);
   background: var(--sheet);
 }
 
@@ -202,23 +207,36 @@
   padding: 0 var(--sheet-inset) 12px;
 }
 
+/* Notes on the left; the count and the synthesize action end the sheet on the right. */
 .sheet-footer {
   display: flex;
-  align-items: baseline;
-  gap: 16px;
-  padding: 10px var(--sheet-inset) 12px;
+  align-items: center;
+  gap: 24px;
+  padding: 12px var(--sheet-inset) 14px;
   border-top: 1px solid var(--rule);
-  color: var(--ink-3);
-  font-size: 12px;
 }
 
-.sheet-note {
+.sheet-notes {
+  display: flex;
   flex: 1;
+  flex-direction: column;
   min-width: 0;
+  color: var(--ink-3);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.sheet-submit {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 16px;
 }
 
 .char-counter {
   flex: none;
+  color: var(--ink-2);
+  font-size: 12.5px;
   font-variant-numeric: tabular-nums;
 }
 
@@ -231,7 +249,9 @@
 
 .inspector {
   display: flex;
+  grid-area: inspector;
   flex-direction: column;
+  border-left: 1px solid var(--rule);
   overflow-y: auto;
   scrollbar-width: thin;
 }
@@ -546,23 +566,9 @@
   font-size: 12.5px;
 }
 
-/* Transport bar -------------------------------------------------------- */
+/* Synthesize action and result ------------------------------------------ */
 
-.transport {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: center;
-  gap: 24px;
-  padding: 12px 20px;
-  border-top: 1px solid var(--rule);
-  background: var(--sheet);
-}
-
-.transport .control-slider {
-  --surface: var(--sheet);
-}
-
-.transport-actions {
+.synthesis-actions {
   display: flex;
   gap: 8px;
 }
@@ -571,17 +577,23 @@
   min-width: 132px;
 }
 
-/* Tall enough for the player and its metadata line, so the workbench never jumps between states. */
-.transport-body {
+/*
+ * The take, below the text it was made from. One height for progress, error and result, so the
+ * sheet does not move again once the first take exists.
+ */
+.result {
   display: flex;
+  grid-area: result;
   flex-direction: column;
   justify-content: center;
-  gap: 4px;
-  min-width: 0;
-  min-height: 58px;
+  gap: 8px;
+  min-height: 88px;
+  padding: 12px var(--sheet-inset);
+  border-top: 1px solid var(--rule);
+  background: var(--paper);
 }
 
-.transport-status {
+.result-status {
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -600,19 +612,32 @@
   animation: pulse 1.4s ease-in-out infinite;
 }
 
-.transport-empty {
-  color: var(--ink-3);
-  font-size: 13px;
+.result-track {
+  padding: 10px 12px 10px 10px;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-m);
+  background: var(--sheet);
+}
+
+.result-track .control-slider {
+  --surface: var(--sheet);
 }
 
 .result-metadata {
   overflow: hidden;
   color: var(--ink-3);
   font-size: 12px;
-  line-height: 18px;
+  line-height: 20px;
   font-variant-numeric: tabular-nums;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.result-voice {
+  margin-right: 4px;
+  color: var(--ink);
+  font-size: 13.5px;
+  font-weight: 600;
 }
 
 /* Dialog --------------------------------------------------------------- */
@@ -661,6 +686,11 @@
     --inspector-width: 320px;
     --sheet-inset: 24px;
   }
+
+  /* The shortcut is still announced by the button and the editor. */
+  .shortcut-hint {
+    display: none;
+  }
 }
 
 /* Laptop screens around 768px tall: tighten vertical rhythm so Delivery stays in view. */
@@ -690,8 +720,9 @@
     min-height: 150px;
   }
 
-  .transport {
-    padding: 8px 20px;
+  .result {
+    min-height: 80px;
+    padding-block: 8px;
   }
 }
 
@@ -701,7 +732,7 @@
   }
 
   .app {
-    grid-template-rows: var(--header-height) auto auto;
+    grid-template-rows: var(--header-height) auto;
     height: auto;
     min-height: 100dvh;
   }
@@ -714,13 +745,24 @@
     display: none;
   }
 
+  /* One column in working order: write, synthesize, listen, then fine-tune below. */
   .workbench {
+    grid-template-areas:
+      "sheet"
+      "result"
+      "inspector";
     grid-template-columns: 1fr;
+    grid-template-rows: auto;
   }
 
-  .sheet {
-    border-right: 0;
-    border-bottom: 1px solid var(--rule);
+  .sheet-footer {
+    flex-wrap: wrap;
+    gap: 10px 16px;
+  }
+
+  .sheet-submit {
+    flex: 1 1 100%;
+    justify-content: space-between;
   }
 
   .text-editor {
@@ -734,6 +776,8 @@
 
   .inspector {
     overflow: visible;
+    border-top: 1px solid var(--rule);
+    border-left: 0;
   }
 
   .inspector-section {
@@ -749,33 +793,29 @@
     max-height: 320px;
   }
 
-  .transport {
-    position: sticky;
-    bottom: 0;
-    z-index: 2;
-    grid-template-columns: 1fr;
-    gap: 10px;
-    padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+  .result {
+    min-height: 0;
+  }
+
+  /* The action takes the width the count leaves, a comfortable target for a thumb. */
+  .synthesis-actions {
+    flex: 1;
   }
 
   .action-buttons .btn {
     flex: 1;
   }
 
-  /* On a phone the idle hint only costs height in the pinned bar. */
-  .transport[data-state="idle"] .transport-body {
-    display: none;
-  }
-
-  .transport-body {
-    min-height: 0;
+  /* The track keeps a usable timeline; download moves to its own row. */
+  .player-wrapper {
+    flex-wrap: wrap;
   }
 
   .audio-player {
-    flex-wrap: wrap;
+    flex-basis: 100%;
   }
 
-  .player-wrapper {
-    flex-wrap: wrap;
+  .btn-download {
+    flex: 1;
   }
 }

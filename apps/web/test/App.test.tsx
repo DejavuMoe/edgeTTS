@@ -1606,9 +1606,12 @@ describe("EdgeTTS Web Workbench", () => {
       expect(originalFilename).toMatch(/^edgetts_zh-CN-YunxiNeural_high_\d{8}-\d{6}\.mp3$/);
 
       // Metadata text is present
+      // The take shows the short voice name; the full name and voice ID are in its tooltip.
       const metaContainer = screen.getByLabelText(/音频生成信息/i);
-      expect(metaContainer.textContent).toContain("Microsoft Yunxi");
-      expect(metaContainer.textContent).toContain("zh-CN-YunxiNeural");
+      expect(metaContainer.textContent).toContain("Yunxi");
+      expect(metaContainer.textContent).not.toContain("Microsoft");
+      expect(metaContainer.getAttribute("title")).toContain("Microsoft Yunxi");
+      expect(metaContainer.getAttribute("title")).toContain("zh-CN-YunxiNeural");
       expect(metaContainer.textContent).toContain("高品质");
       expect(metaContainer.textContent).toContain("1.50×");
       expect(metaContainer.textContent).toContain("+2半音");
@@ -1622,10 +1625,12 @@ describe("EdgeTTS Web Workbench", () => {
 
       // Verification: Download filename and metadata container remain strictly unchanged!
       expect(downloadLink.getAttribute("download")).toBe(originalFilename);
-      expect(metaContainer.textContent).toContain("Microsoft Yunxi");
-      expect(metaContainer.textContent).toContain("zh-CN-YunxiNeural");
+      expect(metaContainer.textContent).toContain("Yunxi");
+      expect(metaContainer.getAttribute("title")).toContain("Microsoft Yunxi");
+      expect(metaContainer.getAttribute("title")).toContain("zh-CN-YunxiNeural");
       expect(metaContainer.textContent).toContain("高品质");
-      expect(metaContainer.textContent).not.toContain("Microsoft Jenny");
+      expect(metaContainer.textContent).not.toContain("Jenny");
+      expect(metaContainer.getAttribute("title")).not.toContain("Microsoft Jenny");
     });
 
     it("new generation replaces result metadata, and cancelled/failed generation does not produce metadata", async () => {
@@ -1658,7 +1663,8 @@ describe("EdgeTTS Web Workbench", () => {
         );
       });
       const metaContainer = screen.getByLabelText(/音频生成信息/i);
-      expect(metaContainer.textContent).toContain("Microsoft Jenny");
+      expect(metaContainer.textContent).toContain("Jenny");
+      expect(metaContainer.getAttribute("title")).toContain("Microsoft Jenny");
 
       // 3. Third generation fails (400 Bad Request)
       fetchMock.mockImplementationOnce(async () => {
@@ -2844,6 +2850,27 @@ describe("EdgeTTS Web Workbench", () => {
       expect(downloadLink.getAttribute("href")).toContain("blob:");
     });
 
+    it("shows the result only after synthesis, between the text and the settings", async () => {
+      const user = userEvent.setup();
+      render(<App />);
+      await screen.findByLabelText(/选择声音/i);
+      expect(screen.queryByRole("region", { name: "合成结果播放" })).toBeNull();
+
+      fireEvent.change(screen.getByLabelText(/文本内容/i), { target: { value: "结果位置测试" } });
+      await user.click(screen.getByRole("button", { name: /合成语音/i }));
+      await screen.findByLabelText(/语音合成播放器/i);
+
+      const result = screen.getByRole("region", { name: "合成结果播放" });
+      const editor = screen.getByRole("region", { name: "文本编辑区域" });
+      const inspector = screen.getByRole("complementary", { name: "语音参数配置" });
+      const follows = (a: Element, b: Element) =>
+        Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+      expect(follows(editor, result)).toBe(true);
+      expect(follows(result, inspector)).toBe(true);
+      // The action that produced it ends the editor.
+      expect(editor.contains(screen.getByRole("button", { name: /合成语音/i }))).toBe(true);
+    });
+
     it("keyboard Tab navigation reaches core interactive controls in logical sequence", async () => {
       window.localStorage.setItem(
         WORKBENCH_FAVORITES_KEY,
@@ -2868,6 +2895,10 @@ describe("EdgeTTS Web Workbench", () => {
 
       await user.tab();
       expect(document.activeElement).toBe(textarea);
+
+      // The synthesize action ends the text it submits, before the settings.
+      await user.tab();
+      expect(document.activeElement).toBe(screen.getByRole("button", { name: /合成语音/i }));
 
       await user.tab();
       expect(document.activeElement).toBe(screen.getByRole("checkbox", { name: /只看收藏/i }));
@@ -2900,9 +2931,6 @@ describe("EdgeTTS Web Workbench", () => {
 
       await user.tab();
       expect(document.activeElement).toBe(screen.getByLabelText(/^音量/i));
-
-      await user.tab();
-      expect(document.activeElement).toBe(screen.getByRole("button", { name: /合成语音/i }));
     });
 
     it("disabled controls are natively skipped during Tab navigation", async () => {

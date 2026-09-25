@@ -5,12 +5,13 @@ import { AuthCard } from "./workbench/AuthCard.js";
 import { ClearTextDialog } from "./workbench/ClearTextDialog.js";
 import { EditorPanel } from "./workbench/EditorPanel.js";
 import { ParameterControls } from "./workbench/ParameterControls.js";
+import { ResultPanel } from "./workbench/ResultPanel.js";
+import { SynthesisActions } from "./workbench/SynthesisActions.js";
 import { useSynthesis } from "./workbench/useSynthesis.js";
 import { useSynthesisParameters } from "./workbench/useSynthesisParameters.js";
 import { useTextDocument } from "./workbench/useTextDocument.js";
 import { useVoiceFilters } from "./workbench/useVoiceFilters.js";
 import { useWorkbenchConnection } from "./workbench/useWorkbenchConnection.js";
-import { TransportBar } from "./workbench/TransportBar.js";
 import { VoicePicker } from "./workbench/VoicePicker.js";
 import { WorkbenchHeader } from "./workbench/WorkbenchHeader.js";
 import "./styles/index.css";
@@ -82,7 +83,15 @@ function Workbench() {
           isGenerating={isGenerating}
           onGenerate={handleGenerate}
           onRequestClear={handleRequestClear}
+          actions={
+            <SynthesisActions
+              synthesis={synthesis}
+              canGenerate={canGenerate}
+              onGenerate={handleGenerate}
+            />
+          }
         />
+        <ResultPanel synthesis={synthesis} />
 
         <aside className="inspector" aria-label={t("语音参数配置")}>
           {auth.required && <AuthCard auth={auth} />}
@@ -97,8 +106,6 @@ function Workbench() {
           <ParameterControls parameters={parameters} disabled={isGenerating} />
         </aside>
       </main>
-
-      <TransportBar synthesis={synthesis} canGenerate={canGenerate} onGenerate={handleGenerate} />
     </div>
   );
 }

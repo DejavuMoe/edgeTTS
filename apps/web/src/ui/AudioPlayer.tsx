@@ -14,10 +14,12 @@ export interface AudioPlayerProps {
   downloadFilename?: string | null | undefined;
   className?: string;
   "aria-label"?: string;
+  /** What is playing, shown above the timeline, e.g. the voice and its settings. */
+  children?: React.ReactNode;
 }
 
 export const AudioPlayer = forwardRef<HTMLAudioElement, AudioPlayerProps>(function AudioPlayer(
-  { src, downloadUrl, downloadFilename, className = "", "aria-label": ariaLabel },
+  { src, downloadUrl, downloadFilename, className = "", "aria-label": ariaLabel, children },
   ref,
 ) {
   const { t } = useI18n();
@@ -139,29 +141,32 @@ export const AudioPlayer = forwardRef<HTMLAudioElement, AudioPlayerProps>(functi
           )}
         </button>
 
-        {/* Time display */}
-        <span className="ui-audio-time" aria-label={t("播放时间")}>
-          {formatTime(currentTime)} / {formatTime(duration)}
-        </span>
-
-        {/* Seek Bar */}
-        <div className="ui-audio-seek-wrap">
-          <input
-            type="range"
-            className="control-slider ui-audio-seek-slider"
-            min="0"
-            max={isDurationFinite ? duration : 100}
-            step="0.05"
-            value={isDurationFinite ? currentTime : 0}
-            onChange={handleSeek}
-            disabled={!isDurationFinite}
-            aria-label={t("音频时间进度条")}
-            style={
-              {
-                "--slider-progress": `${progressPercent}%`,
-              } as React.CSSProperties
-            }
-          />
+        {/* Title and time above a full-width timeline */}
+        <div className="player-main">
+          <div className="player-heading">
+            <div className="player-title">{children}</div>
+            <span className="ui-audio-time" aria-label={t("播放时间")}>
+              {formatTime(currentTime)} / {formatTime(duration)}
+            </span>
+          </div>
+          <div className="ui-audio-seek-wrap">
+            <input
+              type="range"
+              className="control-slider ui-audio-seek-slider"
+              min="0"
+              max={isDurationFinite ? duration : 100}
+              step="0.05"
+              value={isDurationFinite ? currentTime : 0}
+              onChange={handleSeek}
+              disabled={!isDurationFinite}
+              aria-label={t("音频时间进度条")}
+              style={
+                {
+                  "--slider-progress": `${progressPercent}%`,
+                } as React.CSSProperties
+              }
+            />
+          </div>
         </div>
 
         {/* Mute button */}
