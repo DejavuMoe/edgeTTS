@@ -40,13 +40,26 @@ export const VoiceList = forwardRef<HTMLDivElement | null, VoiceListProps>(funct
 
   // Keep the selected voice in view when it changes by keyboard, filter or restore. Only the
   // list scrolls: scrollIntoView would also move the page, e.g. jump to the list on mobile.
+  // The first time it appears it is centred, so a restored voice shows its neighbours; after
+  // that the list moves as little as possible, one row per arrow key.
+  const hasRevealedSelection = useRef(false);
   useEffect(() => {
     const list = listRef.current;
     if (!list || selectedIndex < 0) return;
     const option = document.getElementById(optionId(selectedVoiceId));
     if (!option) return;
-    const header = option.parentElement?.querySelector<HTMLElement>(".voice-group-header");
-    const top = option.offsetTop - (header?.offsetHeight ?? 0);
+    if (!hasRevealedSelection.current) {
+      hasRevealedSelection.current = true;
+      list.scrollTop = option.offsetTop - (list.clientHeight - option.offsetHeight) / 2;
+      return;
+    }
+    // Scrolling up onto the first voice of a group also reveals the group's header.
+    const previous = option.previousElementSibling;
+    const header =
+      previous instanceof HTMLElement && previous.classList.contains("voice-group-header")
+        ? previous
+        : null;
+    const top = header ? header.offsetTop : option.offsetTop;
     const bottom = option.offsetTop + option.offsetHeight;
     if (top < list.scrollTop) {
       list.scrollTop = top;
@@ -118,7 +131,10 @@ export const VoiceList = forwardRef<HTMLDivElement | null, VoiceListProps>(funct
                   >
                     <span className="voice-option-name">{shortVoiceName(voice)}</span>
                     <span className="voice-option-meta">
-                      {voice.locale} · {formatVoiceGender(voice.gender, locale)}
+                      {/* A locale group already names the locale; favorites mix them. */}
+                      {group.locale
+                        ? formatVoiceGender(voice.gender, locale)
+                        : `${voice.locale} · ${formatVoiceGender(voice.gender, locale)}`}
                     </span>
                   </div>
                 );
