@@ -1,6 +1,7 @@
 // Keeps the documentation truthful: translations reference the same contract identifiers,
-// relative links and anchors resolve, release image tags match the package version, and every
-// environment variable the server reads is documented.
+// relative links and anchors resolve, release image tags match the package version, every
+// environment variable the server reads is documented, and the deployment templates in
+// deploy/ match the copies embedded in the guides.
 import assert from "node:assert/strict";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
@@ -10,14 +11,15 @@ import { fileURLToPath, URL } from "node:url";
 const root = fileURLToPath(new URL("../", import.meta.url));
 const read = (file) => readFileSync(path.join(root, file), "utf8");
 
+// Each entry lists one document in every language; the first is the reference.
+const LANGUAGES = ["en", "zh-CN", "ja"];
 const TRANSLATIONS = [
-  "README",
-  "docs/api",
-  "docs/configuration",
-  "docs/deployment",
-  "docs/reverse-proxy",
+  ["README.md", "README.zh-CN.md", "README.ja.md"],
+  ...["api", "configuration", "deployment", "reverse-proxy"].map((name) =>
+    LANGUAGES.map((lang) => `docs/${lang}/${name}.md`),
+  ),
 ];
-const LANGUAGES = ["", ".zh-CN", ".ja"];
+const DEPLOYMENT_GUIDES = TRANSLATIONS.find(([file]) => file.endsWith("/deployment.md"));
 
 // Walk the tree rather than asking git: Linux build mirrors intentionally have no .git.
 const IGNORED_DIRECTORIES = new Set([".git", ".agents", "node_modules", "dist", "coverage"]);
@@ -64,10 +66,24 @@ function headingAnchors(markdown) {
   return anchors;
 }
 
+/** Fenced code blocks of one language tag, optionally within a section. */
+function codeBlocks(markdown, tag) {
+  return [...markdown.matchAll(new RegExp("```" + tag + "\\n([\\s\\S]*?)```", "g"))].map(
+    ([, body]) => body,
+  );
+}
+
+/** Template lines that carry meaning: comments (translated in docs) and blanks are dropped. */
+function significantLines(text) {
+  return text
+    .split("\n")
+    .map((line) => line.trimEnd())
+    .filter((line) => line && !line.trimStart().startsWith("#"));
+}
+
 describe("translations", () => {
-  for (const base of TRANSLATIONS) {
-    it(`${base} references the same contract identifiers in every language`, () => {
-      const [reference, ...others] = LANGUAGES.map((lang) => `${base}${lang}.md`);
+  for (const [reference, ...others] of TRANSLATIONS) {
+    it(`${reference} references the same contract identifiers in every language`, () => {
       const expected = [...contractTokens(read(reference))].sort();
       for (const file of others) {
         assert.deepEqual(
@@ -105,7 +121,7 @@ describe("versions", () => {
   it("documents the current release image tag", () => {
     const { version } = JSON.parse(read("package.json"));
     const stale = [];
-    for (const file of markdownFiles) {
+    for (const file of [...markdownFiles, "deploy/compose/compose.yaml"]) {
       for (const [tag, tagVersion] of read(file).matchAll(
         /ghcr\.io\/dejavumoe\/edgetts:(\d+\.\d+\.\d+)/g,
       )) {
@@ -129,7 +145,30 @@ describe("configuration", () => {
     }
     assert.ok(names.size >= 10, `expected to discover server variables, found ${names.size}`);
 
-    const documented = contractTokens(read("docs/configuration.md"));
+    const documented = contractTokens(read("docs/en/configuration.md"));
     assert.deepEqual([...names].filter((name) => !documented.has(name)).sort(), []);
   });
+});
+
+describe("deployment templates", () => {
+  const compose = significantLines(read("deploy/compose/compose.yaml"));
+  const unit = significantLines(read("deploy/systemd/edgetts.service"));
+
+  for (const file of ["README.md", "README.zh-CN.md", "README.ja.md", ...DEPLOYMENT_GUIDES]) {
+    it(`${file} embeds deploy/compose/compose.yaml unchanged`, () => {
+      const blocks = codeBlocks(read(file), "yaml").filter((body) =>
+        body.includes("image: ghcr.io"),
+      );
+      assert.equal(blocks.length, 1, "expected exactly one pre-built image compose file");
+      assert.deepEqual(significantLines(blocks[0]), compose);
+    });
+  }
+
+  for (const file of DEPLOYMENT_GUIDES) {
+    it(`${file} embeds deploy/systemd/edgetts.service unchanged`, () => {
+      const blocks = codeBlocks(read(file), "ini");
+      assert.equal(blocks.length, 1, "expected exactly one systemd unit");
+      assert.deepEqual(significantLines(blocks[0]), unit);
+    });
+  }
 });

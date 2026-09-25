@@ -13,6 +13,14 @@
 - `packages/tts-service`: Provider-independent application service (voice caching, concurrency limiter, synthesis orchestration).
 - `packages/shared`: Shared types and validation schemas.
 
+Supporting directories:
+
+- `deploy/`: Production templates (`compose/`, `systemd/`, `nginx/`). The guides embed them; `pnpm test:docs` fails on drift.
+- `docs/`: User guides in `en/`, `zh-CN/` and `ja/` with identical structure, the generated `openapi.json`, and maintainer notes in `development/`.
+- `tests/`: Repository-level checks: `pnpm test:architecture`, `pnpm test:docs`, `pnpm test:release`.
+- `scripts/`: Tooling only (`release-check.sh`, `ablation/`). Package-level smoke, benchmark and generator scripts stay in each package's `scripts/`.
+- The root `Dockerfile` builds the production image; the root `compose.yaml` builds `edgetts:local` from source for development.
+
 Repository remote: `git@github.com:DejavuMoe/edgeTTS.git`
 
 ## Architecture Rules

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# scripts/test-release-guard.sh
+# tests/release-guard.test.sh
 #
 # Deterministic test suite for edgeTTS release governance contracts:
 #   1. Strict stable SemVer format enforcement

@@ -13,3 +13,9 @@
 *.aac
 *.flac
 .DS_Store
+
+# Not part of the image: documentation, deployment templates, repository tests and tooling.
+docs
+deploy
+tests
+scripts

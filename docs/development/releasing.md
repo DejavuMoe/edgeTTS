@@ -1,6 +1,6 @@
 # Releases and rollback
 
-Container images are published to GHCR as `ghcr.io/dejavumoe/edgetts`. The [CI workflow](../.github/workflows/ci.yml) is the source of truth for validation and publication.
+Container images are published to GHCR as `ghcr.io/dejavumoe/edgetts`. The [CI workflow](../../.github/workflows/ci.yml) is the source of truth for validation and publication.
 
 ## Publication contract
 
@@ -12,7 +12,7 @@ Container images are published to GHCR as `ghcr.io/dejavumoe/edgetts`. The [CI w
 
 ## Create a release
 
-Start from a clean, synchronized `main` with successful CI. Update package versions and release examples consistently, and move the `[Unreleased]` entries of [CHANGELOG.md](../CHANGELOG.md) under a `## [X.Y.Z] - YYYY-MM-DD` section. `pnpm test` fails if any documented image tag no longer matches the package version. Then validate before creating the tag:
+Start from a clean, synchronized `main` with successful CI. Update package versions and release examples consistently, and move the `[Unreleased]` entries of [CHANGELOG.md](../../CHANGELOG.md) under a `## [X.Y.Z] - YYYY-MM-DD` section. `pnpm test` fails if any documented image tag no longer matches the package version. Then validate before creating the tag:
 
 ```bash
 git fetch origin
@@ -64,7 +64,7 @@ docker compose up -d edgetts
 curl --fail http://127.0.0.1:8080/health
 ```
 
-The health endpoint confirms the HTTP process only; verify an authenticated synthesis separately. Rebuilding an old source revision does not reproduce the original image. Keep release tags immutable and avoid moving `latest` to implement a rollback. A single-instance replacement can interrupt active streams; see [deployment](deployment.md).
+The health endpoint confirms the HTTP process only; verify an authenticated synthesis separately. Rebuilding an old source revision does not reproduce the original image. Keep release tags immutable and avoid moving `latest` to implement a rollback. A single-instance replacement can interrupt active streams; see [deployment](../en/deployment.md).
 
 ## Repository protection
 

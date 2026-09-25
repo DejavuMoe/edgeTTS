@@ -25,7 +25,7 @@
 
 ## Nginx 配置方案
 
-使用[仓库内的 Nginx 模板](../deploy/nginx/edgetts.conf.example)，替换域名和证书路径后启用。两条语音路由均保持响应缓冲与缓存关闭。
+使用[仓库内的 Nginx 模板](../../deploy/nginx/edgetts.conf.example)，替换域名和证书路径后启用。两条语音路由均保持响应缓冲与缓存关闭。
 
 ### 安装与生效（Ubuntu / Debian）
 
@@ -48,7 +48,7 @@ sudo systemctl reload nginx
 
 ### 自动化代理验证脚本
 
-仓库内提供了全自动的代理测试脚本 [`deploy/nginx/test-proxy.sh`](../deploy/nginx/test-proxy.sh)。该脚本可在容器内验证配置语法、流式首包即时传输、错误状态码保留及请求头透传：
+仓库内提供了全自动的代理测试脚本 [`deploy/nginx/test-proxy.sh`](../../deploy/nginx/test-proxy.sh)。该脚本可在容器内验证配置语法、流式首包即时传输、错误状态码保留及请求头透传：
 
 ```bash
 # 执行确定性验证（不调用微软上游）

@@ -1,6 +1,6 @@
 # Nginx deployment
 
-Use the [reverse-proxy guide](../../docs/reverse-proxy.md) for installation, certificates and streaming configuration.
+Use the [reverse-proxy guide](../../docs/en/reverse-proxy.md) for installation, certificates and streaming configuration.
 
 - [`edgetts.conf.example`](edgetts.conf.example) is the canonical Nginx template.
 - [`test-proxy.sh`](test-proxy.sh) derives its checks from that template. It requires Docker, curl, openssl, jq, awk and sed.

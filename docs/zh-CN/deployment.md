@@ -32,7 +32,7 @@
 
 ## 方案一：Docker Compose 预构建镜像部署（推荐）
 
-直接运行已发布的多架构镜像，无需克隆或编译源码。在一个空目录（例如 `~/edgetts`）中创建 `compose.yaml`：
+直接运行已发布的多架构镜像，无需克隆或编译源码。在一个空目录（例如 `~/edgetts`）中创建 `compose.yaml`。仓库中的 [deploy/compose/compose.yaml](../../deploy/compose/compose.yaml) 是同一份文件：
 
 ```yaml
 services:
@@ -76,7 +76,7 @@ docker compose up -d
 curl --fail http://127.0.0.1:8080/health
 ```
 
-升级时保留 `.env`。`REQUIRE_API_KEY` 默认为 `true`，缺少 `API_KEY` 时容器会拒绝启动。同一个 `.env` 还可以设置宿主机绑定用的 `EDGETTS_BIND_ADDRESS` 与 `EDGETTS_HOST_PORT`（默认 `127.0.0.1:8080`），以及 `SPEECH_RATE_LIMIT_MAX`、`SPEECH_RATE_LIMIT_WINDOW_MS`。Compose 只转发 `environment` 中列出的变量：如需使用[配置参考](configuration.zh-CN.md)中的其他变量（例如 `TRUST_PROXY`、`METRICS_ENABLED`），先把它们加入该列表，再写入 `.env`。需要可复现部署时，可将标签替换为发布说明中的摘要（见下文）。
+升级时保留 `.env`。`REQUIRE_API_KEY` 默认为 `true`，缺少 `API_KEY` 时容器会拒绝启动。同一个 `.env` 还可以设置宿主机绑定用的 `EDGETTS_BIND_ADDRESS` 与 `EDGETTS_HOST_PORT`（默认 `127.0.0.1:8080`），以及 `SPEECH_RATE_LIMIT_MAX`、`SPEECH_RATE_LIMIT_WINDOW_MS`。Compose 只转发 `environment` 中列出的变量：如需使用[配置参考](configuration.md)中的其他变量（例如 `TRUST_PROXY`、`METRICS_ENABLED`），先把它们加入该列表，再写入 `.env`。需要可复现部署时，可将标签替换为发布说明中的摘要（见下文）。
 
 ## 方案二：Docker 单容器运行 (`docker run`)
 
@@ -200,7 +200,7 @@ sudo sh -c 'umask 077; set -C; printf "API_KEY=%s\n" "$(openssl rand -hex 32)" >
 
 ### 4. 编写 Systemd 服务单元
 
-创建 `/etc/systemd/system/edgetts.service`：
+创建 `/etc/systemd/system/edgetts.service`，或从源码目录复制 [deploy/systemd/edgetts.service](../../deploy/systemd/edgetts.service)：
 
 ```ini
 [Unit]

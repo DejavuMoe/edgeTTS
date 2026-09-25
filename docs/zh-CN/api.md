@@ -13,7 +13,7 @@
 | `POST`   | `/api/speech`      | 是（若启用认证） | 原生分段长文本流式语音合成接口                      |
 | `GET`    | `/api/metrics`     | 是（若启用认证） | Prometheus 指标，仅在 `METRICS_ENABLED=true` 时提供 |
 
-机器可读的 [OpenAPI 3 接口描述](openapi.json)由校验 schema 自动生成。
+机器可读的 [OpenAPI 3 接口描述](../openapi.json)由校验 schema 自动生成。
 
 ## 认证方式
 
@@ -162,7 +162,7 @@ Content-Type: application/json; charset=utf-8
 
 ## 5. 指标接口 (`GET /api/metrics`)
 
-仅在 `METRICS_ENABLED=true` 时提供，输出 Prometheus 文本格式，并与其他受保护路由使用相同的 Bearer 认证。指标列表见[配置参考](configuration.zh-CN.md#运行指标)。
+仅在 `METRICS_ENABLED=true` 时提供，输出 Prometheus 文本格式，并与其他受保护路由使用相同的 Bearer 认证。指标列表见[配置参考](configuration.md#运行指标)。
 
 ```yaml
 scrape_configs:
@@ -195,4 +195,4 @@ scrape_configs:
 | 502  | `UPSTREAM_ERROR`         | 上游连接或合成失败         |
 | 503  | `SERVER_BUSY`            | 队列满或排队超过 30 秒     |
 
-两条语音接口共享单进程 12 次/10 秒配额，音色查询为单进程每分钟 60 次。详见[配置参考](configuration.zh-CN.md)。
+两条语音接口共享单进程 12 次/10 秒配额，音色查询为单进程每分钟 60 次。详见[配置参考](configuration.md)。

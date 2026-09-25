@@ -11,6 +11,11 @@ the version being released.
 
 - The deployment guide now walks through Docker Compose with the pre-built image in all three
   languages; building from source with Compose is described as the development workflow.
+- Repository layout: guides moved to `docs/en/`, `docs/zh-CN/` and `docs/ja/`; maintainer notes to
+  `docs/development/`; repository tests to `tests/`; production Compose and systemd templates to
+  `deploy/`, where `pnpm test` keeps the embedded copies in the guides identical.
+- The README Quick Start Compose file now matches the deployment guide and template (configurable
+  host binding, `REQUIRE_API_KEY` fail-closed default).
 
 ## [0.7.0] - 2026-09-25
 
@@ -26,8 +31,8 @@ the version being released.
 - Optional Prometheus metrics at `/api/metrics` behind the API key (`METRICS_ENABLED=true`).
 - A generated OpenAPI description, [docs/openapi.json](docs/openapi.json).
 - A live long-text benchmark (`pnpm --filter @edgetts/tts-service bench`) and its results in
-  [docs/performance.zh-CN.md](docs/performance.zh-CN.md).
-- [Architecture and design decisions](docs/architecture.md).
+  [docs/development/research/performance.zh-CN.md](docs/development/research/performance.zh-CN.md).
+- [Architecture and design decisions](docs/development/architecture.md).
 
 ### Changed
 

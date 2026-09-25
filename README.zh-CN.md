@@ -49,13 +49,15 @@ services:
       - /tmp
     stop_grace_period: 35s
     ports:
-      - "127.0.0.1:8080:8080"
+      - "${EDGETTS_BIND_ADDRESS:-127.0.0.1}:${EDGETTS_HOST_PORT:-8080}:8080"
     environment:
       - NODE_ENV=production
       - HOST=0.0.0.0
       - PORT=8080
-      - API_KEY=${API_KEY:?Set API_KEY in .env}
-      - REQUIRE_API_KEY=true
+      - API_KEY
+      - REQUIRE_API_KEY=${REQUIRE_API_KEY:-true}
+      - SPEECH_RATE_LIMIT_MAX
+      - SPEECH_RATE_LIMIT_WINDOW_MS
 ```
 
 生成强随机 API Key 并启动服务：
@@ -75,7 +77,7 @@ curl -i http://127.0.0.1:8080/health
 
 在浏览器中打开 `http://127.0.0.1:8080` 即可直接使用 Web 工作台。
 
-`.env` 只生成一次，升级时保留。`/health` 只确认 HTTP 进程可用。浏览器在本机访问 `http://127.0.0.1:8080`，远程服务器则使用反向代理的 HTTPS 地址，并输入同一个 API Key。执行下方 shell 示例前，用 `set -a; . ./.env; set +a` 导入本地生成的密钥。其他部署方式和升级步骤见[部署指南](docs/deployment.zh-CN.md)。
+`.env` 只生成一次，升级时保留。`/health` 只确认 HTTP 进程可用。浏览器在本机访问 `http://127.0.0.1:8080`，远程服务器则使用反向代理的 HTTPS 地址，并输入同一个 API Key。执行下方 shell 示例前，用 `set -a; . ./.env; set +a` 导入本地生成的密钥。其他部署方式和升级步骤见[部署指南](docs/zh-CN/deployment.md)。
 
 ## 接口调用示例
 
@@ -100,17 +102,17 @@ curl -X POST http://127.0.0.1:8080/api/speech \
 
 ## 详细文档指南
 
-| 文档导航                                               | 内容说明                                                               |
-| :----------------------------------------------------- | :--------------------------------------------------------------------- |
-| [**自托管部署指南**](docs/deployment.zh-CN.md)         | Docker Compose、Docker 单容器、源码编译与 Linux systemd 原生服务部署。 |
-| [**反向代理与 TLS 配置**](docs/reverse-proxy.zh-CN.md) | 生产环境 Nginx 与 Caddy 配置、语音流式无缓冲原则及自动化代理测试。     |
-| [**配置参考手册**](docs/configuration.zh-CN.md)        | 环境变量参考表、认证安全机制、准入限流及并发队列控制。                 |
-| [**API 参考与客户端集成**](docs/api.zh-CN.md)          | 完整端点协议、请求响应结构体、错误代码说明及常见第三方客户端对接。     |
-| [**发布治理与安全供应链**](docs/releasing.md)          | 严格 SemVer 规范、OCI 镜像供应链多架构证明检查及不可变摘要锁定。       |
+| 文档导航                                                  | 内容说明                                                               |
+| :-------------------------------------------------------- | :--------------------------------------------------------------------- |
+| [**自托管部署指南**](docs/zh-CN/deployment.md)            | Docker Compose、Docker 单容器、源码编译与 Linux systemd 原生服务部署。 |
+| [**反向代理与 TLS 配置**](docs/zh-CN/reverse-proxy.md)    | 生产环境 Nginx 与 Caddy 配置、语音流式无缓冲原则及自动化代理测试。     |
+| [**配置参考手册**](docs/zh-CN/configuration.md)           | 环境变量参考表、认证安全机制、准入限流及并发队列控制。                 |
+| [**API 参考与客户端集成**](docs/zh-CN/api.md)             | 完整端点协议、请求响应结构体、错误代码说明及常见第三方客户端对接。     |
+| [**发布治理与安全供应链**](docs/development/releasing.md) | 严格 SemVer 规范、OCI 镜像供应链多架构证明检查及不可变摘要锁定。       |
 
-- [消融实验](docs/ablation.zh-CN.md)
-- [长文本合成性能](docs/performance.zh-CN.md)
-- [架构与设计决策（英文）](docs/architecture.md)
+- [消融实验](docs/development/research/ablation.zh-CN.md)
+- [长文本合成性能](docs/development/research/performance.zh-CN.md)
+- [架构与设计决策（英文）](docs/development/architecture.md)
 - [变更日志（英文）](CHANGELOG.md)
 
 ## 项目架构
@@ -138,6 +140,10 @@ flowchart TD
 - `packages/tts-core`：领域核心抽象与 Provider 端口契约。
 - `packages/edge-provider`：微软 Edge 大声朗读服务 WebSocket 适配器。
 - `packages/shared`：跨包共享的数据校验 Schema、通用类型及 Unicode 码点处理工具。
+- `deploy/`：生产用 Compose 文件、systemd 服务单元与 Nginx 模板，与部署指南保持一致。
+- `docs/`：`en/`、`zh-CN/`、`ja/` 三语用户指南，自动生成的 `openapi.json`，以及 `development/` 开发文档。
+- `tests/`：仓库级检查，覆盖架构边界、文档一致性与发布治理。
+- `scripts/`：发布前检查与消融实验工具。
 
 ## 开源协议
 

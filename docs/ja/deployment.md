@@ -32,7 +32,7 @@
 
 ## 方法 1: Docker Compose ビルド済みイメージデプロイ（推奨）
 
-公開済みのマルチアーキテクチャイメージを、ソースのクローンやビルドなしで実行します。空のディレクトリ（例: `~/edgetts`）に `compose.yaml` を作成します：
+公開済みのマルチアーキテクチャイメージを、ソースのクローンやビルドなしで実行します。空のディレクトリ（例: `~/edgetts`）に `compose.yaml` を作成します。リポジトリの [deploy/compose/compose.yaml](../../deploy/compose/compose.yaml) と同じ内容です：
 
 ```yaml
 services:
@@ -76,7 +76,7 @@ docker compose up -d
 curl --fail http://127.0.0.1:8080/health
 ```
 
-アップグレード時も `.env` は保持してください。`REQUIRE_API_KEY` の既定値は `true` のため、`API_KEY` がないとコンテナは起動を拒否します。同じ `.env` では、ホスト側のバインドに使う `EDGETTS_BIND_ADDRESS` と `EDGETTS_HOST_PORT`（既定値 `127.0.0.1:8080`）、および `SPEECH_RATE_LIMIT_MAX`、`SPEECH_RATE_LIMIT_WINDOW_MS` も設定できます。Compose は `environment` に列挙した変数だけを渡します。[設定リファレンス](configuration.ja.md)にある他の変数（例: `TRUST_PROXY`、`METRICS_ENABLED`）を使う場合は、先にこの一覧へ追加してから `.env` に設定してください。再現性のあるデプロイには、タグをリリースノートのダイジェストに置き換えます（後述）。
+アップグレード時も `.env` は保持してください。`REQUIRE_API_KEY` の既定値は `true` のため、`API_KEY` がないとコンテナは起動を拒否します。同じ `.env` では、ホスト側のバインドに使う `EDGETTS_BIND_ADDRESS` と `EDGETTS_HOST_PORT`（既定値 `127.0.0.1:8080`）、および `SPEECH_RATE_LIMIT_MAX`、`SPEECH_RATE_LIMIT_WINDOW_MS` も設定できます。Compose は `environment` に列挙した変数だけを渡します。[設定リファレンス](configuration.md)にある他の変数（例: `TRUST_PROXY`、`METRICS_ENABLED`）を使う場合は、先にこの一覧へ追加してから `.env` に設定してください。再現性のあるデプロイには、タグをリリースノートのダイジェストに置き換えます（後述）。
 
 ## 方法 2: 単一 Docker コンテナ実行 (`docker run`)
 
@@ -200,7 +200,7 @@ sudo sh -c 'umask 077; set -C; printf "API_KEY=%s\n" "$(openssl rand -hex 32)" >
 
 ### 4. Systemd ユニットファイルの作成
 
-`/etc/systemd/system/edgetts.service` を作成します：
+`/etc/systemd/system/edgetts.service` を作成するか、チェックアウトした [deploy/systemd/edgetts.service](../../deploy/systemd/edgetts.service) をコピーします：
 
 ```ini
 [Unit]

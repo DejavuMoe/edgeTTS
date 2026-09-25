@@ -13,9 +13,10 @@
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
     "lint": "eslint .",
-    "test": "pnpm -r test && pnpm test:architecture && pnpm test:docs && bash scripts/test-release-guard.sh",
-    "test:architecture": "node --test scripts/architecture-boundaries.test.mjs",
-    "test:docs": "node --test scripts/docs-consistency.test.mjs",
+    "test": "pnpm -r test && pnpm test:architecture && pnpm test:docs && pnpm test:release",
+    "test:architecture": "node --test tests/architecture-boundaries.test.mjs",
+    "test:docs": "node --test tests/docs-consistency.test.mjs",
+    "test:release": "bash tests/release-guard.test.sh",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "audit:deps": "pnpm audit --prod --audit-level high"

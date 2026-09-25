@@ -25,7 +25,7 @@ Clients (Browsers / Mobile Apps / OpenAI Clients)
 
 ## Nginx Configuration
 
-Use the [canonical Nginx template](../deploy/nginx/edgetts.conf.example). Replace its domain and certificate paths before enabling it. Keep buffering and caching disabled for both speech routes.
+Use the [canonical Nginx template](../../deploy/nginx/edgetts.conf.example). Replace its domain and certificate paths before enabling it. Keep buffering and caching disabled for both speech routes.
 
 ### Installation Steps (Ubuntu / Debian)
 
@@ -48,7 +48,7 @@ sudo systemctl reload nginx
 
 ### Automated Proxy Test Suite
 
-The repository includes an automated integration test script [`deploy/nginx/test-proxy.sh`](../deploy/nginx/test-proxy.sh). It validates configuration syntax, streaming delivery without buffering, error preservation, and header passthrough:
+The repository includes an automated integration test script [`deploy/nginx/test-proxy.sh`](../../deploy/nginx/test-proxy.sh). It validates configuration syntax, streaming delivery without buffering, error preservation, and header passthrough:
 
 ```bash
 # Deterministic verification mode (no external network needed)

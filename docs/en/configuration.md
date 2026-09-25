@@ -77,7 +77,7 @@ edgeTTS enforces strict in-memory concurrency controls via `TtsService`:
 
 - **Fair Concurrency Allocation**: Long-text segmented requests hold exactly one concurrency permit for their entire sequential streaming lifecycle. This prevents mid-stream queue starvation and maintains audio continuity.
 - **Client Disconnect Cancellation**: If a client closes its connection or aborts the HTTP request, edgeTTS terminates the upstream Microsoft WebSocket session immediately and releases the concurrency permit.
-- **Upstream Connection Reuse**: All segments of one request share a single upstream connection, saving a handshake per segment. If the service closes it between segments, edgeTTS reconnects within the setup timeout. See [long-text performance](performance.zh-CN.md).
+- **Upstream Connection Reuse**: All segments of one request share a single upstream connection, saving a handshake per segment. If the service closes it between segments, edgeTTS reconnects within the setup timeout. See [long-text performance](../development/research/performance.zh-CN.md).
 
 ## Admission Rate Limiting
 

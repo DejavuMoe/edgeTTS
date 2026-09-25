@@ -1,6 +1,6 @@
 # 消融实验
 
-2026-09-22 的历史实验基于业务源码 `22c9b40c97ca441ad447025904f24c3afe4b280c`。Windows 与 Debian WSL2 的 4 个基线和 16 个单因素变体结果一致；完整计数、失败用例与源码哈希保存在 [ablation-results.json](ablation-results.json)。项目架构见 [README](../README.zh-CN.md)。
+2026-09-22 的历史实验基于业务源码 `22c9b40c97ca441ad447025904f24c3afe4b280c`。Windows 与 Debian WSL2 的 4 个基线和 16 个单因素变体结果一致；完整计数、失败用例与源码哈希保存在 [ablation-results.json](ablation-results.json)。项目架构见 [README](../../../README.zh-CN.md)。
 
 ## 方法与边界
 
@@ -48,7 +48,7 @@
 ```bash
 pnpm install --frozen-lockfile
 pnpm build
-node scripts/ablation.mjs
+node scripts/ablation/ablation.mjs
 ```
 
 当前源码已移除冗余 `groupId`，实验入口相应保留 15 个变体。历史 JSON 保留原来的 16 项记录，不随修复改写；复现原始矩阵可使用包含实验工具的提交 `fee658788ecb96c827de470a2a699345465e0273`。

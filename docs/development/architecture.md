@@ -2,7 +2,7 @@
 
 This document explains how a request flows through edgeTTS, which resources it holds, and
 why the main design choices were made. Deployment and API usage are covered in the
-[deployment guide](deployment.md) and the [API reference](api.md).
+[deployment guide](../en/deployment.md) and the [API reference](../en/api.md).
 
 ## Layers
 
@@ -78,7 +78,7 @@ must treat a truncated stream as a failure.
 ### Hold one permit for a whole long-text request
 
 Releasing the permit between segments would let queued requests interleave with a stream in
-progress and stall its audio. The [ablation experiments](ablation.zh-CN.md) confirm that
+progress and stall its audio. The [ablation experiments](research/ablation.zh-CN.md) confirm that
 queued requests are only admitted after the whole session ends.
 
 ### Share one speech budget across both speech routes
@@ -93,7 +93,7 @@ budget, not which routes share it.
 Measured against the live service, each new connection cost about 1.5–2 s. Reusing one
 connection halved long-text delivery time. Prefetching the next segment recovered about
 half of that gain while doubling concurrent upstream connections. See the
-[performance measurements](performance.zh-CN.md).
+[performance measurements](research/performance.zh-CN.md).
 
 ### Reconnect explicitly before each session segment
 

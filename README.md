@@ -49,13 +49,15 @@ services:
       - /tmp
     stop_grace_period: 35s
     ports:
-      - "127.0.0.1:8080:8080"
+      - "${EDGETTS_BIND_ADDRESS:-127.0.0.1}:${EDGETTS_HOST_PORT:-8080}:8080"
     environment:
       - NODE_ENV=production
       - HOST=0.0.0.0
       - PORT=8080
-      - API_KEY=${API_KEY:?Set API_KEY in .env}
-      - REQUIRE_API_KEY=true
+      - API_KEY
+      - REQUIRE_API_KEY=${REQUIRE_API_KEY:-true}
+      - SPEECH_RATE_LIMIT_MAX
+      - SPEECH_RATE_LIMIT_WINDOW_MS
 ```
 
 Generate a secure random API key and start the container:
@@ -75,7 +77,7 @@ Expected response: `HTTP/1.1 200 OK` with `{"status":"ok"}`.
 
 Open `http://127.0.0.1:8080` in your web browser to access the Web Workbench.
 
-Generate `.env` only once and preserve it on upgrades. `/health` confirms the HTTP process, not Microsoft availability. Open `http://127.0.0.1:8080` locally, or your reverse proxy’s HTTPS URL for a remote server, then enter the same API key. Before using the shell API examples, load the locally generated key with `set -a; . ./.env; set +a`. Other deployment methods and upgrades are in the [deployment guide](docs/deployment.md).
+Generate `.env` only once and preserve it on upgrades. `/health` confirms the HTTP process, not Microsoft availability. Open `http://127.0.0.1:8080` locally, or your reverse proxy’s HTTPS URL for a remote server, then enter the same API key. Before using the shell API examples, load the locally generated key with `set -a; . ./.env; set +a`. Other deployment methods and upgrades are in the [deployment guide](docs/en/deployment.md).
 
 ## API Usage at a Glance
 
@@ -100,17 +102,17 @@ curl -X POST http://127.0.0.1:8080/api/speech \
 
 ## Documentation
 
-| Document                                               | Description                                                                         |
-| :----------------------------------------------------- | :---------------------------------------------------------------------------------- |
-| [**Self-Hosted Deployment Guide**](docs/deployment.md) | Docker Compose, single container, source build, and bare-metal systemd setups.      |
-| [**Reverse Proxy & TLS Guide**](docs/reverse-proxy.md) | Production Nginx and Caddy setups, streaming buffer rules, and test scripts.        |
-| [**Configuration Reference**](docs/configuration.md)   | Environment variables, authentication, rate limits, and concurrency queues.         |
-| [**API Reference & Integrations**](docs/api.md)        | Endpoint specifications, schemas, error codes, and third-party client integrations. |
-| [**Release Governance & Security**](docs/releasing.md) | SemVer policies, OCI supply-chain attestations, and immutable digest pinning.       |
+| Document                                                           | Description                                                                         |
+| :----------------------------------------------------------------- | :---------------------------------------------------------------------------------- |
+| [**Self-Hosted Deployment Guide**](docs/en/deployment.md)          | Docker Compose, single container, source build, and bare-metal systemd setups.      |
+| [**Reverse Proxy & TLS Guide**](docs/en/reverse-proxy.md)          | Production Nginx and Caddy setups, streaming buffer rules, and test scripts.        |
+| [**Configuration Reference**](docs/en/configuration.md)            | Environment variables, authentication, rate limits, and concurrency queues.         |
+| [**API Reference & Integrations**](docs/en/api.md)                 | Endpoint specifications, schemas, error codes, and third-party client integrations. |
+| [**Release Governance & Security**](docs/development/releasing.md) | SemVer policies, OCI supply-chain attestations, and immutable digest pinning.       |
 
-- [Ablation results (Chinese)](docs/ablation.zh-CN.md)
-- [Long-text performance (Chinese)](docs/performance.zh-CN.md)
-- [Architecture and design decisions](docs/architecture.md)
+- [Ablation results (Chinese)](docs/development/research/ablation.zh-CN.md)
+- [Long-text performance (Chinese)](docs/development/research/performance.zh-CN.md)
+- [Architecture and design decisions](docs/development/architecture.md)
 - [Changelog](CHANGELOG.md)
 
 ## Architecture
@@ -138,6 +140,10 @@ Solid arrows show the call path; dashed arrows show shared contracts and depende
 - `packages/tts-core`: Domain abstractions and port definitions.
 - `packages/edge-provider`: Microsoft Edge Read Aloud WebSocket provider adapter.
 - `packages/shared`: Shared validation schemas, types, and Unicode text processing utilities.
+- `deploy/`: Production Compose file, systemd unit and Nginx template, kept in sync with the guides.
+- `docs/`: User guides in `en/`, `zh-CN/` and `ja/`, the generated `openapi.json`, and `development/` notes.
+- `tests/`: Repository-level checks for architecture boundaries, documentation and release governance.
+- `scripts/`: Release preflight and ablation tooling.
 
 ## License
 

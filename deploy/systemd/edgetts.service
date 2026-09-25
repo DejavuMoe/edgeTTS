@@ -1,0 +1,35 @@
+# Bare-metal service unit. Documented in docs/*/deployment.md (Method 4); the docs may
+# translate comments, and tests/docs-consistency.test.mjs checks every other line.
+[Unit]
+Description=edgeTTS Speech Synthesis Service
+After=network.target
+
+[Service]
+Type=simple
+User=edgetts
+Group=edgetts
+WorkingDirectory=/opt/edgetts
+ExecStart=/usr/bin/node apps/server/dist/server.js
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=35s
+
+# Environment configuration
+Environment=NODE_ENV=production
+Environment=HOST=127.0.0.1
+Environment=PORT=8080
+Environment=REQUIRE_API_KEY=true
+EnvironmentFile=/etc/edgetts.env
+
+# Security sandbox
+ProtectSystem=strict
+ProtectHome=true
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictNamespaces=true
+CapabilityBoundingSet=
+
+[Install]
+WantedBy=multi-user.target
