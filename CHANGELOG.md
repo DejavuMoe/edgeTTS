@@ -7,6 +7,8 @@ the version being released.
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-09-25
+
 ### Added
 
 - `400 UNKNOWN_VOICE` for voices missing from a fresh cached voice catalog. The check never
@@ -86,7 +88,8 @@ the version being released.
 - First release: an OpenAI-compatible speech API, Edge voice discovery, prosody controls, the
   browser workbench and a container image.
 
-[Unreleased]: https://github.com/DejavuMoe/edgeTTS/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/DejavuMoe/edgeTTS/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/DejavuMoe/edgeTTS/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/DejavuMoe/edgeTTS/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/DejavuMoe/edgeTTS/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/DejavuMoe/edgeTTS/compare/v0.3.0...v0.4.0

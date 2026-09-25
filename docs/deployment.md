@@ -59,7 +59,7 @@ docker run -d \
   -p 127.0.0.1:8080:8080 \
   -e API_KEY="$API_KEY" \
   -e REQUIRE_API_KEY=true \
-  ghcr.io/dejavumoe/edgetts:0.6.0
+  ghcr.io/dejavumoe/edgetts:0.7.0
 ```
 
 ### Security Flags Explained
@@ -80,7 +80,7 @@ Official multi-architecture images support `linux/amd64` and `linux/arm64`.
 
 | Image Tag                                   | Description                                 | Use Case                                  |
 | :------------------------------------------ | :------------------------------------------ | :---------------------------------------- |
-| `ghcr.io/dejavumoe/edgetts:0.6.0`           | Exact stable SemVer release                 | Production standard                       |
+| `ghcr.io/dejavumoe/edgetts:0.7.0`           | Exact stable SemVer release                 | Production standard                       |
 | `ghcr.io/dejavumoe/edgetts:latest`          | Tracks the highest published stable release | Automatic update environments             |
 | `ghcr.io/dejavumoe/edgetts:main`            | Continuous snapshot built from `main`       | Testing latest fixes                      |
 | `ghcr.io/dejavumoe/edgetts@sha256:<digest>` | Content-addressed immutable image           | Mission-critical reproducible deployments |
@@ -195,7 +195,7 @@ sudo systemctl status edgetts
 
 ## Upgrades and Maintenance
 
-First change `image:` in `compose.yaml` to the desired published version or digest. `docker compose pull` only pulls the configured reference; it does not advance a pinned `0.6.0` to another version. Keep `.env` and the previous image reference.
+First change `image:` in `compose.yaml` to the desired published version or digest. `docker compose pull` only pulls the configured reference; it does not advance a pinned `0.7.0` to another version. Keep `.env` and the previous image reference.
 
 ```bash
 cd ~/edgetts

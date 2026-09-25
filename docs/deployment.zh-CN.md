@@ -59,7 +59,7 @@ docker run -d \
   -p 127.0.0.1:8080:8080 \
   -e API_KEY="$API_KEY" \
   -e REQUIRE_API_KEY=true \
-  ghcr.io/dejavumoe/edgetts:0.6.0
+  ghcr.io/dejavumoe/edgetts:0.7.0
 ```
 
 ### 安全参数说明
@@ -80,7 +80,7 @@ docker run -d \
 
 | 镜像标签                                    | 描述                               | 适用场景                 |
 | :------------------------------------------ | :--------------------------------- | :----------------------- |
-| `ghcr.io/dejavumoe/edgetts:0.6.0`           | 严格语义化版本发布标签             | 生产环境常规部署         |
+| `ghcr.io/dejavumoe/edgetts:0.7.0`           | 严格语义化版本发布标签             | 生产环境常规部署         |
 | `ghcr.io/dejavumoe/edgetts:latest`          | 始终指向最新稳定发布版本           | 自动化环境跟踪           |
 | `ghcr.io/dejavumoe/edgetts:main`            | 跟踪 `main` 分支最新构建的代码快照 | 测试最新特性或缺陷修复   |
 | `ghcr.io/dejavumoe/edgetts@sha256:<digest>` | 基于内容寻址的不可变镜像摘要       | 严格可复现的生产基线锁定 |
@@ -195,7 +195,7 @@ sudo systemctl status edgetts
 
 ## 版本更新与日常维护
 
-先将 `compose.yaml` 中的 `image:` 改成要部署的已发布版本或摘要。`docker compose pull` 只拉取配置指定的镜像，不会把固定的 `0.6.0` 自动升级到其他版本。保留 `.env` 和上一版本镜像引用。
+先将 `compose.yaml` 中的 `image:` 改成要部署的已发布版本或摘要。`docker compose pull` 只拉取配置指定的镜像，不会把固定的 `0.7.0` 自动升级到其他版本。保留 `.env` 和上一版本镜像引用。
 
 ```bash
 cd ~/edgetts
