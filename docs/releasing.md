@@ -36,6 +36,18 @@ docker buildx imagetools inspect ghcr.io/dejavumoe/edgetts:X.Y.Z
 docker buildx imagetools inspect ghcr.io/dejavumoe/edgetts:latest
 ```
 
+## Maintain dependencies
+
+CI runs `pnpm audit:deps` and fails on high or critical advisories in production dependencies. No external update service is configured, so review dependencies before releases:
+
+```bash
+pnpm audit --prod          # all advisory levels for runtime dependencies
+pnpm outdated -r           # available updates across the workspace
+pnpm update -r <package>   # update within declared ranges, then run the full validation suite
+```
+
+Major upgrades, the pinned Node.js and pnpm versions (`package.json`, `Dockerfile`, CI) and the pinned GitHub Actions commit SHAs are updated by hand in a dedicated commit. Keep `patches/msedge-tts@2.0.7.patch` in mind when upgrading msedge-tts: remove it only once upstream ignores frames for destroyed streams.
+
 ## Roll back a deployment
 
 Use the recorded digest of a previously verified image. Keep the existing API key and deployment settings. In `compose.yaml`, restore that image reference:
