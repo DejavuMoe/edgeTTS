@@ -33,3 +33,21 @@ export function localeDisplayName(locale: string, uiLocale: string): string | nu
     return null;
   }
 }
+
+/**
+ * A stable hue (0–359) for a voice, so its monogram keeps one colour across sessions. FNV-1a
+ * over the ID spreads neighbouring IDs ("…XiaoxiaoNeural", "…XiaoyiNeural") far apart.
+ */
+export function voiceHue(voiceId: string): number {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < voiceId.length; i++) {
+    hash ^= voiceId.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0) % 360;
+}
+
+/** The monogram letter: the first letter of the short name. */
+export function voiceInitial(voice: Pick<VoiceDto, "displayName">): string {
+  return Array.from(shortVoiceName(voice))[0]?.toLocaleUpperCase() ?? "?";
+}
