@@ -13,6 +13,8 @@ This guide details all HTTP API endpoints, request/response contracts, and clien
 | `POST` | `/api/speech`      | Yes (when enabled) | Native segmented long-text streaming synthesis       |
 | `GET`  | `/api/metrics`     | Yes (when enabled) | Prometheus metrics, only when `METRICS_ENABLED=true` |
 
+The machine-readable [OpenAPI 3 description](openapi.json) is generated from the validation schemas.
+
 ## Authentication
 
 When `API_KEY` is configured, requests must include the API key in the standard `Authorization` header:

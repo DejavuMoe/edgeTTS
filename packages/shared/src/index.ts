@@ -39,11 +39,28 @@ export const VoiceIdSchema = z
   .string()
   .min(1, "Voice must not be empty")
   .max(MAX_VOICE_ID_LENGTH, `Voice must not exceed ${MAX_VOICE_ID_LENGTH} characters`)
-  .regex(VOICE_ID_REGEX, "Voice identifier contains invalid characters");
+  .regex(VOICE_ID_REGEX, "Voice identifier contains invalid characters")
+  .describe("Edge voice ID, as listed by GET /api/voices.");
+
+/**
+ * A finite number within [min, max]. Native constraints (not a refinement) so that generated
+ * JSON Schema carries the bounds.
+ */
+function boundedNumber(min: number, max: number, message: string) {
+  return z.number().finite({ message }).min(min, { message }).max(max, { message });
+}
+
+const SpeedSchema = boundedNumber(
+  0.5,
+  2.0,
+  "Speed must be a finite number between 0.5 and 2.0",
+).describe("Speaking rate multiplier; 1 is normal speed.");
 
 export const SpeechRequestSchema = z
   .object({
-    model: z.enum(["tts-1", "tts-1-hd"]),
+    model: z
+      .enum(["tts-1", "tts-1-hd"])
+      .describe("tts-1 selects 48 kbps MP3 and tts-1-hd 96 kbps MP3 from Edge, not OpenAI models."),
     voice: VoiceIdSchema,
     input: z
       .string()
@@ -54,14 +71,13 @@ export const SpeechRequestSchema = z
       })
       .refine(isValidXmlText, {
         message: "Input contains characters not supported by XML",
-      }),
-    response_format: z.literal("mp3").optional(),
-    speed: z
-      .number()
-      .refine((val) => Number.isFinite(val) && val >= 0.5 && val <= 2.0, {
-        message: "Speed must be a finite number between 0.5 and 2.0",
       })
-      .optional(),
+      .describe(
+        "Text to synthesize: at most 4,096 UTF-16 code units, not whitespace-only, " +
+          "and only characters allowed in XML.",
+      ),
+    response_format: z.literal("mp3").optional().describe("Only mp3 is supported."),
+    speed: SpeedSchema.optional(),
   })
   .strict();
 
@@ -99,26 +115,26 @@ export const NativeSpeechRequestSchema = z
       })
       .refine((val) => countCodePoints(val) <= MAX_NATIVE_INPUT_CODE_POINTS, {
         message: `Input must not exceed ${MAX_NATIVE_INPUT_CODE_POINTS} code points`,
-      }),
+      })
+      .describe(
+        `Text to synthesize: at most ${MAX_NATIVE_INPUT_CODE_POINTS.toLocaleString("en-US")} ` +
+          "Unicode code points, not whitespace-only, and only characters allowed in XML.",
+      ),
     voice: VoiceIdSchema,
-    quality: z.enum(["standard", "high"]).optional(),
-    speed: z
-      .number()
-      .refine((val) => Number.isFinite(val) && val >= 0.5 && val <= 2.0, {
-        message: "Speed must be a finite number between 0.5 and 2.0",
-      })
+    quality: z
+      .enum(["standard", "high"])
+      .optional()
+      .describe("standard: 48 kbps MP3 (default); high: 96 kbps MP3."),
+    speed: SpeedSchema.optional(),
+    pitchSemitones: boundedNumber(
+      -12,
+      12,
+      "Pitch must be a finite number between -12 and 12 semitones",
+    )
+      .describe("Pitch shift in semitones; 0 keeps the voice's pitch.")
       .optional(),
-    pitchSemitones: z
-      .number()
-      .refine((val) => Number.isFinite(val) && val >= -12 && val <= 12, {
-        message: "Pitch must be a finite number between -12 and 12 semitones",
-      })
-      .optional(),
-    volume: z
-      .number()
-      .refine((val) => Number.isFinite(val) && val >= 0 && val <= 1, {
-        message: "Volume must be a finite number between 0 and 1",
-      })
+    volume: boundedNumber(0, 1, "Volume must be a finite number between 0 and 1")
+      .describe("Output volume from 0 (silent) to 1 (full).")
       .optional(),
   })
   .strict();

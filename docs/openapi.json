@@ -1,0 +1,554 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "edgeTTS API",
+    "version": "0.6.0",
+    "description": "Self-hosted Microsoft Edge speech synthesis. Errors before audio headers use the ApiError shape; failures after streaming starts terminate the connection.",
+    "license": {
+      "name": "MIT"
+    }
+  },
+  "servers": [
+    {
+      "url": "http://127.0.0.1:8080"
+    }
+  ],
+  "paths": {
+    "/v1/audio/speech": {
+      "post": {
+        "summary": "OpenAI-compatible speech synthesis",
+        "operationId": "createSpeechOpenAi",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SpeechRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "MP3 audio, streamed while it is synthesized.",
+            "content": {
+              "audio/mpeg": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "INVALID_REQUEST (validation failed) or UNKNOWN_VOICE (voice not in the catalog).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UNAUTHORIZED: missing or invalid API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "PAYLOAD_TOO_LARGE: request body above 262144 bytes.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "UNSUPPORTED_MEDIA_TYPE: the body must be application/json.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "RATE_LIMITED: speech admission quota exceeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "UPSTREAM_ERROR: the upstream service failed before audio started.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "SERVER_BUSY: queue full, or queued longer than 30 seconds.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/speech": {
+      "post": {
+        "summary": "Native long-text streaming synthesis",
+        "description": "Text is split into segments of at most 300 code points and streamed as one MP3.",
+        "operationId": "createSpeech",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NativeSpeechRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "MP3 audio, streamed while it is synthesized.",
+            "content": {
+              "audio/mpeg": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            },
+            "headers": {
+              "X-EdgeTTS-Segment-Count": {
+                "description": "Number of synthesized segments.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              },
+              "X-EdgeTTS-Segment-Max-Code-Points": {
+                "description": "Maximum code points per segment.",
+                "schema": {
+                  "type": "integer",
+                  "enum": [
+                    300
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "INVALID_REQUEST (validation failed) or UNKNOWN_VOICE (voice not in the catalog).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UNAUTHORIZED: missing or invalid API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "PAYLOAD_TOO_LARGE: request body above 262144 bytes.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "UNSUPPORTED_MEDIA_TYPE: the body must be application/json.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "RATE_LIMITED: speech admission quota exceeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "UPSTREAM_ERROR: the upstream service failed before audio started.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "SERVER_BUSY: queue full, or queued longer than 30 seconds.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/voices": {
+      "get": {
+        "summary": "List available voices",
+        "operationId": "listVoices",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Voice catalog.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoicesResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UNAUTHORIZED: missing or invalid API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "RATE_LIMITED: voice discovery quota exceeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "UPSTREAM_ERROR: the voice catalog could not be retrieved.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "summary": "Process liveness; does not contact the upstream service",
+        "operationId": "health",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "The HTTP process is running.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/health": {
+      "get": {
+        "summary": "Process liveness under the /api prefix",
+        "operationId": "apiHealth",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "The HTTP process is running.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/metrics": {
+      "get": {
+        "summary": "Prometheus metrics, only when METRICS_ENABLED=true",
+        "operationId": "metrics",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Prometheus text exposition format 0.0.4.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UNAUTHORIZED: missing or invalid API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Required when the server has an API_KEY configured."
+      }
+    },
+    "schemas": {
+      "SpeechRequest": {
+        "type": "object",
+        "properties": {
+          "model": {
+            "type": "string",
+            "enum": [
+              "tts-1",
+              "tts-1-hd"
+            ],
+            "description": "tts-1 selects 48 kbps MP3 and tts-1-hd 96 kbps MP3 from Edge, not OpenAI models."
+          },
+          "voice": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "Edge voice ID, as listed by GET /api/voices."
+          },
+          "input": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096,
+            "description": "Text to synthesize: at most 4,096 UTF-16 code units, not whitespace-only, and only characters allowed in XML."
+          },
+          "response_format": {
+            "type": "string",
+            "enum": [
+              "mp3"
+            ],
+            "description": "Only mp3 is supported."
+          },
+          "speed": {
+            "type": "number",
+            "minimum": 0.5,
+            "maximum": 2,
+            "description": "Speaking rate multiplier; 1 is normal speed."
+          }
+        },
+        "required": [
+          "model",
+          "voice",
+          "input"
+        ],
+        "additionalProperties": false
+      },
+      "NativeSpeechRequest": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string",
+            "description": "Text to synthesize: at most 20,000 Unicode code points, not whitespace-only, and only characters allowed in XML."
+          },
+          "voice": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "Edge voice ID, as listed by GET /api/voices."
+          },
+          "quality": {
+            "type": "string",
+            "enum": [
+              "standard",
+              "high"
+            ],
+            "description": "standard: 48 kbps MP3 (default); high: 96 kbps MP3."
+          },
+          "speed": {
+            "type": "number",
+            "minimum": 0.5,
+            "maximum": 2,
+            "description": "Speaking rate multiplier; 1 is normal speed."
+          },
+          "pitchSemitones": {
+            "type": "number",
+            "minimum": -12,
+            "maximum": 12,
+            "description": "Pitch shift in semitones; 0 keeps the voice's pitch."
+          },
+          "volume": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "description": "Output volume from 0 (silent) to 1 (full)."
+          }
+        },
+        "required": [
+          "input",
+          "voice"
+        ],
+        "additionalProperties": false
+      },
+      "VoicesResponse": {
+        "type": "object",
+        "properties": {
+          "voices": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "displayName": {
+                  "type": "string"
+                },
+                "locale": {
+                  "type": "string"
+                },
+                "gender": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string"
+                },
+                "suggestedCodec": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "displayName",
+                "locale",
+                "gender"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "voices"
+        ],
+        "additionalProperties": false
+      },
+      "HealthResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok"
+            ]
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "ApiError": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "message"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "additionalProperties": false
+      }
+    }
+  }
+}

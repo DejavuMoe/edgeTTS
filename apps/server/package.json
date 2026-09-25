@@ -13,7 +13,8 @@
     "start": "node dist/server.js",
     "typecheck": "tsc -p tsconfig.test.json --noEmit",
     "test": "vitest run",
-    "smoke": "tsx scripts/smoke.ts"
+    "smoke": "tsx scripts/smoke.ts",
+    "openapi": "tsx scripts/openapi.ts"
   },
   "dependencies": {
     "@edgetts/edge-provider": "workspace:*",
@@ -28,6 +29,7 @@
     "@types/node": "^24.13.6",
     "tsx": "^4.19.3",
     "typescript": "^5.8.2",
-    "vitest": "^4.1.11"
+    "vitest": "^4.1.11",
+    "zod-to-json-schema": "^3.25.2"
   }
 }
