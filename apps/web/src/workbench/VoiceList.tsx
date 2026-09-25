@@ -3,6 +3,7 @@ import type { KeyboardEvent } from "react";
 import { useI18n } from "../i18n.js";
 import { formatVoiceGender, type VoiceGroup } from "../lib/voice-catalog.js";
 import { localeDisplayName, shortVoiceName } from "../lib/voice-names.js";
+import { VoiceAvatar } from "./VoiceAvatar.js";
 
 export interface VoiceListProps {
   readonly groups: readonly VoiceGroup[];
@@ -129,6 +130,7 @@ export const VoiceList = forwardRef<HTMLDivElement | null, VoiceListProps>(funct
                       listRef.current?.focus();
                     }}
                   >
+                    <VoiceAvatar voice={voice} />
                     <span className="voice-option-name">{shortVoiceName(voice)}</span>
                     <span className="voice-option-meta">
                       {/* A locale group already names the locale; favorites mix them. */}

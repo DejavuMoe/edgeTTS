@@ -5,6 +5,7 @@ import { formatVoiceGender } from "../lib/voice-catalog.js";
 import { localeDisplayName, shortVoiceName } from "../lib/voice-names.js";
 import { Checkbox, Select } from "../ui/index.js";
 import type { useVoiceFilters } from "./useVoiceFilters.js";
+import { VoiceAvatar } from "./VoiceAvatar.js";
 import { VoiceList } from "./VoiceList.js";
 
 export interface VoicePickerProps {
@@ -66,6 +67,7 @@ export function VoicePicker({
 
       {activeVoice && (
         <div className="voice-current" aria-label={t("当前声音详情")}>
+          <VoiceAvatar voice={activeVoice} size="large" />
           <div className="voice-current-text" title={activeVoice.displayName}>
             <span className="voice-current-name">{shortVoiceName(activeVoice)}</span>
             <span className="voice-current-meta">

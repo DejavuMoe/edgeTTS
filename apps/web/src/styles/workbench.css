@@ -22,9 +22,18 @@
 }
 
 .brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   font-size: 15px;
   font-weight: 600;
   letter-spacing: -0.01em;
+}
+
+.brand-mark {
+  width: 18px;
+  height: 18px;
+  fill: var(--accent);
 }
 
 .brand-accent {
@@ -303,7 +312,7 @@
 
 .voice-current {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 12px;
   padding: 10px 12px;
@@ -444,10 +453,9 @@
 
 .voice-option {
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 6px 12px;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 12px;
   line-height: 20px;
   cursor: pointer;
 }
@@ -478,6 +486,8 @@
 }
 
 .voice-option-name {
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
   font-size: 13.5px;
   text-overflow: ellipsis;
@@ -488,6 +498,48 @@
   flex: none;
   color: var(--ink-3);
   font-size: 12px;
+}
+
+/*
+ * Voice monograms. Every voice keeps one hue (hashed from its ID), so the list reads as a cast
+ * of speakers rather than a column of names. Lightness is fixed per scheme, which keeps every
+ * hue at the same contrast.
+ */
+.voice-avatar {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: oklch(0.92 0.045 var(--hue));
+  color: oklch(0.4 0.09 var(--hue));
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.voice-avatar-large {
+  width: 40px;
+  height: 40px;
+  font-size: 16px;
+}
+
+.voice-option[aria-selected="true"] .voice-avatar {
+  background: oklch(0.4 0.09 var(--hue));
+  color: oklch(0.97 0.02 var(--hue));
+}
+
+@media (prefers-color-scheme: dark) {
+  .voice-avatar {
+    background: oklch(0.34 0.06 var(--hue));
+    color: oklch(0.88 0.07 var(--hue));
+  }
+
+  .voice-option[aria-selected="true"] .voice-avatar {
+    background: oklch(0.8 0.09 var(--hue));
+    color: oklch(0.25 0.05 var(--hue));
+  }
 }
 
 /* Authentication */
@@ -586,11 +638,11 @@
   grid-area: result;
   flex-direction: column;
   justify-content: center;
-  gap: 8px;
-  min-height: 88px;
-  padding: 12px var(--sheet-inset);
+  gap: 10px;
+  min-height: 96px;
+  padding: 14px var(--sheet-inset) 18px;
   border-top: 1px solid var(--rule);
-  background: var(--paper);
+  background: var(--sheet);
 }
 
 .result-status {
@@ -612,15 +664,51 @@
   animation: pulse 1.4s ease-in-out infinite;
 }
 
-.result-track {
-  padding: 10px 12px 10px 10px;
-  border: 1px solid var(--rule);
-  border-radius: var(--radius-m);
-  background: var(--sheet);
-}
-
+/* The take shares the text's column: its edges are the text's edges. */
 .result-track .control-slider {
   --surface: var(--sheet);
+}
+
+/*
+ * Until the first audio arrives, bars rise and fall in the accent colour: the voice forming.
+ * Heights vary by position so the row reads as speech, not as a loading bar.
+ */
+.result-live {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 40px;
+  overflow: hidden;
+}
+
+.result-live span {
+  flex: 0 1 2px;
+  min-width: 1px;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--accent);
+  opacity: 0.55;
+  transform: scaleY(0.12);
+  animation: voice-forming 1.3s ease-in-out infinite;
+}
+
+.result-live span:nth-child(3n) {
+  animation-duration: 1.05s;
+}
+
+.result-live span:nth-child(4n + 1) {
+  animation-duration: 1.55s;
+}
+
+@keyframes voice-forming {
+  0%,
+  100% {
+    transform: scaleY(0.12);
+  }
+
+  50% {
+    transform: scaleY(0.9);
+  }
 }
 
 .result-metadata {

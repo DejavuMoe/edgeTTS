@@ -16,10 +16,51 @@ export interface AudioPlayerProps {
   "aria-label"?: string;
   /** What is playing, shown above the timeline, e.g. the voice and its settings. */
   children?: React.ReactNode;
+  /** Loudness per bar (0..1). When present the timeline is drawn as the take's waveform. */
+  peaks?: readonly number[] | null | undefined;
+}
+
+const BAR_PITCH = 3;
+const BAR_WIDTH = 2;
+const WAVE_HEIGHT = 40;
+
+/** One SVG of rounded bars, mirrored around the centre line like a recorder's level trace. */
+function WaveformBars({
+  peaks,
+  className,
+  style,
+}: {
+  peaks: readonly number[];
+  className: string;
+  style?: React.CSSProperties;
+}) {
+  return (
+    <svg
+      className={className}
+      style={style}
+      viewBox={`0 0 ${peaks.length * BAR_PITCH} ${WAVE_HEIGHT}`}
+      preserveAspectRatio="none"
+      aria-hidden="true"
+    >
+      {peaks.map((peak, index) => {
+        const height = Math.max(2, peak * WAVE_HEIGHT);
+        return (
+          <rect
+            key={index}
+            x={index * BAR_PITCH}
+            y={(WAVE_HEIGHT - height) / 2}
+            width={BAR_WIDTH}
+            height={height}
+            rx={1}
+          />
+        );
+      })}
+    </svg>
+  );
 }
 
 export const AudioPlayer = forwardRef<HTMLAudioElement, AudioPlayerProps>(function AudioPlayer(
-  { src, downloadUrl, downloadFilename, className = "", "aria-label": ariaLabel, children },
+  { src, downloadUrl, downloadFilename, className = "", "aria-label": ariaLabel, children, peaks },
   ref,
 ) {
   const { t } = useI18n();
@@ -100,6 +141,14 @@ export const AudioPlayer = forwardRef<HTMLAudioElement, AudioPlayerProps>(functi
   };
 
   const isDurationFinite = Number.isFinite(duration) && duration > 0;
+
+  // Where a click on the waveform would seek to, shown while the pointer is over it.
+  const [hoverRatio, setHoverRatio] = useState<number | null>(null);
+  const trackHover = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.pointerType !== "mouse") return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    setHoverRatio(Math.min(1, Math.max(0, (e.clientX - rect.left) / (rect.width || 1))));
+  };
   const progressPercent = isDurationFinite
     ? Math.min(100, Math.max(0, (currentTime / duration) * 100))
     : 0;
@@ -149,7 +198,31 @@ export const AudioPlayer = forwardRef<HTMLAudioElement, AudioPlayerProps>(functi
               {formatTime(currentTime)} / {formatTime(duration)}
             </span>
           </div>
-          <div className="ui-audio-seek-wrap">
+          <div
+            className={`ui-audio-seek-wrap ${peaks?.length ? "has-waveform" : ""}`}
+            onPointerMove={peaks?.length ? trackHover : undefined}
+            onPointerLeave={() => setHoverRatio(null)}
+          >
+            {peaks?.length && hoverRatio !== null && isDurationFinite ? (
+              <span
+                className="waveform-hover"
+                style={{ left: `${hoverRatio * 100}%` }}
+                aria-hidden="true"
+              >
+                <span className="waveform-hover-time">{formatTime(hoverRatio * duration)}</span>
+              </span>
+            ) : null}
+            {peaks?.length ? (
+              <>
+                <WaveformBars peaks={peaks} className="waveform waveform-rest" />
+                <WaveformBars
+                  peaks={peaks}
+                  className="waveform waveform-played"
+                  // Only the played part of the accent copy shows.
+                  style={{ clipPath: `inset(0 ${100 - progressPercent}% 0 0)` }}
+                />
+              </>
+            ) : null}
             <input
               type="range"
               className="control-slider ui-audio-seek-slider"

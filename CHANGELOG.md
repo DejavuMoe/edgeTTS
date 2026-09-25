@@ -7,6 +7,16 @@ the version being released.
 
 ## [Unreleased]
 
+### Added
+
+- The finished take is drawn as its own waveform, decoded locally in the browser, with the played
+  part in the accent colour and a time readout under the pointer. Seeking still uses the native
+  slider, so keyboard, touch and screen readers work as before. Takes the browser cannot decode,
+  or above 12 MiB, keep the plain timeline.
+- While a take is synthesizing, a row of rising bars shows the voice forming until audio arrives.
+- Every voice has a monogram in its own stable colour in the list and the current-voice card.
+- A brand mark in the header.
+
 ### Changed
 
 - The web workbench follows the order the work happens. The synthesize action ends the text, next

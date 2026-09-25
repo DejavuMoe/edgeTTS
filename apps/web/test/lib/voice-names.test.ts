@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { localeDisplayName, shortVoiceName } from "../../src/lib/voice-names.js";
+import {
+  localeDisplayName,
+  shortVoiceName,
+  voiceHue,
+  voiceInitial,
+} from "../../src/lib/voice-names.js";
 
 describe("shortVoiceName", () => {
   it.each([
@@ -30,5 +35,22 @@ describe("localeDisplayName", () => {
 
   it("returns null for invalid locales", () => {
     expect(localeDisplayName("not a locale", "en")).toBeNull();
+  });
+});
+
+describe("voice monograms", () => {
+  it("gives each voice a stable hue in range and spreads similar IDs apart", () => {
+    const a = voiceHue("zh-CN-XiaoxiaoNeural");
+    expect(voiceHue("zh-CN-XiaoxiaoNeural")).toBe(a);
+    expect(a).toBeGreaterThanOrEqual(0);
+    expect(a).toBeLessThan(360);
+    expect(Math.abs(a - voiceHue("zh-CN-XiaoyiNeural"))).toBeGreaterThan(5);
+  });
+
+  it("uses the first letter of the short name", () => {
+    expect(voiceInitial({ displayName: "Microsoft Xiaoxiao Online (Natural) - Chinese" })).toBe(
+      "X",
+    );
+    expect(voiceInitial({ displayName: "ana" })).toBe("A");
   });
 });

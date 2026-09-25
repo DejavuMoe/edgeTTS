@@ -540,8 +540,8 @@
 }
 
 .ui-audio-play-btn {
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
   border-color: var(--ink);
   background: var(--ink);
   color: var(--sheet);
@@ -585,7 +585,81 @@
 }
 
 .ui-audio-seek-wrap {
+  position: relative;
   display: flex;
+  align-items: center;
+  height: 40px;
+}
+
+/*
+ * Waveform timeline: the take's own loudness drawn twice, muted and in the accent colour, with
+ * the accent copy clipped to the playhead. The native range input stays on top, transparent, so
+ * pointer, touch, keyboard and screen readers seek exactly as before.
+ */
+.waveform {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.waveform-rest {
+  fill: var(--rule-strong);
+}
+
+.waveform-played {
+  fill: var(--accent);
+  transition: clip-path 250ms linear;
+}
+
+.waveform-hover {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  width: 1px;
+  background: var(--ink);
+  pointer-events: none;
+}
+
+.waveform-hover-time {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  margin-bottom: 4px;
+  padding: 1px 6px;
+  border-radius: var(--radius-s);
+  background: var(--ink);
+  color: var(--sheet);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  line-height: 16px;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+.has-waveform .control-slider {
+  position: relative;
+  z-index: 1;
+  height: 100%;
+  cursor: pointer;
+  opacity: 0;
+}
+
+.has-waveform:has(.control-slider:focus-visible) {
+  border-radius: var(--radius-s);
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 4px;
+}
+
+.has-waveform {
+  animation: waveform-in 240ms ease-out;
+}
+
+@keyframes waveform-in {
+  from {
+    opacity: 0;
+  }
 }
 
 .btn-download {

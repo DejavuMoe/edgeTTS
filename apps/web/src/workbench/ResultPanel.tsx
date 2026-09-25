@@ -1,9 +1,13 @@
+import { useWaveform } from "../audio/useWaveform.js";
 import { useI18n } from "../i18n.js";
 import { formatResultMetadataDisplay, formatResultSummary } from "../lib/result-metadata.js";
 import { formatGeneratingStatusText } from "../lib/synthesis-telemetry.js";
 import { shortVoiceName } from "../lib/voice-names.js";
 import { AudioPlayer } from "../ui/index.js";
 import type { useSynthesis } from "./useSynthesis.js";
+
+/** Bars of the "voice forming" animation shown until the first audio arrives. */
+const LIVE_BARS = 160;
 
 export interface ResultPanelProps {
   readonly synthesis: ReturnType<typeof useSynthesis>;
@@ -17,6 +21,7 @@ export interface ResultPanelProps {
 export function ResultPanel({ synthesis }: ResultPanelProps) {
   const { locale, t } = useI18n();
   const { isGenerating, telemetry, error, audioSrc, downloadUrl, completedResult } = synthesis;
+  const peaks = useWaveform(completedResult ? downloadUrl : null);
 
   if (!isGenerating && !error && !audioSrc) return null;
 
@@ -35,6 +40,14 @@ export function ResultPanel({ synthesis }: ResultPanelProps) {
         </span>
       )}
 
+      {isGenerating && !audioSrc && (
+        <div className="result-live" aria-hidden="true">
+          {Array.from({ length: LIVE_BARS }, (_, index) => (
+            <span key={index} style={{ animationDelay: `${((index * 7) % 13) * -95}ms` }} />
+          ))}
+        </div>
+      )}
+
       {error && (
         <div className="inline-alert generation-error" role="alert">
           {t(error)}
@@ -49,6 +62,7 @@ export function ResultPanel({ synthesis }: ResultPanelProps) {
           downloadFilename={completedResult?.filename}
           aria-label={t("语音合成播放器")}
           className="result-track"
+          peaks={peaks}
         >
           {completedResult && (
             <div
