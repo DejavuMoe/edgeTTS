@@ -7,7 +7,7 @@ import {
   createCompletedResultMeta,
   formatResultMetadataDisplay,
   type GenerationSnapshot,
-} from "../src/result-metadata.js";
+} from "../../src/lib/result-metadata.js";
 
 describe("Download & Result Metadata (apps/web/src/result-metadata.ts)", () => {
   const testDate = new Date(2026, 8, 14, 15, 45, 30); // 2026-09-14 15:45:30 local

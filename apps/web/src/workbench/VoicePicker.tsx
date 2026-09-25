@@ -1,9 +1,11 @@
-import { useId } from "react";
+import { useId, useRef } from "react";
 import type { VoiceDto } from "@edgetts/shared";
 import { type MessageKey, useI18n } from "../i18n.js";
+import { formatVoiceGender } from "../lib/voice-catalog.js";
+import { localeDisplayName, shortVoiceName } from "../lib/voice-names.js";
 import { Checkbox, Select } from "../ui/index.js";
-import { formatVoiceGender } from "../voice-catalog.js";
 import type { useVoiceFilters } from "./useVoiceFilters.js";
+import { VoiceList } from "./VoiceList.js";
 
 export interface VoicePickerProps {
   readonly voices: readonly VoiceDto[];
@@ -12,6 +14,20 @@ export interface VoicePickerProps {
   readonly onSelectVoice: (voiceId: string) => void;
   readonly filters: ReturnType<typeof useVoiceFilters>;
   readonly disabled: boolean;
+}
+
+function StarIcon({ filled }: { readonly filled: boolean }) {
+  return (
+    <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+      <path
+        d="M8 1.6l1.9 3.9 4.3.6-3.1 3 .7 4.3L8 11.4l-3.8 2 .7-4.3-3.1-3 4.3-.6z"
+        fill={filled ? "currentColor" : "none"}
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
 }
 
 export function VoicePicker({
@@ -23,56 +39,24 @@ export function VoicePicker({
   disabled,
 }: VoicePickerProps) {
   const { locale, t } = useI18n();
-  const voiceSearchId = useId();
+  const titleId = useId();
+  const searchId = useId();
   const localeSelectId = useId();
-  const favoriteOnlyCheckboxId = useId();
-  const voiceSelectId = useId();
+  const favoriteOnlyId = useId();
+  const listRef = useRef<HTMLDivElement | null>(null);
 
   const activeVoice = voices.find((v) => v.id === selectedVoiceId);
-  const voiceCountLabel = t("选择声音 ({count})", { count: filters.filteredVoices.length });
+  const favorite = filters.isSelectedVoiceFavorite;
+  const noCatalog = voices.length === 0;
 
   return (
-    <>
-      {/* Voice Search & Locale Filter */}
-      <div className="voice-filter-row">
-        <div className="control-group search-group">
-          <label htmlFor={voiceSearchId} className="control-label">
-            {t("搜索声音")}
-          </label>
-          <input
-            id={voiceSearchId}
-            type="search"
-            className="control-input"
-            aria-describedby={`${voiceSearchId}-hint`}
-            placeholder={t("搜索...")}
-            value={filters.search}
-            onChange={(e) => filters.setSearch(e.target.value)}
-            disabled={disabled || voices.length === 0}
-          />
-          <span id={`${voiceSearchId}-hint`} className="control-hint">
-            {t("按名称、ID、语言或性别过滤")}
-          </span>
-        </div>
-
-        <div className="control-group locale-group">
-          <label htmlFor={localeSelectId} className="control-label">
-            {t("地区 / Locale")}
-          </label>
-          <Select
-            id={localeSelectId}
-            value={filters.locale}
-            onChange={filters.setLocale}
-            options={filters.localeSelectOptions}
-            disabled={disabled || voices.length === 0}
-            aria-label={t("地区 / Locale")}
-          />
-        </div>
-      </div>
-
-      {/* Favorite Only Filter */}
-      <div className="favorite-filter-row">
+    <section className="inspector-section voice-section" aria-labelledby={titleId}>
+      <div className="section-header">
+        <h2 id={titleId} className="section-title">
+          {t("声音")}
+        </h2>
         <Checkbox
-          id={favoriteOnlyCheckboxId}
+          id={favoriteOnlyId}
           checked={filters.favoriteOnly}
           onChange={filters.setFavoriteOnly}
           disabled={disabled || filters.totalFavoritesInCatalog === 0}
@@ -80,56 +64,91 @@ export function VoicePicker({
         />
       </div>
 
-      {/* Voice Selection */}
-      <div className="control-group">
-        <label htmlFor={voiceSelectId} className="control-label">
-          {voiceCountLabel}
-        </label>
-        {voiceError ? (
-          <div className="control-error" role="alert">
-            {t(voiceError)}
+      {activeVoice && (
+        <div className="voice-current" aria-label={t("当前声音详情")}>
+          <div className="voice-current-text" title={activeVoice.displayName}>
+            <span className="voice-current-name">{shortVoiceName(activeVoice)}</span>
+            <span className="voice-current-meta">
+              {localeDisplayName(activeVoice.locale, locale) ?? activeVoice.locale} ·{" "}
+              {formatVoiceGender(activeVoice.gender, locale)}
+            </span>
+            <span className="voice-current-id">{activeVoice.id}</span>
           </div>
-        ) : (
-          <Select
-            id={voiceSelectId}
-            value={filters.isSelectedVoiceVisible ? selectedVoiceId : ""}
-            onChange={(newVoice) => {
-              if (newVoice) {
-                onSelectVoice(newVoice);
+          <button
+            type="button"
+            className={`btn-favorite ${favorite ? "is-favorite" : ""}`}
+            onClick={filters.toggleSelectedFavorite}
+            disabled={disabled}
+            aria-pressed={favorite}
+            aria-label={favorite ? t("取消收藏当前声音") : t("收藏当前声音")}
+          >
+            <StarIcon filled={favorite} />
+            <span>{favorite ? t("已收藏") : t("加入收藏")}</span>
+          </button>
+        </div>
+      )}
+
+      <div className="voice-filters">
+        <div className="field field-search">
+          <label htmlFor={searchId} className="visually-hidden">
+            {t("搜索声音")}
+          </label>
+          <input
+            id={searchId}
+            type="search"
+            className="control-input"
+            aria-describedby={`${searchId}-hint`}
+            placeholder={t("搜索...")}
+            value={filters.search}
+            onChange={(e) => filters.setSearch(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "ArrowDown") {
+                e.preventDefault();
+                listRef.current?.focus();
               }
             }}
-            options={filters.voicePlaceholderOptions}
-            groups={filters.filteredVoices.length > 0 ? filters.voiceSelectGroups : undefined}
-            disabled={disabled || filters.filteredVoices.length === 0}
-            aria-label={voiceCountLabel}
+            disabled={disabled || noCatalog}
           />
-        )}
-
-        {/* Current Voice Details & Favorite Action */}
-        {activeVoice && (
-          <div className="current-voice-details" aria-label={t("当前声音详情")}>
-            <div className="current-voice-meta">
-              <span className="current-voice-title">
-                {activeVoice.displayName} · {activeVoice.locale} ·{" "}
-                {formatVoiceGender(activeVoice.gender, locale)}
-              </span>
-              <span className="current-voice-id">{activeVoice.id}</span>
-            </div>
-            <button
-              type="button"
-              className={`btn-favorite ${filters.isSelectedVoiceFavorite ? "is-favorite" : ""}`}
-              onClick={filters.toggleSelectedFavorite}
-              disabled={disabled || !selectedVoiceId}
-              aria-pressed={filters.isSelectedVoiceFavorite}
-              aria-label={
-                filters.isSelectedVoiceFavorite ? t("取消收藏当前声音") : t("收藏当前声音")
-              }
-            >
-              {filters.isSelectedVoiceFavorite ? t("★ 已收藏") : t("☆ 收藏")}
-            </button>
-          </div>
-        )}
+          <span id={`${searchId}-hint`} className="visually-hidden">
+            {t("按名称、ID、语言或性别过滤")}
+          </span>
+        </div>
+        <div className="field field-locale">
+          <label htmlFor={localeSelectId} className="visually-hidden">
+            {t("地区 / Locale")}
+          </label>
+          <Select
+            id={localeSelectId}
+            value={filters.locale}
+            onChange={filters.setLocale}
+            options={filters.localeSelectOptions}
+            disabled={disabled || noCatalog}
+            aria-label={t("地区 / Locale")}
+          />
+        </div>
       </div>
-    </>
+
+      {filters.hiddenSelectionNotice && (
+        <p className="voice-notice" role="status">
+          {filters.hiddenSelectionNotice}
+        </p>
+      )}
+
+      {voiceError ? (
+        <div className="inline-alert" role="alert">
+          {t(voiceError)}
+        </div>
+      ) : (
+        <VoiceList
+          ref={listRef}
+          groups={filters.voiceGroups}
+          selectedVoiceId={selectedVoiceId}
+          onSelect={onSelectVoice}
+          aria-label={t("选择声音 ({count})", { count: filters.filteredVoices.length })}
+          disabled={disabled}
+          emptyMessage={filters.emptyMessage}
+        />
+      )}
+    </section>
   );
 }

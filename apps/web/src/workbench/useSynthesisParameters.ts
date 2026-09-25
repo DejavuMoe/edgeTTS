@@ -3,7 +3,7 @@ import {
   DEFAULT_WORKBENCH_PREFERENCES,
   saveWorkbenchPreferences,
   type WorkbenchPreferencesV1,
-} from "../preferences.js";
+} from "../lib/preferences.js";
 
 export type Quality = WorkbenchPreferencesV1["quality"];
 

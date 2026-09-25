@@ -1,11 +1,11 @@
 import React from "react";
 import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from "vitest";
-import { render, screen, waitFor, fireEvent, cleanup } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent, cleanup, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { VoiceDto } from "@edgetts/shared";
 import { App, isValidApiKeyFormat, MIN_API_KEY_LENGTH } from "../src/App.js";
-import { WORKBENCH_PREFERENCES_KEY } from "../src/preferences.js";
-import { WORKBENCH_FAVORITES_KEY } from "../src/voice-favorites.js";
+import { WORKBENCH_PREFERENCES_KEY } from "../src/lib/preferences.js";
+import { WORKBENCH_FAVORITES_KEY } from "../src/lib/voice-favorites.js";
 
 function requestUrl(input: RequestInfo | URL): string {
   if (typeof input === "string") return input;
@@ -39,40 +39,63 @@ const mockVoices: readonly VoiceDto[] = [
   },
 ];
 
-async function openCombobox(
+/**
+ * The element holding a picker's choices: a combobox's popup listbox, or the control itself for
+ * always-visible pickers (the voice listbox, the quality radio group).
+ */
+function choicesOf(picker: HTMLElement): HTMLElement {
+  if (picker.getAttribute("role") !== "combobox") return picker;
+  const popup = document.getElementById(picker.getAttribute("aria-controls") ?? "");
+  if (!popup) throw new Error("combobox popup is not open");
+  return popup;
+}
+
+function choiceRole(picker: HTMLElement): "radio" | "option" {
+  return picker.getAttribute("role") === "radiogroup" ? "radio" : "option";
+}
+
+async function openPicker(
   user: ReturnType<typeof userEvent.setup>,
-  combobox: HTMLElement,
+  picker: HTMLElement,
 ): Promise<void> {
-  if (combobox.getAttribute("aria-expanded") !== "true") {
-    await user.click(combobox);
+  if (
+    picker.getAttribute("role") === "combobox" &&
+    picker.getAttribute("aria-expanded") !== "true"
+  ) {
+    await user.click(picker);
   }
 }
 
-async function closeCombobox(
+async function closePicker(
   user: ReturnType<typeof userEvent.setup>,
-  combobox: HTMLElement,
+  picker: HTMLElement,
 ): Promise<void> {
-  if (combobox.getAttribute("aria-expanded") === "true") {
-    await user.click(combobox);
+  if (
+    picker.getAttribute("role") === "combobox" &&
+    picker.getAttribute("aria-expanded") === "true"
+  ) {
+    await user.click(picker);
   }
 }
 
-async function selectComboboxOption(
+async function selectPickerOption(
   user: ReturnType<typeof userEvent.setup>,
-  combobox: HTMLElement,
+  picker: HTMLElement,
   optionMatcher: string | RegExp,
 ): Promise<void> {
-  await openCombobox(user, combobox);
-  const option = await screen.findByRole("option", { name: optionMatcher });
+  await openPicker(user, picker);
+  const option = await within(choicesOf(picker)).findByRole(choiceRole(picker), {
+    name: optionMatcher,
+  });
   await user.click(option);
 }
 
-async function getComboboxOptions(
+async function getPickerOptions(
   user: ReturnType<typeof userEvent.setup>,
-  combobox: HTMLElement,
+  picker: HTMLElement,
 ): Promise<HTMLElement[]> {
-  await openCombobox(user, combobox);
-  return screen.getAllByRole("option");
+  await openPicker(user, picker);
+  return within(choicesOf(picker)).getAllByRole(choiceRole(picker));
 }
 
 describe("EdgeTTS Web Workbench", () => {
@@ -153,7 +176,7 @@ describe("EdgeTTS Web Workbench", () => {
 
       const select = await screen.findByLabelText(/选择声音/i);
       expect(select).toBeDefined();
-      expect((select as HTMLSelectElement).value).toBe("zh-CN-XiaoxiaoNeural");
+      expect(select.getAttribute("data-value")).toBe("zh-CN-XiaoxiaoNeural");
     });
 
     it("falls back to first zh-CN voice when Xiaoxiao is not present", async () => {
@@ -181,8 +204,8 @@ describe("EdgeTTS Web Workbench", () => {
       });
 
       render(<App />);
-      const select = (await screen.findByLabelText(/选择声音/i)) as HTMLSelectElement;
-      expect(select.value).toBe("zh-CN-YunxiNeural");
+      const select = await screen.findByLabelText(/选择声音/i);
+      expect(select.getAttribute("data-value")).toBe("zh-CN-YunxiNeural");
     });
 
     it("falls back to first available voice when no zh-CN voice exists", async () => {
@@ -215,8 +238,8 @@ describe("EdgeTTS Web Workbench", () => {
       });
 
       render(<App />);
-      const select = (await screen.findByLabelText(/选择声音/i)) as HTMLSelectElement;
-      expect(select.value).toBe("en-US-JennyNeural");
+      const select = await screen.findByLabelText(/选择声音/i);
+      expect(select.getAttribute("data-value")).toBe("en-US-JennyNeural");
     });
 
     it("displays error message when voice fetching fails", async () => {
@@ -245,46 +268,42 @@ describe("EdgeTTS Web Workbench", () => {
       await screen.findByLabelText(/选择声音/i);
       const searchInput = screen.getByLabelText(/搜索声音/i);
 
-      // Search by displayName "Jenny" (Xiaoxiao filtered out -> placeholder + Jenny = 2 options)
+      // Search by displayName "Jenny" (Xiaoxiao filtered out -> notice + Jenny)
       await user.type(searchInput, "jenny");
       const select = screen.getByLabelText(/选择声音/i);
-      let options = await getComboboxOptions(user, select);
-      expect(options.length).toBe(2);
-      expect(options[0]?.getAttribute("data-value")).toBe("");
-      expect(options[0]?.getAttribute("aria-disabled")).toBe("true");
-      expect(options[0]?.textContent).toContain("当前声音不在筛选结果中");
-      expect(options[1]?.getAttribute("data-value")).toBe("en-US-JennyNeural");
-      await closeCombobox(user, select);
+      let options = await getPickerOptions(user, select);
+      expect(options.map((o) => o.getAttribute("data-value"))).toEqual(["en-US-JennyNeural"]);
+      expect(screen.getByText("当前声音不在筛选结果中")).toBeDefined();
+      await closePicker(user, select);
 
-      // Search by locale "ja-jp" (Xiaoxiao filtered out -> placeholder + Nanami = 2 options)
+      // Search by locale "ja-jp" (Xiaoxiao filtered out -> notice + Nanami)
       await user.clear(searchInput);
       await user.type(searchInput, "ja-jp");
-      options = await getComboboxOptions(user, select);
-      expect(options.length).toBe(2);
-      expect(options[0]?.getAttribute("data-value")).toBe("");
-      expect(options[0]?.textContent).toContain("当前声音不在筛选结果中");
-      expect(options[1]?.getAttribute("data-value")).toBe("ja-JP-NanamiNeural");
-      await closeCombobox(user, select);
+      options = await getPickerOptions(user, select);
+      expect(options.map((o) => o.getAttribute("data-value"))).toEqual(["ja-JP-NanamiNeural"]);
+      expect(screen.getByText("当前声音不在筛选结果中")).toBeDefined();
+      await closePicker(user, select);
 
-      // Search by partial id "xiaoxiao" (Xiaoxiao matches -> no placeholder = 1 option)
+      // Search by partial id "xiaoxiao" (Xiaoxiao matches -> no notice)
       await user.clear(searchInput);
       await user.type(searchInput, "xiaoxiao");
-      options = await getComboboxOptions(user, select);
+      options = await getPickerOptions(user, select);
       expect(options.length).toBe(1);
       expect(options[0]?.getAttribute("data-value")).toBe("zh-CN-XiaoxiaoNeural");
-      await closeCombobox(user, select);
+      expect(screen.queryByText("当前声音不在筛选结果中")).toBeNull();
+      await closePicker(user, select);
 
       // Search by gender "Female" (matches Xiaoxiao, Jenny, Nanami; Yunxi excluded)
       await user.clear(searchInput);
       await user.type(searchInput, "female");
-      options = await getComboboxOptions(user, select);
+      options = await getPickerOptions(user, select);
       expect(options.length).toBe(3);
       expect(options.map((o) => o.getAttribute("data-value"))).toEqual([
         "en-US-JennyNeural",
         "ja-JP-NanamiNeural",
         "zh-CN-XiaoxiaoNeural",
       ]);
-      await closeCombobox(user, select);
+      await closePicker(user, select);
     });
   });
 
@@ -331,7 +350,7 @@ describe("EdgeTTS Web Workbench", () => {
 
       // Change quality to high
       const qualitySelect = screen.getByLabelText(/音质/i);
-      await selectComboboxOption(user, qualitySelect, /高品质/i);
+      await selectPickerOption(user, qualitySelect, /高品质/i);
 
       // Change speed slider
       const speedSlider = screen.getByLabelText(/^语速/i);
@@ -374,11 +393,11 @@ describe("EdgeTTS Web Workbench", () => {
 
       const speedSlider = screen.getByLabelText(/^语速/i);
       fireEvent.change(speedSlider, { target: { value: "1.75" } });
-      expect(screen.getByText("1.75x")).toBeDefined();
+      expect(screen.getByText("1.75×")).toBeDefined();
 
       const resetSpeedBtn = screen.getByRole("button", { name: /重置语速/i });
       await user.click(resetSpeedBtn);
-      expect(screen.getByText("1.00x")).toBeDefined();
+      expect(screen.getByText("1.00×")).toBeDefined();
     });
   });
 
@@ -903,8 +922,8 @@ describe("EdgeTTS Web Workbench", () => {
         expect(screen.queryByRole("region", { name: /API 认证/i })).toBeNull();
       });
 
-      const voiceSelect = (await screen.findByLabelText(/选择声音/i)) as HTMLSelectElement;
-      expect(voiceSelect.value).toBe("zh-CN-XiaoxiaoNeural");
+      const voiceSelect = await screen.findByLabelText(/选择声音/i);
+      expect(voiceSelect.getAttribute("data-value")).toBe("zh-CN-XiaoxiaoNeural");
 
       // Perform synthesis and check that Authorization header is attached
       const textarea = screen.getByLabelText(/文本内容/i);
@@ -1408,11 +1427,11 @@ describe("EdgeTTS Web Workbench", () => {
       );
 
       render(<App />);
-      const select = (await screen.findByLabelText(/选择声音/i)) as HTMLSelectElement;
-      expect(select.value).toBe("en-US-JennyNeural");
+      const select = await screen.findByLabelText(/选择声音/i);
+      expect(select.getAttribute("data-value")).toBe("en-US-JennyNeural");
 
-      const qualitySelect = screen.getByLabelText(/音质/i) as HTMLSelectElement;
-      expect(qualitySelect.value).toBe("high");
+      const qualitySelect = screen.getByLabelText(/音质/i);
+      expect(qualitySelect.getAttribute("data-value")).toBe("high");
 
       const speedSlider = screen.getByLabelText(/^语速/i) as HTMLInputElement;
       expect(speedSlider.value).toBe("1.5");
@@ -1437,9 +1456,9 @@ describe("EdgeTTS Web Workbench", () => {
       );
 
       render(<App />);
-      const select = (await screen.findByLabelText(/选择声音/i)) as HTMLSelectElement;
+      const select = await screen.findByLabelText(/选择声音/i);
       // Falls back to Xiaoxiao
-      expect(select.value).toBe("zh-CN-XiaoxiaoNeural");
+      expect(select.getAttribute("data-value")).toBe("zh-CN-XiaoxiaoNeural");
 
       await waitFor(() => {
         const stored = JSON.parse(window.localStorage.getItem(WORKBENCH_PREFERENCES_KEY) || "{}");
@@ -1479,8 +1498,8 @@ describe("EdgeTTS Web Workbench", () => {
       await user.type(screen.getByLabelText(/API Key/i), TEST_AUTH_KEY);
       await user.click(screen.getByRole("button", { name: /解锁/i }));
 
-      const select = (await screen.findByLabelText(/选择声音/i)) as HTMLSelectElement;
-      expect(select.value).toBe("en-US-JennyNeural");
+      const select = await screen.findByLabelText(/选择声音/i);
+      expect(select.getAttribute("data-value")).toBe("en-US-JennyNeural");
     });
 
     it("persists preference updates when controls change", async () => {
@@ -1499,7 +1518,7 @@ describe("EdgeTTS Web Workbench", () => {
 
       // Change voice
       const voiceSelect = screen.getByLabelText(/选择声音/i);
-      await selectComboboxOption(user, voiceSelect, /Nanami/i);
+      await selectPickerOption(user, voiceSelect, /Nanami/i);
 
       await waitFor(() => {
         const stored = JSON.parse(window.localStorage.getItem(WORKBENCH_PREFERENCES_KEY) || "{}");
@@ -1523,7 +1542,7 @@ describe("EdgeTTS Web Workbench", () => {
       const select = (await screen.findByLabelText(/选择声音/i)) as HTMLButtonElement;
 
       // Select Jenny voice
-      await selectComboboxOption(user, select, /Jenny/i);
+      await selectPickerOption(user, select, /Jenny/i);
       expect(select.getAttribute("data-value")).toBe("en-US-JennyNeural");
 
       // Initially parameters are default, button is disabled
@@ -1532,7 +1551,7 @@ describe("EdgeTTS Web Workbench", () => {
 
       // Change quality, speed, pitch, volume
       const qualitySelect = screen.getByLabelText(/音质/i);
-      await selectComboboxOption(user, qualitySelect, /高品质/i);
+      await selectPickerOption(user, qualitySelect, /高品质/i);
 
       const speedSlider = screen.getByLabelText(/^语速/i);
       fireEvent.change(speedSlider, { target: { value: "1.5" } });
@@ -1570,8 +1589,8 @@ describe("EdgeTTS Web Workbench", () => {
       await screen.findByLabelText(/选择声音/i);
 
       // Select Yunxi voice, high quality, speed 1.5, pitch 2, volume 0.8
-      await selectComboboxOption(user, screen.getByLabelText(/选择声音/i), /Yunxi/i);
-      await selectComboboxOption(user, screen.getByLabelText(/音质/i), /高品质/i);
+      await selectPickerOption(user, screen.getByLabelText(/选择声音/i), /Yunxi/i);
+      await selectPickerOption(user, screen.getByLabelText(/音质/i), /高品质/i);
       fireEvent.change(screen.getByLabelText(/^语速/i), { target: { value: "1.5" } });
       fireEvent.change(screen.getByLabelText(/^音调/i), { target: { value: "2" } });
       fireEvent.change(screen.getByLabelText(/^音量/i), { target: { value: "0.8" } });
@@ -1596,8 +1615,8 @@ describe("EdgeTTS Web Workbench", () => {
       expect(metaContainer.textContent).toContain("80%音量");
 
       // Now mutate UI controls: switch voice to Jenny, quality to standard, speed to 1.0, pitch to 0
-      await selectComboboxOption(user, screen.getByLabelText(/选择声音/i), /Jenny/i);
-      await selectComboboxOption(user, screen.getByLabelText(/音质/i), /标准/i);
+      await selectPickerOption(user, screen.getByLabelText(/选择声音/i), /Jenny/i);
+      await selectPickerOption(user, screen.getByLabelText(/音质/i), /标准/i);
       fireEvent.change(screen.getByLabelText(/^语速/i), { target: { value: "1.0" } });
       fireEvent.change(screen.getByLabelText(/^音调/i), { target: { value: "0" } });
 
@@ -1626,7 +1645,7 @@ describe("EdgeTTS Web Workbench", () => {
       expect(screen.getByLabelText(/音频生成信息/i)).toBeDefined();
 
       // 2. Second generation with different voice
-      await selectComboboxOption(user, screen.getByLabelText(/选择声音/i), /Jenny/i);
+      await selectPickerOption(user, screen.getByLabelText(/选择声音/i), /Jenny/i);
       await user.clear(screen.getByLabelText(/文本内容/i));
       await user.type(screen.getByLabelText(/文本内容/i), "Second audio");
       await user.click(screen.getByRole("button", { name: /合成语音/i }));
@@ -1669,7 +1688,7 @@ describe("EdgeTTS Web Workbench", () => {
       await screen.findByLabelText(/选择声音/i);
 
       const localeSelect = screen.getByLabelText(/地区 \/ Locale/i);
-      const options = await getComboboxOptions(user, localeSelect);
+      const options = await getPickerOptions(user, localeSelect);
       expect(options.length).toBe(4);
       expect(options[0]?.getAttribute("data-value")).toBe("all");
       expect(options[0]?.textContent).toContain("全部地区 (4)");
@@ -1679,7 +1698,7 @@ describe("EdgeTTS Web Workbench", () => {
       expect(options[2]?.textContent).toContain("ja-JP (1)");
       expect(options[3]?.getAttribute("data-value")).toBe("zh-CN");
       expect(options[3]?.textContent).toContain("zh-CN (2)");
-      await closeCombobox(user, localeSelect);
+      await closePicker(user, localeSelect);
     });
 
     it("filters catalog by locale while maintaining selected voice stability", async () => {
@@ -1692,36 +1711,37 @@ describe("EdgeTTS Web Workbench", () => {
 
       // Active voice is default Xiaoxiao (zh-CN)
       // Switch locale to ja-JP
-      await selectComboboxOption(user, localeSelect, /ja-JP/i);
+      await selectPickerOption(user, localeSelect, /ja-JP/i);
 
-      // Voice options include placeholder + Nanami
-      let options = await getComboboxOptions(user, voiceSelect);
-      expect(options.length).toBe(2);
-      expect(options[0]?.getAttribute("data-value")).toBe("");
-      expect(options[0]?.getAttribute("aria-disabled")).toBe("true");
-      expect(options[0]?.textContent).toContain("当前声音不在筛选结果中");
-      expect(options[1]?.getAttribute("data-value")).toBe("ja-JP-NanamiNeural");
-      await closeCombobox(user, voiceSelect);
+      // Voice options contain only Nanami; a notice explains the hidden selection
+      let options = await getPickerOptions(user, voiceSelect);
+      expect(options.map((o) => o.getAttribute("data-value"))).toEqual(["ja-JP-NanamiNeural"]);
+      expect(screen.getByText("当前声音不在筛选结果中")).toBeDefined();
+      expect(voiceSelect.getAttribute("data-value")).toBe("zh-CN-XiaoxiaoNeural");
+      await closePicker(user, voiceSelect);
 
       // Current voice details still display active Xiaoxiao voice
       const voiceDetails = screen.getByLabelText(/当前声音详情/i);
-      expect(voiceDetails.textContent).toContain("Microsoft Xiaoxiao · zh-CN · 女性");
+      expect(voiceDetails.textContent).toContain("Xiaoxiao");
+      expect(voiceDetails.textContent).toContain("中文（中国） · 女性");
       expect(voiceDetails.textContent).toContain("zh-CN-XiaoxiaoNeural");
 
       // Selecting the visible voice switches active voice
-      await selectComboboxOption(user, voiceSelect, /Nanami/i);
-      options = await getComboboxOptions(user, voiceSelect);
-      expect(options.length).toBe(1); // placeholder gone because Nanami is now visible
-      await closeCombobox(user, voiceSelect);
-      expect(voiceDetails.textContent).toContain("Microsoft Nanami · ja-JP · 女性");
+      await selectPickerOption(user, voiceSelect, /Nanami/i);
+      options = await getPickerOptions(user, voiceSelect);
+      expect(options.length).toBe(1);
+      expect(screen.queryByText("当前声音不在筛选结果中")).toBeNull(); // notice gone because Nanami is visible
+      await closePicker(user, voiceSelect);
+      expect(voiceDetails.textContent).toContain("Nanami");
+      expect(voiceDetails.textContent).toContain("日语（日本） · 女性");
       expect(voiceDetails.textContent).toContain("ja-JP-NanamiNeural");
 
       // Switch back to "all"
-      await selectComboboxOption(user, localeSelect, /全部地区/i);
-      options = await getComboboxOptions(user, voiceSelect);
+      await selectPickerOption(user, localeSelect, /全部地区/i);
+      options = await getPickerOptions(user, voiceSelect);
       expect(options.length).toBe(4);
-      await closeCombobox(user, voiceSelect);
-      expect(voiceDetails.textContent).toContain("Microsoft Nanami · ja-JP · 女性");
+      await closePicker(user, voiceSelect);
+      expect(voiceDetails.textContent).toContain("ja-JP-NanamiNeural");
     });
 
     it("toggles favorite voice, persists to localStorage, and enables favorite-only filter", async () => {
@@ -1735,13 +1755,13 @@ describe("EdgeTTS Web Workbench", () => {
 
       const favBtn = screen.getByRole("button", { name: /收藏当前声音/i });
       expect(favBtn.getAttribute("aria-pressed")).toBe("false");
-      expect(favBtn.textContent).toContain("☆ 收藏");
+      expect(favBtn.textContent).toContain("加入收藏");
 
       // Toggle favorite on Xiaoxiao
       await user.click(favBtn);
 
       expect(favBtn.getAttribute("aria-pressed")).toBe("true");
-      expect(favBtn.textContent).toContain("★ 已收藏");
+      expect(favBtn.textContent).toContain("已收藏");
       expect(favBtn.getAttribute("aria-label")).toBe("取消收藏当前声音");
 
       // Check localStorage persistence
@@ -1759,10 +1779,10 @@ describe("EdgeTTS Web Workbench", () => {
 
       const voiceSelect = screen.getByLabelText(/选择声音/i);
       // Only Xiaoxiao is visible
-      const options = await getComboboxOptions(user, voiceSelect);
+      const options = await getPickerOptions(user, voiceSelect);
       expect(options.length).toBe(1);
       expect(options[0]?.getAttribute("data-value")).toBe("zh-CN-XiaoxiaoNeural");
-      await closeCombobox(user, voiceSelect);
+      await closePicker(user, voiceSelect);
 
       // Un-favorite Xiaoxiao while favoriteOnly is active: favoriteOnly automatically resets to false
       await user.click(favBtn);
@@ -1786,8 +1806,8 @@ describe("EdgeTTS Web Workbench", () => {
       await screen.findByLabelText(/选择声音/i);
 
       const voiceSelect = screen.getByLabelText(/选择声音/i);
-      await openCombobox(user, voiceSelect);
-      const groups = document.querySelectorAll(".ui-select-group");
+      await openPicker(user, voiceSelect);
+      const groups = within(voiceSelect).getAllByRole("group");
 
       // Groups should be:
       // 1. 收藏 (Jenny, Yunxi)
@@ -1811,7 +1831,7 @@ describe("EdgeTTS Web Workbench", () => {
         o.getAttribute("data-value"),
       );
       expect(zhOptions).toEqual(["zh-CN-XiaoxiaoNeural"]);
-      await closeCombobox(user, voiceSelect);
+      await closePicker(user, voiceSelect);
     });
 
     it("displays empty state placeholder when no voices match combined filters", async () => {
@@ -1838,11 +1858,11 @@ describe("EdgeTTS Web Workbench", () => {
 
       // Change search and locale
       await user.type(searchInput, "xiao");
-      await selectComboboxOption(user, localeSelect, /zh-CN/i);
+      await selectPickerOption(user, localeSelect, /zh-CN/i);
       await user.click(favBtn); // Favorite Xiaoxiao
 
       // Change synthesis parameters
-      await selectComboboxOption(user, screen.getByLabelText(/音质/i), /高品质/i);
+      await selectPickerOption(user, screen.getByLabelText(/音质/i), /高品质/i);
       const resetBtn = screen.getByRole("button", { name: /恢复默认参数/i });
       expect(resetBtn.hasAttribute("disabled")).toBe(false);
 
@@ -1889,10 +1909,10 @@ describe("EdgeTTS Web Workbench", () => {
 
       await screen.findByLabelText(/选择声音/i);
       const localeSelect = screen.getByLabelText(/地区 \/ Locale/i);
-      const options = await getComboboxOptions(user, localeSelect);
+      const options = await getPickerOptions(user, localeSelect);
       expect(options.length).toBe(4);
       expect(options[0]?.textContent).toContain("全部地区 (4)");
-      await closeCombobox(user, localeSelect);
+      await closePicker(user, localeSelect);
     });
   });
 
@@ -1919,7 +1939,7 @@ describe("EdgeTTS Web Workbench", () => {
       await screen.findByLabelText(/选择声音/i);
 
       // Select high quality and custom speed
-      await selectComboboxOption(user, screen.getByLabelText(/音质/i), /高品质/i);
+      await selectPickerOption(user, screen.getByLabelText(/音质/i), /高品质/i);
       const textarea = screen.getByLabelText(/文本内容/i) as HTMLTextAreaElement;
 
       const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
@@ -2622,7 +2642,7 @@ describe("EdgeTTS Web Workbench", () => {
       fireEvent.change(speedSlider, { target: { value: "1.5" } });
 
       // Change voice
-      await selectComboboxOption(user, screen.getByLabelText(/选择声音/i), /Jenny/i);
+      await selectPickerOption(user, screen.getByLabelText(/选择声音/i), /Jenny/i);
 
       // Completed metadata remains unchanged
       const metadataAfter = screen.getByLabelText(/音频生成信息/i).textContent;
@@ -2755,19 +2775,19 @@ describe("EdgeTTS Web Workbench", () => {
 
       const favBtn = screen.getByRole("button", { name: /收藏当前声音/i });
       expect(favBtn.getAttribute("aria-pressed")).toBe("false");
-      expect(favBtn.textContent).toContain("☆ 收藏");
+      expect(favBtn.textContent).toContain("加入收藏");
 
       // Click favorite
       await user.click(favBtn);
       expect(favBtn.getAttribute("aria-pressed")).toBe("true");
       expect(favBtn.getAttribute("aria-label")).toBe("取消收藏当前声音");
-      expect(favBtn.textContent).toContain("★ 已收藏");
+      expect(favBtn.textContent).toContain("已收藏");
 
       // Click again to unfavorite
       await user.click(favBtn);
       expect(favBtn.getAttribute("aria-pressed")).toBe("false");
       expect(favBtn.getAttribute("aria-label")).toBe("收藏当前声音");
-      expect(favBtn.textContent).toContain("☆ 收藏");
+      expect(favBtn.textContent).toContain("加入收藏");
     });
 
     it("validation and runtime errors expose alert semantics", async () => {
@@ -2850,6 +2870,14 @@ describe("EdgeTTS Web Workbench", () => {
       expect(document.activeElement).toBe(textarea);
 
       await user.tab();
+      expect(document.activeElement).toBe(screen.getByRole("checkbox", { name: /只看收藏/i }));
+
+      await user.tab();
+      expect(document.activeElement).toBe(
+        screen.getByRole("button", { name: /取消收藏当前声音/i }),
+      );
+
+      await user.tab();
       expect(document.activeElement).toBe(screen.getByRole("searchbox", { name: /搜索声音/i }));
 
       await user.tab();
@@ -2858,18 +2886,11 @@ describe("EdgeTTS Web Workbench", () => {
       );
 
       await user.tab();
-      expect(document.activeElement).toBe(screen.getByRole("checkbox", { name: /只看收藏/i }));
+      expect(document.activeElement).toBe(screen.getByRole("listbox", { name: /选择声音/i }));
 
+      // The quality radio group is a single tab stop on its checked option.
       await user.tab();
-      expect(document.activeElement).toBe(screen.getByRole("combobox", { name: /选择声音/i }));
-
-      await user.tab();
-      expect(document.activeElement).toBe(
-        screen.getByRole("button", { name: /取消收藏当前声音/i }),
-      );
-
-      await user.tab();
-      expect(document.activeElement).toBe(screen.getByRole("combobox", { name: /音质/i }));
+      expect(document.activeElement).toBe(screen.getByRole("radio", { name: /标准/i }));
 
       await user.tab();
       expect(document.activeElement).toBe(screen.getByLabelText(/^语速/i));
@@ -2914,9 +2935,14 @@ describe("EdgeTTS Web Workbench", () => {
       const nativeSelects = document.querySelectorAll("select");
       expect(nativeSelects.length).toBe(0);
 
-      // Verify custom comboboxes are used instead
-      const comboboxes = screen.getAllByRole("combobox");
-      expect(comboboxes.length).toBeGreaterThanOrEqual(3);
+      // Verify custom pickers are used instead: comboboxes for language and locale, an
+      // always-visible listbox for voices, and a radio group for quality.
+      expect(screen.getAllByRole("combobox").map((c) => c.getAttribute("aria-label"))).toEqual([
+        "界面语言",
+        "地区 / Locale",
+      ]);
+      expect(screen.getByRole("listbox", { name: /选择声音/i })).toBeDefined();
+      expect(screen.getByRole("radiogroup", { name: "音质" })).toBeDefined();
     });
   });
 });

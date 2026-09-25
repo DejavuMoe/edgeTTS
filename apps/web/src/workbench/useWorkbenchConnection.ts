@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { VoiceDto } from "@edgetts/shared";
 import { ApiHttpError, fetchHealth, fetchVoices } from "../api/client.js";
 import type { MessageKey } from "../i18n.js";
-import { resolveEffectiveVoiceId } from "../preferences.js";
+import { resolveEffectiveVoiceId } from "../lib/preferences.js";
 
 export type ApiStatus = "loading" | "healthy" | "unavailable";
 

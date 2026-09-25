@@ -1,19 +1,19 @@
 import { useRef, useState } from "react";
 import { I18nProvider, useI18n } from "./i18n.js";
-import { loadWorkbenchPreferences, type WorkbenchPreferencesV1 } from "./preferences.js";
+import { loadWorkbenchPreferences, type WorkbenchPreferencesV1 } from "./lib/preferences.js";
 import { AuthCard } from "./workbench/AuthCard.js";
 import { ClearTextDialog } from "./workbench/ClearTextDialog.js";
 import { EditorPanel } from "./workbench/EditorPanel.js";
 import { ParameterControls } from "./workbench/ParameterControls.js";
-import { ResultPanel } from "./workbench/ResultPanel.js";
 import { useSynthesis } from "./workbench/useSynthesis.js";
 import { useSynthesisParameters } from "./workbench/useSynthesisParameters.js";
 import { useTextDocument } from "./workbench/useTextDocument.js";
 import { useVoiceFilters } from "./workbench/useVoiceFilters.js";
 import { useWorkbenchConnection } from "./workbench/useWorkbenchConnection.js";
+import { TransportBar } from "./workbench/TransportBar.js";
 import { VoicePicker } from "./workbench/VoicePicker.js";
 import { WorkbenchHeader } from "./workbench/WorkbenchHeader.js";
-import "./App.css";
+import "./styles/index.css";
 
 export { isValidApiKeyFormat, MIN_API_KEY_LENGTH } from "./workbench/useWorkbenchConnection.js";
 
@@ -72,12 +72,11 @@ function Workbench() {
   };
 
   return (
-    <div className="app-layout">
+    <div className="app">
       <WorkbenchHeader apiStatus={connection.apiStatus} />
-
       <ClearTextDialog dialogRef={clearDialogRef} onConfirm={handleConfirmClear} />
-      <main className="workbench-main">
-        {/* Left Column: Text Editor */}
+
+      <main className="workbench">
         <EditorPanel
           textDocument={textDocument}
           isGenerating={isGenerating}
@@ -85,10 +84,8 @@ function Workbench() {
           onRequestClear={handleRequestClear}
         />
 
-        {/* Right Column: Controls Panel */}
-        <aside className="panel controls-panel" aria-label={t("语音参数配置")}>
+        <aside className="inspector" aria-label={t("语音参数配置")}>
           {auth.required && <AuthCard auth={auth} />}
-
           <VoicePicker
             voices={voices}
             voiceError={connection.voiceError}
@@ -97,36 +94,11 @@ function Workbench() {
             filters={filters}
             disabled={isGenerating}
           />
-
           <ParameterControls parameters={parameters} disabled={isGenerating} />
-
-          {/* Action Buttons */}
-          <div className="action-buttons">
-            <button
-              type="button"
-              className="btn btn-primary"
-              onClick={handleGenerate}
-              disabled={!canGenerate}
-            >
-              {isGenerating ? t("正在合成...") : t("合成语音")}
-            </button>
-            {isGenerating && (
-              <button
-                type="button"
-                className="btn btn-secondary"
-                onClick={synthesis.cancel}
-                aria-label={t("取消合成")}
-                aria-keyshortcuts="Escape"
-              >
-                {t("取消")}
-              </button>
-            )}
-          </div>
         </aside>
-
-        {/* Bottom Section: Single Audio Player & Status */}
-        <ResultPanel synthesis={synthesis} />
       </main>
+
+      <TransportBar synthesis={synthesis} canGenerate={canGenerate} onGenerate={handleGenerate} />
     </div>
   );
 }

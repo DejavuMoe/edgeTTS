@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { countLines } from "../src/text-stats.js";
+import { countLines } from "../../src/lib/text-stats.js";
 
 describe("countLines text statistics", () => {
   it("returns 0 for empty string", () => {

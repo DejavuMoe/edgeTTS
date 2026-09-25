@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { StreamPlaybackController } from "../src/audio/stream-controller.js";
+import { StreamPlaybackController } from "../../src/audio/stream-controller.js";
 
 describe("StreamPlaybackController Session Isolation & URL Lifecycle", () => {
   let originalMediaSource: unknown;

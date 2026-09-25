@@ -1,6 +1,9 @@
 import type { MessageKey } from "../i18n.js";
-import type { CompletedResultMeta } from "../result-metadata.js";
-import type { GenerationTelemetryState, SynthesisPlanMetadata } from "../synthesis-telemetry.js";
+import type { CompletedResultMeta } from "../lib/result-metadata.js";
+import type {
+  GenerationTelemetryState,
+  SynthesisPlanMetadata,
+} from "../lib/synthesis-telemetry.js";
 
 export interface SynthesisState {
   readonly isGenerating: boolean;

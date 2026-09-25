@@ -1,19 +1,19 @@
 import { useMemo, useState } from "react";
 import type { VoiceDto } from "@edgetts/shared";
 import type { UiLocale, useI18n } from "../i18n.js";
-import type { SelectGroup, SelectOption } from "../ui/Select.js";
+import type { SelectOption } from "../ui/Select.js";
 import {
   filterVoices,
-  formatVoiceGender,
   getGroupedVoices,
   getLocaleOptions,
   isVoiceVisible,
-} from "../voice-catalog.js";
+} from "../lib/voice-catalog.js";
 import {
   loadFavoriteVoiceIds,
   saveFavoriteVoiceIds,
   toggleFavoriteVoiceId,
-} from "../voice-favorites.js";
+} from "../lib/voice-favorites.js";
+import { localeDisplayName } from "../lib/voice-names.js";
 
 type Translate = ReturnType<typeof useI18n>["t"];
 
@@ -64,33 +64,26 @@ export function useVoiceFilters(
     [filteredVoices, favoriteSet, uiLocale],
   );
 
+  // The locale code and count stay the option label; the localized region name is secondary.
   const localeSelectOptions: SelectOption[] = useMemo(
-    () => localeOptions.map((opt) => ({ value: opt.locale, label: opt.label })),
-    [localeOptions],
-  );
-
-  const voiceSelectGroups: SelectGroup[] = useMemo(
     () =>
-      voiceGroups.map((group) => ({
-        label: group.label,
-        options: group.voices.map((v) => ({
-          value: v.id,
-          label: v.displayName,
-          secondaryLabel: `${v.locale} · ${formatVoiceGender(v.gender, uiLocale)}`,
-        })),
-      })),
-    [voiceGroups, uiLocale],
+      localeOptions.map((opt) => {
+        const regionName = opt.locale === "all" ? null : localeDisplayName(opt.locale, uiLocale);
+        return {
+          value: opt.locale,
+          label: opt.label,
+          ...(regionName ? { secondaryLabel: regionName } : {}),
+        };
+      }),
+    [localeOptions, uiLocale],
   );
 
-  const voicePlaceholderOptions: SelectOption[] | undefined = useMemo(() => {
-    if (filteredVoices.length === 0) {
-      return [{ value: "", label: t("没有匹配的声音"), disabled: true }];
-    }
-    if (!isSelectedVoiceVisible) {
-      return [{ value: "", label: t("当前声音不在筛选结果中"), disabled: true }];
-    }
-    return undefined;
-  }, [filteredVoices.length, isSelectedVoiceVisible, t]);
+  const emptyMessage = t("没有匹配的声音");
+  /** Set when the selected voice is hidden by the filters, so the list can say why. */
+  const hiddenSelectionNotice =
+    filteredVoices.length > 0 && selectedVoiceId && !isSelectedVoiceVisible
+      ? t("当前声音不在筛选结果中")
+      : null;
 
   const isSelectedVoiceFavorite = Boolean(selectedVoiceId && favoriteSet.has(selectedVoiceId));
 
@@ -119,7 +112,8 @@ export function useVoiceFilters(
     isSelectedVoiceFavorite,
     toggleSelectedFavorite,
     localeSelectOptions,
-    voiceSelectGroups,
-    voicePlaceholderOptions,
+    voiceGroups,
+    emptyMessage,
+    hiddenSelectionNotice,
   };
 }

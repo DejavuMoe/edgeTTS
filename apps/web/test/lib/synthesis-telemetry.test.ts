@@ -4,7 +4,7 @@ import {
   formatAudioBytes,
   formatGeneratingStatusText,
   MAX_TELEMETRY_HEADER_VALUE,
-} from "../src/synthesis-telemetry.js";
+} from "../../src/lib/synthesis-telemetry.js";
 
 describe("Synthesis Telemetry", () => {
   describe("parseSynthesisPlanHeaders", () => {

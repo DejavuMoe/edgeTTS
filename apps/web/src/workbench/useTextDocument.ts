@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { countCodePoints, MAX_NATIVE_INPUT_CODE_POINTS } from "@edgetts/shared";
 import type { MessageKey } from "../i18n.js";
-import { readImportedTextFile } from "../text-import.js";
-import { countLines } from "../text-stats.js";
+import { readImportedTextFile } from "../lib/text-import.js";
+import { countLines } from "../lib/text-stats.js";
 
 /**
  * The text to synthesize, its statistics and local TXT import. Editing, clearing or

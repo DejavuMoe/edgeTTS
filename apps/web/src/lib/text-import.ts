@@ -1,4 +1,4 @@
-import type { MessageKey } from "./i18n.js";
+import type { MessageKey } from "../i18n.js";
 import { countCodePoints, MAX_NATIVE_INPUT_CODE_POINTS } from "@edgetts/shared";
 
 /**

@@ -4,7 +4,7 @@ import {
   isTxtFilename,
   decodeUtf8Text,
   readImportedTextFile,
-} from "../src/text-import.js";
+} from "../../src/lib/text-import.js";
 
 describe("isTxtFilename", () => {
   it("accepts lowercase .txt extension", () => {

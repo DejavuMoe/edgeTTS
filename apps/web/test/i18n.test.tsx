@@ -9,8 +9,11 @@ import {
   translate,
   type MessageKey,
 } from "../src/i18n.js";
-import { formatGeneratingStatusText } from "../src/synthesis-telemetry.js";
-import { createCompletedResultMeta, formatResultMetadataDisplay } from "../src/result-metadata.js";
+import { formatGeneratingStatusText } from "../src/lib/synthesis-telemetry.js";
+import {
+  createCompletedResultMeta,
+  formatResultMetadataDisplay,
+} from "../src/lib/result-metadata.js";
 
 const voices = [
   { id: "ja-JP-NanamiNeural", displayName: "Nanami", locale: "ja-JP", gender: "Female" },
@@ -52,7 +55,7 @@ describe("workbench localization", () => {
 
   it("switches all four languages, persists the choice, and preserves editor, voice and search state", async () => {
     const { unmount } = render(<App />);
-    await screen.findByText("Nanami");
+    await screen.findByRole("option", { name: /Nanami/ });
     fireEvent.change(screen.getByRole("textbox"), { target: { value: "private draft" } });
     fireEvent.change(screen.getByRole("searchbox"), { target: { value: "Nanami" } });
     for (const { value, label } of LANGUAGE_OPTIONS) {
@@ -100,10 +103,10 @@ describe("workbench localization", () => {
 
   it("localizes imported-file errors and supports searching localized gender", async () => {
     render(<App />);
-    await screen.findByText("Nanami");
+    await screen.findByRole("option", { name: /Nanami/ });
     switchLanguage("日本語");
     fireEvent.change(screen.getByRole("searchbox"), { target: { value: "女性" } });
-    expect(screen.getByRole("combobox", { name: "音声を選択 (1)" })).toBeDefined();
+    expect(screen.getByRole("listbox", { name: "音声を選択 (1)" })).toBeDefined();
     fireEvent.change(document.querySelector('input[type="file"]')!, {
       target: { files: [new File([], "invalid.pdf")] },
     });
@@ -155,7 +158,7 @@ describe("workbench localization", () => {
         : new Response(JSON.stringify(url === "/api/health" ? { status: "ok" } : { voices })),
     );
     render(<App />);
-    await screen.findByText("Nanami");
+    await screen.findByRole("option", { name: /Nanami/ });
     fireEvent.change(screen.getByRole("textbox"), { target: { value: "private draft" } });
     fireEvent.click(screen.getByRole("button", { name: "合成语音" }));
     const link = await screen.findByRole("link", { name: "下载合成音频" });

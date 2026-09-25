@@ -9,6 +9,11 @@ the version being released.
 
 ### Changed
 
+- Redesigned web workbench: a full-height text sheet, an inspector with an always-visible
+  keyboard-navigable voice list (short names, locale groups, favorites pinned) and compact
+  delivery controls, and a transport bar pinned to the bottom that keeps the synthesize action,
+  progress, player and download in view. New warm neutral palette with a single accent, proper
+  dark mode, and WCAG AA contrast for all text tokens, enforced by tests.
 - The deployment guide now walks through Docker Compose with the pre-built image in all three
   languages; building from source with Compose is described as the development workflow.
 - Repository layout: guides moved to `docs/en/`, `docs/zh-CN/` and `docs/ja/`; maintainer notes to

@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
-import type { CompletedResultMeta } from "../src/result-metadata.js";
+import type { CompletedResultMeta } from "../../src/lib/result-metadata.js";
 import {
   INITIAL_SYNTHESIS_STATE,
   synthesisReducer,
   type SynthesisEvent,
   type SynthesisState,
-} from "../src/workbench/synthesis-state.js";
+} from "../../src/workbench/synthesis-state.js";
 
 const RESULT: CompletedResultMeta = {
   voiceId: "zh-CN-XiaoxiaoNeural",

@@ -5,7 +5,7 @@ export const groups = {
   service: { directory: "packages/tts-service", tests: ["test/*.test.ts"] },
   provider: { directory: "packages/edge-provider", tests: ["test/edge-provider.test.ts"] },
   http: { directory: "apps/server", tests: ["test/rate-limit.test.ts"] },
-  playback: { directory: "apps/web", tests: ["test/stream-controller.test.ts"] },
+  playback: { directory: "apps/web", tests: ["test/audio/stream-controller.test.ts"] },
 };
 
 // Each intervention changes one mechanism only, in Vite's in-memory source.

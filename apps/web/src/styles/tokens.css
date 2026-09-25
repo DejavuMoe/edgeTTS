@@ -1,0 +1,75 @@
+/*
+ * Design tokens. Warm paper and ink neutrals with a single accent that is reserved for the
+ * synthesize action and live states. Hairline rules separate regions instead of shadows.
+ */
+:root {
+  color-scheme: light;
+
+  --paper: #f3f1ec;
+  --sheet: #fbfaf7;
+  --ink: #1c1b18;
+  --ink-2: #55524b;
+  --ink-3: #6b675f;
+  --rule: #e0dcd3;
+  --rule-strong: #cbc6bb;
+  --hover: rgb(28 27 24 / 4.5%);
+  --selected: #ece8df;
+
+  --accent: #c2410c;
+  --accent-strong: #9a3412;
+  --accent-ink: #fffaf5;
+
+  --ok: #2f7d4f;
+  --danger: #b42318;
+  --danger-soft: #fbeae7;
+  --favorite-text: #8a5300;
+  --favorite-bg: #f7eddb;
+  --favorite-border: #e4cd9f;
+
+  --focus-ring: #1c1b18;
+  --focus-ring-offset: 2px;
+
+  --radius-s: 4px;
+  --radius-m: 6px;
+
+  --font-ui:
+    system-ui, -apple-system, "Segoe UI", "PingFang SC", "Hiragino Sans", "Microsoft YaHei UI",
+    "Noto Sans CJK SC", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", "JetBrains Mono", Consolas, monospace;
+
+  --header-height: 52px;
+  --inspector-width: 360px;
+  /* Keeps the manuscript at a readable measure on wide screens. */
+  --sheet-inset: max(32px, calc((100% - 760px) / 2));
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+
+    --paper: #151412;
+    --sheet: #1c1b18;
+    --ink: #ece8df;
+    --ink-2: #b3aea3;
+    --ink-3: #948f85;
+    --rule: #2b2925;
+    --rule-strong: #3c3934;
+    --hover: rgb(236 232 223 / 5%);
+    --selected: #2a2824;
+
+    /* Lighter accent with dark text keeps the primary action above 4.5:1 contrast. */
+    --accent: #f08a4f;
+    --accent-strong: #f5a36f;
+    --accent-ink: #1a120c;
+
+    --ok: #6cc28f;
+    --danger: #f0938a;
+    --danger-soft: #3a1f1c;
+    --favorite-text: #e7b766;
+    --favorite-bg: #2d2517;
+    --favorite-border: #5b4823;
+
+    --focus-ring: #ece8df;
+    --focus-ring-offset: 2px;
+  }
+}
