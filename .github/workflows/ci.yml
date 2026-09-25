@@ -42,6 +42,10 @@ jobs:
       - name: Install workspace dependencies (frozen lockfile)
         run: pnpm install --frozen-lockfile
 
+      # Fails on high or critical advisories in runtime dependencies; lower levels are reported.
+      - name: Audit production dependencies
+        run: pnpm audit:deps
+
       - name: Build workspace packages & apps
         run: pnpm build
 

@@ -39,6 +39,7 @@ the version being released.
 - Type-aware linting and React hooks rules cover source and tests; web tests are type-checked.
 - `pnpm test` checks multilingual documentation for consistency and `docs/openapi.json` for
   freshness.
+- CI fails on high or critical advisories in production dependencies (`pnpm audit:deps`).
 - The web workbench is split into focused hooks and panels around a tested synthesis reducer.
 
 ## [0.6.0] - 2026-09-22

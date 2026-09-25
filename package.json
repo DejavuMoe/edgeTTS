@@ -17,7 +17,8 @@
     "test:architecture": "node --test scripts/architecture-boundaries.test.mjs",
     "test:docs": "node --test scripts/docs-consistency.test.mjs",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "audit:deps": "pnpm audit --prod --audit-level high"
   },
   "devDependencies": {
     "@eslint/js": "^9.21.0",
