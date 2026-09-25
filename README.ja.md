@@ -49,13 +49,15 @@ services:
       - /tmp
     stop_grace_period: 35s
     ports:
-      - "127.0.0.1:8080:8080"
+      - "${EDGETTS_BIND_ADDRESS:-127.0.0.1}:${EDGETTS_HOST_PORT:-8080}:8080"
     environment:
       - NODE_ENV=production
       - HOST=0.0.0.0
       - PORT=8080
-      - API_KEY=${API_KEY:?Set API_KEY in .env}
-      - REQUIRE_API_KEY=true
+      - API_KEY
+      - REQUIRE_API_KEY=${REQUIRE_API_KEY:-true}
+      - SPEECH_RATE_LIMIT_MAX
+      - SPEECH_RATE_LIMIT_WINDOW_MS
 ```
 
 ランダムな API キーを生成してサービスを起動します：
@@ -75,7 +77,7 @@ curl -i http://127.0.0.1:8080/health
 
 ブラウザで `http://127.0.0.1:8080` を開くと Web ワークベンチが表示されます。
 
-`.env` は初回だけ生成し、更新時に保持します。`/health` は HTTP プロセスのみを確認します。ローカルでは `http://127.0.0.1:8080`、リモートでは HTTPS プロキシの URL を開き、同じ API キーを入力します。シェル API 例を使う前に `set -a; . ./.env; set +a` でローカル生成キーを読み込みます。その他の配備方法と更新は[配備ガイド](docs/deployment.ja.md)を参照してください。
+`.env` は初回だけ生成し、更新時に保持します。`/health` は HTTP プロセスのみを確認します。ローカルでは `http://127.0.0.1:8080`、リモートでは HTTPS プロキシの URL を開き、同じ API キーを入力します。シェル API 例を使う前に `set -a; . ./.env; set +a` でローカル生成キーを読み込みます。その他の配備方法と更新は[配備ガイド](docs/ja/deployment.md)を参照してください。
 
 ## API 利用例
 
@@ -100,19 +102,19 @@ curl -X POST http://127.0.0.1:8080/api/speech \
 
 ## ドキュメント一覧
 
-[`docs/`](docs/) ディレクトリにて詳細なドキュメントを提供しています：
+[`docs/`](docs) ディレクトリにて詳細なドキュメントを提供しています：
 
-| ドキュメント                                                | 説明                                                                           |
-| :---------------------------------------------------------- | :----------------------------------------------------------------------------- |
-| [**セルフホストデプロイガイド**](docs/deployment.ja.md)     | Docker Compose、単一コンテナ、ソースビルド、Linux systemd のセットアップ手順。 |
-| [**リバースプロキシ & TLS 設定**](docs/reverse-proxy.ja.md) | Nginx・Caddy の設定例、ストリーミング非バッファリング原則、検証スクリプト。    |
-| [**設定リファレンスマニュアル**](docs/configuration.ja.md)  | 環境変数一覧、認証仕様、レート制限、並行制御キューの詳細。                     |
-| [**API リファレンス & 連携ガイド**](docs/api.ja.md)         | エンドポイント仕様、スキーマ、エラーコード一覧、外部クライアント設定方法。     |
-| [**リリースガバナンス & セキュリティ**](docs/releasing.md)  | 厳格な SemVer 方針、OCI 署名検証、不変ダイジェスト固定の仕組み。               |
+| ドキュメント                                                           | 説明                                                                           |
+| :--------------------------------------------------------------------- | :----------------------------------------------------------------------------- |
+| [**セルフホストデプロイガイド**](docs/ja/deployment.md)                | Docker Compose、単一コンテナ、ソースビルド、Linux systemd のセットアップ手順。 |
+| [**リバースプロキシ & TLS 設定**](docs/ja/reverse-proxy.md)            | Nginx・Caddy の設定例、ストリーミング非バッファリング原則、検証スクリプト。    |
+| [**設定リファレンスマニュアル**](docs/ja/configuration.md)             | 環境変数一覧、認証仕様、レート制限、並行制御キューの詳細。                     |
+| [**API リファレンス & 連携ガイド**](docs/ja/api.md)                    | エンドポイント仕様、スキーマ、エラーコード一覧、外部クライアント設定方法。     |
+| [**リリースガバナンス & セキュリティ**](docs/development/releasing.md) | 厳格な SemVer 方針、OCI 署名検証、不変ダイジェスト固定の仕組み。               |
 
-- [アブレーション結果（中国語）](docs/ablation.zh-CN.md)
-- [長文合成の性能（中国語）](docs/performance.zh-CN.md)
-- [アーキテクチャと設計判断（英語）](docs/architecture.md)
+- [アブレーション結果（中国語）](docs/development/research/ablation.zh-CN.md)
+- [長文合成の性能（中国語）](docs/development/research/performance.zh-CN.md)
+- [アーキテクチャと設計判断（英語）](docs/development/architecture.md)
 - [変更履歴（英語）](CHANGELOG.md)
 
 ## アーキテクチャ
@@ -140,6 +142,10 @@ flowchart TD
 - `packages/tts-core`: ドメイン層の抽象定義とポート契約。
 - `packages/edge-provider`: Microsoft Edge 音声読み上げ WebSocket アダプター。
 - `packages/shared`: 共有バリデーションスキーマ、型定義、Unicode テキスト処理ユーティリティ。
+- `deploy/`: 本番用 Compose ファイル、systemd ユニット、Nginx テンプレート。デプロイガイドと同期しています。
+- `docs/`: `en/`・`zh-CN/`・`ja/` の 3 言語ユーザーガイド、自動生成の `openapi.json`、`development/` の開発者向け文書。
+- `tests/`: アーキテクチャ境界、ドキュメント整合性、リリース管理のリポジトリ単位のチェック。
+- `scripts/`: リリース前チェックとアブレーション実験のツール。
 
 ## ライセンス
 

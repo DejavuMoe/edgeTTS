@@ -32,7 +32,7 @@ Internet (Clients / Browsers / API Consumers)
 
 ## Method 1: Docker Compose with Pre-built Image (Recommended)
 
-Runs the published multi-architecture image without cloning or building the source. Create `compose.yaml` in an empty directory, for example `~/edgetts`:
+Runs the published multi-architecture image without cloning or building the source. Create `compose.yaml` in an empty directory, for example `~/edgetts`. The same file is kept in the repository as [deploy/compose/compose.yaml](../../deploy/compose/compose.yaml):
 
 ```yaml
 services:
@@ -200,7 +200,7 @@ sudo sh -c 'umask 077; set -C; printf "API_KEY=%s\n" "$(openssl rand -hex 32)" >
 
 ### 4. Configure Systemd Service
 
-Create `/etc/systemd/system/edgetts.service`:
+Create `/etc/systemd/system/edgetts.service`, or copy [deploy/systemd/edgetts.service](../../deploy/systemd/edgetts.service) from the checkout:
 
 ```ini
 [Unit]

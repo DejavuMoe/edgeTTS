@@ -111,7 +111,7 @@ export const variants = [
 
 export default function () {
   const group = groups[process.env.EDGETTS_ABLATION_GROUP];
-  if (!group) throw new Error("Run this config through scripts/ablation.mjs");
+  if (!group) throw new Error("Run this config through scripts/ablation/ablation.mjs");
   const variant = variants.find((item) => item.id === process.env.EDGETTS_ABLATION_VARIANT);
   return {
     plugins: variant

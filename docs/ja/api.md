@@ -13,7 +13,7 @@
 | `POST`   | `/api/speech`      | 要（認証有効時） | ネイティブ長文分割ストリーミング音声合成                   |
 | `GET`    | `/api/metrics`     | 要（認証有効時） | Prometheus メトリクス（`METRICS_ENABLED=true` の場合のみ） |
 
-機械可読な [OpenAPI 3 定義](openapi.json)は検証スキーマから自動生成されています。
+機械可読な [OpenAPI 3 定義](../openapi.json)は検証スキーマから自動生成されています。
 
 ## 認証方式
 
@@ -107,7 +107,7 @@ curl -s http://127.0.0.1:8080/api/voices \
 
 ## 5. メトリクス API (`GET /api/metrics`)
 
-`METRICS_ENABLED=true` の場合のみ提供され、Prometheus テキスト形式で出力します。認証は他の保護対象ルートと同じ Bearer 認証です。メトリクスの一覧は[設定リファレンス](configuration.ja.md#メトリクス)を参照してください。
+`METRICS_ENABLED=true` の場合のみ提供され、Prometheus テキスト形式で出力します。認証は他の保護対象ルートと同じ Bearer 認証です。メトリクスの一覧は[設定リファレンス](configuration.md#メトリクス)を参照してください。
 
 ```yaml
 scrape_configs:
@@ -140,4 +140,4 @@ scrape_configs:
 | 502  | `UPSTREAM_ERROR`         | 上流接続または合成失敗                   |
 | 503  | `SERVER_BUSY`            | キュー満杯または 30 秒の待機超過         |
 
-両音声 API はプロセスあたり 12 件/10 秒の枠を共有し、音声一覧は毎分 60 件です。[設定](configuration.ja.md)を参照してください。
+両音声 API はプロセスあたり 12 件/10 秒の枠を共有し、音声一覧は毎分 60 件です。[設定](configuration.md)を参照してください。

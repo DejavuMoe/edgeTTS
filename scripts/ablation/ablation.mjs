@@ -7,10 +7,10 @@ import process from "node:process";
 import { fileURLToPath, URL } from "node:url";
 import { groups, variants } from "./ablation.config.mjs";
 
-const root = fileURLToPath(new URL("../", import.meta.url));
+const root = fileURLToPath(new URL("../../", import.meta.url));
 const output = path.join(root, "coverage/ablation", new Date().toISOString().replaceAll(":", "-"));
 mkdirSync(output, { recursive: true });
-const config = path.join(root, "scripts/ablation.config.mjs");
+const config = path.join(root, "scripts/ablation/ablation.config.mjs");
 const sourceFiles = [...new Set(variants.map((v) => `${groups[v.group].directory}/src/${v.file}`))];
 const hashes = () =>
   Object.fromEntries(
