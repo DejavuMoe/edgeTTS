@@ -110,6 +110,8 @@ curl -X POST http://127.0.0.1:8080/api/speech \
 
 - [消融实验](docs/ablation.zh-CN.md)
 - [长文本合成性能](docs/performance.zh-CN.md)
+- [架构与设计决策（英文）](docs/architecture.md)
+- [变更日志（英文）](CHANGELOG.md)
 
 ## 项目架构
 

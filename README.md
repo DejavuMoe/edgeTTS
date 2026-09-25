@@ -110,6 +110,8 @@ curl -X POST http://127.0.0.1:8080/api/speech \
 
 - [Ablation results (Chinese)](docs/ablation.zh-CN.md)
 - [Long-text performance (Chinese)](docs/performance.zh-CN.md)
+- [Architecture and design decisions](docs/architecture.md)
+- [Changelog](CHANGELOG.md)
 
 ## Architecture
 

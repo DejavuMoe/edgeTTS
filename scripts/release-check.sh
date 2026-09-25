@@ -145,7 +145,19 @@ if [ -n "$REMOTE_TAG_CHECK" ]; then
 fi
 echo "[PASS] Remote tag '$TAG_NAME' is absent on origin."
 
-# 7. Run full test & verification suite (unless skipped)
+# 7. Check release metadata: package version and a dated changelog section
+if ! grep -Eq "^  \"version\": \"${SEMVER_NUM//./\\.}\",?$" package.json 2>/dev/null; then
+  echo "ERROR: package.json version does not match $SEMVER_NUM." >&2
+  exit 1
+fi
+if ! grep -Eq "^## \[${SEMVER_NUM//./\\.}\] - [0-9]{4}-[0-9]{2}-[0-9]{2}$" CHANGELOG.md 2>/dev/null; then
+  echo "ERROR: CHANGELOG.md has no '## [$SEMVER_NUM] - YYYY-MM-DD' section." >&2
+  echo "Move the [Unreleased] entries under a dated section for this release." >&2
+  exit 1
+fi
+echo "[PASS] package.json and CHANGELOG.md document $SEMVER_NUM."
+
+# 8. Run full test & verification suite (unless skipped)
 if [ "$SKIP_TESTS" = "true" ]; then
   echo "[SKIP] Code validation suite skipped via --skip-tests."
 else

@@ -112,6 +112,8 @@ curl -X POST http://127.0.0.1:8080/api/speech \
 
 - [アブレーション結果（中国語）](docs/ablation.zh-CN.md)
 - [長文合成の性能（中国語）](docs/performance.zh-CN.md)
+- [アーキテクチャと設計判断（英語）](docs/architecture.md)
+- [変更履歴（英語）](CHANGELOG.md)
 
 ## アーキテクチャ
 
