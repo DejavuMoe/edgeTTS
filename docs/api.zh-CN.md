@@ -13,6 +13,8 @@
 | `POST`   | `/api/speech`      | 是（若启用认证） | 原生分段长文本流式语音合成接口                      |
 | `GET`    | `/api/metrics`     | 是（若启用认证） | Prometheus 指标，仅在 `METRICS_ENABLED=true` 时提供 |
 
+机器可读的 [OpenAPI 3 接口描述](openapi.json)由校验 schema 自动生成。
+
 ## 认证方式
 
 当配置了 `API_KEY` 时，客户端发起的受保护请求必须在标准 HTTP 请求头中提供 API 密钥：

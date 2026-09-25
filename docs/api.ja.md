@@ -13,6 +13,8 @@
 | `POST`   | `/api/speech`      | 要（認証有効時） | ネイティブ長文分割ストリーミング音声合成                   |
 | `GET`    | `/api/metrics`     | 要（認証有効時） | Prometheus メトリクス（`METRICS_ENABLED=true` の場合のみ） |
 
+機械可読な [OpenAPI 3 定義](openapi.json)は検証スキーマから自動生成されています。
+
 ## 認証方式
 
 `API_KEY` が設定されている場合、保護されたエンドポイントへのリクエストには HTTP `Authorization` ヘッダーが必要です：
