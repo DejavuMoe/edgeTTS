@@ -79,13 +79,12 @@ export function createCompletedResultMeta(
   };
 }
 
-export function formatResultMetadataDisplay(
-  meta: CompletedResultMeta,
-  locale: UiLocale = "zh-CN",
-): string {
-  const qualityText = translate(meta.quality === "high" ? "高品质" : "标准", locale);
-  const speedText = `${meta.speed.toFixed(2)}×`;
-  const parts: string[] = [meta.voiceDisplayName, meta.voiceId, qualityText, speedText];
+/** The settings and size of a take, e.g. "高品质 · 1.25× · +3半音 · 2 段 · 21.9 KiB". */
+export function formatResultSummary(meta: CompletedResultMeta, locale: UiLocale = "zh-CN"): string {
+  const parts: string[] = [
+    translate(meta.quality === "high" ? "高品质" : "标准", locale),
+    `${meta.speed.toFixed(2)}×`,
+  ];
 
   if (meta.pitchSemitones !== 0) {
     const pitchSign =
@@ -105,6 +104,18 @@ export function formatResultMetadataDisplay(
     parts.push(formatAudioBytes(meta.audioBytes));
   }
 
-  parts.push(formatCompletedAt(meta.completedAt));
   return parts.join(" · ");
+}
+
+/** The complete record of a take: full voice name, voice ID, summary and completion time. */
+export function formatResultMetadataDisplay(
+  meta: CompletedResultMeta,
+  locale: UiLocale = "zh-CN",
+): string {
+  return [
+    meta.voiceDisplayName,
+    meta.voiceId,
+    formatResultSummary(meta, locale),
+    formatCompletedAt(meta.completedAt),
+  ].join(" · ");
 }

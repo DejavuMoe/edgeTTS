@@ -1,4 +1,4 @@
-import { useId, useRef } from "react";
+import { useId, useRef, type ReactNode } from "react";
 import { MAX_NATIVE_INPUT_CODE_POINTS } from "@edgetts/shared";
 import { useI18n } from "../i18n.js";
 import type { useTextDocument } from "./useTextDocument.js";
@@ -8,6 +8,8 @@ export interface EditorPanelProps {
   readonly isGenerating: boolean;
   readonly onGenerate: () => void;
   readonly onRequestClear: () => void;
+  /** The submit controls, placed at the end of the text like a send button. */
+  readonly actions: ReactNode;
 }
 
 export function EditorPanel({
@@ -15,6 +17,7 @@ export function EditorPanel({
   isGenerating,
   onGenerate,
   onRequestClear,
+  actions,
 }: EditorPanelProps) {
   const { locale, t } = useI18n();
   const textInputId = useId();
@@ -103,17 +106,22 @@ export function EditorPanel({
       )}
 
       <div className="sheet-footer">
-        <span id={noteId} className="sheet-note">
-          {t("合成时，文本会发送至微软在线语音服务；edgeTTS 不保存文本。")}
-        </span>
-        <span className="shortcut-hint">{t("Ctrl/⌘ + Enter 合成 · Esc 取消")}</span>
-        <span className={`char-counter ${textDocument.isOverLimit ? "counter-error" : ""}`}>
-          {t("{lines} 行 · {count} / {max} 字", {
-            lines: textDocument.lineCount.toLocaleString(locale),
-            count: textDocument.codePointCount.toLocaleString(locale),
-            max: MAX_NATIVE_INPUT_CODE_POINTS.toLocaleString(locale),
-          })}
-        </span>
+        <div className="sheet-notes">
+          <span id={noteId} className="sheet-note">
+            {t("合成时，文本会发送至微软在线语音服务；edgeTTS 不保存文本。")}
+          </span>
+          <span className="shortcut-hint">{t("Ctrl/⌘ + Enter 合成 · Esc 取消")}</span>
+        </div>
+        <div className="sheet-submit">
+          <span className={`char-counter ${textDocument.isOverLimit ? "counter-error" : ""}`}>
+            {t("{lines} 行 · {count} / {max} 字", {
+              lines: textDocument.lineCount.toLocaleString(locale),
+              count: textDocument.codePointCount.toLocaleString(locale),
+              max: MAX_NATIVE_INPUT_CODE_POINTS.toLocaleString(locale),
+            })}
+          </span>
+          {actions}
+        </div>
       </div>
     </section>
   );

@@ -540,6 +540,8 @@
 }
 
 .ui-audio-play-btn {
+  width: 40px;
+  height: 40px;
   border-color: var(--ink);
   background: var(--ink);
   color: var(--sheet);
@@ -554,16 +556,36 @@
   outline-offset: 2px;
 }
 
+/* What is playing and where: title and time on one line, the timeline full width below. */
+.player-main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.player-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 20px;
+}
+
+.player-title {
+  min-width: 0;
+}
+
 .ui-audio-time {
   flex: none;
   color: var(--ink-2);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
+  line-height: 20px;
 }
 
 .ui-audio-seek-wrap {
-  flex: 1;
-  min-width: 60px;
+  display: flex;
 }
 
 .btn-download {

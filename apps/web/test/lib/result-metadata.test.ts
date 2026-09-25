@@ -6,6 +6,7 @@ import {
   buildDownloadFilename,
   createCompletedResultMeta,
   formatResultMetadataDisplay,
+  formatResultSummary,
   type GenerationSnapshot,
 } from "../../src/lib/result-metadata.js";
 
@@ -210,6 +211,41 @@ describe("Download & Result Metadata (apps/web/src/result-metadata.ts)", () => {
       expect(formatResultMetadataDisplay(metaBytes)).toBe(
         "晓晓 · zh-CN-XiaoxiaoNeural · 标准 · 1.00× · 512 B · 2026-09-14 15:45",
       );
+    });
+  });
+
+  describe("formatResultSummary", () => {
+    it("lists settings and size without the voice or completion time", () => {
+      const meta = createCompletedResultMeta(
+        {
+          voiceId: "en-US-JennyNeural",
+          voiceDisplayName: "Microsoft Jenny",
+          quality: "high",
+          speed: 1.25,
+          pitchSemitones: -2,
+          volume: 0.8,
+          segmentCount: 3,
+          audioBytes: 22_426,
+        },
+        testDate,
+      );
+      expect(formatResultSummary(meta)).toBe("高品质 · 1.25× · -2半音 · 80%音量 · 3 段 · 21.9 KiB");
+      expect(formatResultSummary(meta, "en")).toContain("High quality");
+    });
+
+    it("keeps defaults to quality and speed", () => {
+      const meta = createCompletedResultMeta(
+        {
+          voiceId: "zh-CN-XiaoxiaoNeural",
+          voiceDisplayName: "晓晓",
+          quality: "standard",
+          speed: 1.0,
+          pitchSemitones: 0,
+          volume: 1.0,
+        },
+        testDate,
+      );
+      expect(formatResultSummary(meta)).toBe("标准 · 1.00×");
     });
   });
 });
