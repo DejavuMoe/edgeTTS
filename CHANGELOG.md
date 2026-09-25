@@ -7,6 +7,8 @@ the version being released.
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-09-25
+
 ### Changed
 
 - Redesigned web workbench: a full-height text sheet, an inspector with an always-visible
@@ -103,7 +105,8 @@ the version being released.
 - First release: an OpenAI-compatible speech API, Edge voice discovery, prosody controls, the
   browser workbench and a container image.
 
-[Unreleased]: https://github.com/DejavuMoe/edgeTTS/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/DejavuMoe/edgeTTS/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/DejavuMoe/edgeTTS/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/DejavuMoe/edgeTTS/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/DejavuMoe/edgeTTS/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/DejavuMoe/edgeTTS/compare/v0.4.0...v0.5.0

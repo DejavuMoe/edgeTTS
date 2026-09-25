@@ -36,7 +36,7 @@ mkdir -p ~/edgetts && cd ~/edgetts
 ```yaml
 services:
   edgetts:
-    image: ghcr.io/dejavumoe/edgetts:0.7.0
+    image: ghcr.io/dejavumoe/edgetts:0.8.0
     container_name: edgetts
     restart: unless-stopped
     init: true

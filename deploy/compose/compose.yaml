@@ -2,7 +2,7 @@
 # (Method 1); tests/docs-consistency.test.mjs keeps those copies identical to this file.
 services:
   edgetts:
-    image: ghcr.io/dejavumoe/edgetts:0.7.0
+    image: ghcr.io/dejavumoe/edgetts:0.8.0
     container_name: edgetts
     restart: unless-stopped
     init: true
