@@ -1,4 +1,4 @@
-import { translate, type UiLocale } from "./i18n.js";
+import { translate, type UiLocale } from "../i18n.js";
 /**
  * Telemetry and metadata utilities for EdgeTTS speech synthesis.
  */

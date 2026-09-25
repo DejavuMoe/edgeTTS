@@ -6,7 +6,7 @@ import {
   filterVoices,
   getGroupedVoices,
   isVoiceVisible,
-} from "../src/voice-catalog.js";
+} from "../../src/lib/voice-catalog.js";
 
 const testVoices: readonly VoiceDto[] = [
   {

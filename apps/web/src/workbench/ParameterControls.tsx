@@ -1,6 +1,6 @@
 import { useId, useMemo } from "react";
 import { useI18n } from "../i18n.js";
-import { Select, Slider } from "../ui/index.js";
+import { SegmentedControl, Slider } from "../ui/index.js";
 import type { Quality, useSynthesisParameters } from "./useSynthesisParameters.js";
 
 export interface ParameterControlsProps {
@@ -10,43 +10,56 @@ export interface ParameterControlsProps {
 
 export function ParameterControls({ parameters, disabled }: ParameterControlsProps) {
   const { t } = useI18n();
-  const qualitySelectId = useId();
+  const titleId = useId();
   const speedSliderId = useId();
   const pitchSliderId = useId();
   const volumeSliderId = useId();
   const { quality, speed, pitchSemitones, volume } = parameters;
 
   const qualityOptions = useMemo(
-    () => [
-      { value: "standard", label: t("标准 (48 kbps MP3)") },
-      { value: "high", label: t("高品质 (96 kbps MP3)") },
-    ],
+    () =>
+      [
+        { value: "standard", label: t("标准"), detail: "48 kbps" },
+        { value: "high", label: t("高品质"), detail: "96 kbps" },
+      ] as const satisfies readonly { value: Quality; label: string; detail: string }[],
     [t],
   );
 
   return (
-    <>
-      {/* Quality */}
-      <div className="control-group">
-        <label htmlFor={qualitySelectId} className="control-label">
-          {t("音质 (Quality)")}
-        </label>
-        <Select
-          id={qualitySelectId}
+    <section className="inspector-section delivery-section" aria-labelledby={titleId}>
+      <div className="section-header">
+        <h2 id={titleId} className="section-title">
+          {t("表达")}
+        </h2>
+        <button
+          type="button"
+          className="btn-text btn-reset-params"
+          onClick={parameters.resetAll}
+          disabled={disabled || parameters.isAllDefault}
+          aria-label={t("恢复默认参数")}
+        >
+          {t("恢复默认")}
+        </button>
+      </div>
+
+      <div className="delivery-row">
+        <span className="control-label" aria-hidden="true">
+          {t("音质")}
+        </span>
+        <SegmentedControl
+          aria-label={t("音质")}
           value={quality}
-          onChange={(val) => parameters.setQuality(val as Quality)}
           options={qualityOptions}
+          onChange={parameters.setQuality}
           disabled={disabled}
-          aria-label={t("音质 (Quality)")}
         />
       </div>
 
-      {/* Speed */}
       <Slider
         id={speedSliderId}
-        label={t("语速 (Speed)")}
+        label={t("语速")}
         value={speed}
-        formattedValue={`${speed.toFixed(2)}x`}
+        formattedValue={`${speed.toFixed(2)}×`}
         min={0.5}
         max={2.0}
         step={0.05}
@@ -57,10 +70,9 @@ export function ParameterControls({ parameters, disabled }: ParameterControlsPro
         disabled={disabled}
       />
 
-      {/* Pitch */}
       <Slider
         id={pitchSliderId}
-        label={t("音调 (Pitch)")}
+        label={t("音调")}
         value={pitchSemitones}
         formattedValue={t("{value} 半音", {
           value: pitchSemitones > 0 ? `+${pitchSemitones}` : pitchSemitones,
@@ -75,10 +87,9 @@ export function ParameterControls({ parameters, disabled }: ParameterControlsPro
         disabled={disabled}
       />
 
-      {/* Volume */}
       <Slider
         id={volumeSliderId}
-        label={t("音量 (Volume)")}
+        label={t("音量")}
         value={volume}
         formattedValue={`${Math.round(volume * 100)}%`}
         min={0.0}
@@ -90,19 +101,6 @@ export function ParameterControls({ parameters, disabled }: ParameterControlsPro
         resetAriaLabel={t("重置音量")}
         disabled={disabled}
       />
-
-      {/* Reset All Synthesis Parameters */}
-      <div className="reset-params-group">
-        <button
-          type="button"
-          className="btn-reset-params"
-          onClick={parameters.resetAll}
-          disabled={disabled || parameters.isAllDefault}
-          aria-label={t("恢复默认参数")}
-        >
-          {t("恢复默认参数")}
-        </button>
-      </div>
-    </>
+    </section>
   );
 }

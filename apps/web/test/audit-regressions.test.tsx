@@ -57,7 +57,7 @@ describe("audit regressions", () => {
     vi.stubGlobal("fetch", fetchMock);
     render(<App />);
 
-    await screen.findByText("Aria");
+    await screen.findByRole("option", { name: /Aria/ });
     expect(fetchMock).toHaveBeenCalledWith("/api/voices", expect.any(Object));
   });
 

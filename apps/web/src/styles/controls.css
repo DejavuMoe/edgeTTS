@@ -1,0 +1,516 @@
+/* Buttons ---------------------------------------------------------------- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 18px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-m);
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease,
+    color 120ms ease;
+}
+
+.btn:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: var(--focus-ring-offset);
+}
+
+.btn-primary {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--accent-strong);
+}
+
+.btn-primary:disabled {
+  background: var(--selected);
+  color: var(--ink-3);
+}
+
+.btn-secondary {
+  background: transparent;
+  border-color: var(--rule-strong);
+  color: var(--ink);
+}
+
+.btn-secondary:hover {
+  background: var(--hover);
+}
+
+/* Quiet inline actions: import, clear, reset. */
+.btn-text {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--radius-s);
+  background: transparent;
+  color: var(--ink-2);
+  font-size: 13px;
+}
+
+.btn-text:hover:not(:disabled) {
+  background: var(--hover);
+  color: var(--ink);
+}
+
+.btn-text:disabled {
+  color: var(--ink-3);
+  opacity: 0.55;
+}
+
+.btn-text:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 0;
+}
+
+/* Inputs ----------------------------------------------------------------- */
+
+.control-input,
+.control-select {
+  width: 100%;
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius-s);
+  background: var(--sheet);
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.control-input::placeholder {
+  color: var(--ink-3);
+}
+
+.control-input:focus-visible,
+.control-select:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 0;
+  border-color: var(--focus-ring);
+}
+
+.control-input:disabled,
+.control-select:disabled {
+  color: var(--ink-3);
+  background: transparent;
+}
+
+/* Select (custom combobox) ------------------------------------------------ */
+
+.ui-select-container {
+  position: relative;
+  min-width: 0;
+}
+
+.ui-select-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  text-align: left;
+}
+
+.ui-select-trigger-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ui-select-chevron {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  color: var(--ink-3);
+  transition: transform 120ms ease;
+}
+
+.ui-select-chevron.is-open {
+  transform: rotate(180deg);
+}
+
+.ui-select-menu {
+  padding: 4px;
+  overflow-y: auto;
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius-m);
+  background: var(--sheet);
+  box-shadow: 0 12px 32px rgb(0 0 0 / 12%);
+}
+
+.ui-select-group-header {
+  padding: 8px 10px 4px;
+  color: var(--ink-3);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.ui-select-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 32px;
+  padding: 5px 10px;
+  border-radius: var(--radius-s);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.ui-select-option.is-focused {
+  background: var(--hover);
+}
+
+.ui-select-option.is-selected {
+  font-weight: 600;
+}
+
+.ui-select-option.is-disabled {
+  color: var(--ink-3);
+  cursor: default;
+}
+
+.ui-select-option-content {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.ui-select-option-sub {
+  color: var(--ink-3);
+  font-size: 11.5px;
+  font-weight: 400;
+}
+
+.ui-select-check {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  color: var(--accent);
+}
+
+/* Checkbox --------------------------------------------------------------- */
+
+.ui-checkbox-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+  font-size: 13px;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+
+.ui-checkbox-label.is-disabled {
+  color: var(--ink-3);
+  cursor: default;
+}
+
+.ui-checkbox-box {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border: 1.5px solid var(--rule-strong);
+  border-radius: 3px;
+  background: var(--sheet);
+}
+
+.ui-checkbox-box.is-checked {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.ui-checkbox-input {
+  position: absolute;
+  inset: -4px;
+  margin: 0;
+  opacity: 0;
+  cursor: inherit;
+}
+
+.ui-checkbox-icon {
+  width: 12px;
+  height: 12px;
+  visibility: hidden;
+}
+
+.ui-checkbox-icon.is-visible {
+  visibility: visible;
+}
+
+.ui-checkbox-box:has(.ui-checkbox-input:focus-visible) {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* Segmented control -------------------------------------------------------- */
+
+.segmented {
+  display: grid;
+  grid-auto-columns: 1fr;
+  grid-auto-flow: column;
+  gap: 6px;
+}
+
+.segmented-option {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius-s);
+  background: var(--sheet);
+  color: var(--ink-2);
+  text-align: left;
+}
+
+.segmented-option[aria-checked="true"] {
+  border-color: var(--ink);
+  box-shadow: inset 0 0 0 1px var(--ink);
+  color: var(--ink);
+}
+
+.segmented-option:disabled {
+  color: var(--ink-3);
+}
+
+.segmented-option:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.segmented-label {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.segmented-detail {
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+/* Slider ----------------------------------------------------------------- */
+
+/* One row per control: label | track | value | reset. */
+.ui-slider-group {
+  display: grid;
+  grid-template-areas: "label track value reset";
+  grid-template-columns: var(--control-label-width, 72px) minmax(0, 1fr) 64px 32px;
+  align-items: center;
+  column-gap: 10px;
+  min-height: 32px;
+}
+
+.control-header {
+  display: contents;
+}
+
+.ui-slider-group .control-label {
+  grid-area: label;
+}
+
+.ui-slider-group .control-value {
+  grid-area: value;
+  text-align: right;
+}
+
+.ui-slider-group .btn-reset {
+  grid-area: reset;
+}
+
+.ui-slider-track-wrap {
+  grid-area: track;
+  display: flex;
+}
+
+.control-label {
+  font-size: 13px;
+}
+
+.control-value {
+  color: var(--ink-2);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.btn-reset {
+  min-height: 24px;
+  padding: 0 4px;
+  border: 0;
+  border-radius: var(--radius-s);
+  background: transparent;
+  color: var(--ink-3);
+  font-size: 11.5px;
+  transition: opacity 120ms ease;
+}
+
+.btn-reset:hover:not(:disabled) {
+  color: var(--ink);
+}
+
+/* At the default value the reset action has nothing to do; keep its space, hide the noise. */
+.btn-reset:disabled {
+  opacity: 0;
+}
+
+.btn-reset:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 0;
+}
+
+.control-slider {
+  --track: var(--rule-strong);
+  --fill: var(--ink);
+  width: 100%;
+  height: 20px;
+  margin: 0;
+  background: transparent;
+  appearance: none;
+  cursor: pointer;
+}
+
+.control-slider:disabled {
+  --fill: var(--ink-3);
+  cursor: default;
+}
+
+.control-slider::-webkit-slider-runnable-track {
+  height: 2px;
+  border-radius: 1px;
+  background: linear-gradient(
+    to right,
+    var(--fill) var(--slider-progress, 0%),
+    var(--track) var(--slider-progress, 0%)
+  );
+}
+
+.control-slider::-moz-range-track {
+  height: 2px;
+  border-radius: 1px;
+  background: linear-gradient(
+    to right,
+    var(--fill) var(--slider-progress, 0%),
+    var(--track) var(--slider-progress, 0%)
+  );
+}
+
+.control-slider::-webkit-slider-thumb {
+  width: 14px;
+  height: 14px;
+  margin-top: -6px;
+  border: 2px solid var(--fill);
+  border-radius: 50%;
+  background: var(--sheet);
+  appearance: none;
+}
+
+.control-slider::-moz-range-thumb {
+  width: 10px;
+  height: 10px;
+  border: 2px solid var(--fill);
+  border-radius: 50%;
+  background: var(--sheet);
+}
+
+.control-slider:focus-visible {
+  outline: none;
+}
+
+.control-slider:focus-visible::-webkit-slider-thumb {
+  box-shadow:
+    0 0 0 3px var(--sheet),
+    0 0 0 5px var(--focus-ring);
+}
+
+.control-slider:focus-visible::-moz-range-thumb {
+  box-shadow:
+    0 0 0 3px var(--sheet),
+    0 0 0 5px var(--focus-ring);
+}
+
+/* Audio player ------------------------------------------------------------ */
+
+.player-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.audio-player {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.ui-audio-btn {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--rule-strong);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--ink);
+}
+
+.ui-audio-play-btn {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--sheet);
+}
+
+.ui-audio-btn:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.ui-audio-time {
+  flex: none;
+  color: var(--ink-2);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.ui-audio-seek-wrap {
+  flex: 1;
+  min-width: 60px;
+}
+
+.btn-download {
+  flex: none;
+  min-height: 36px;
+  padding: 0 14px;
+  border-color: var(--rule-strong);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.btn-download:hover {
+  background: var(--hover);
+}
+
+.btn-download:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: var(--focus-ring-offset);
+}

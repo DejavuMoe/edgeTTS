@@ -1,4 +1,4 @@
-import { translate, type UiLocale } from "./i18n.js";
+import { translate, type UiLocale } from "../i18n.js";
 import type { VoiceDto } from "@edgetts/shared";
 
 export interface LocaleOption {
@@ -9,6 +9,8 @@ export interface LocaleOption {
 
 export interface VoiceGroup {
   readonly label: string;
+  /** The shared locale of a locale group; null for the favorites group. */
+  readonly locale: string | null;
   readonly voices: readonly VoiceDto[];
 }
 
@@ -120,6 +122,7 @@ export function getGroupedVoices(
   if (favorites.length > 0) {
     groups.push({
       label: translate("收藏", locale),
+      locale: null,
       voices: favorites,
     });
   }
@@ -133,6 +136,7 @@ export function getGroupedVoices(
     list.sort((a, b) => a.displayName.localeCompare(b.displayName) || a.id.localeCompare(b.id));
     groups.push({
       label: loc,
+      locale: loc,
       voices: list,
     });
   }

@@ -7,7 +7,7 @@ import {
   loadFavoriteVoiceIds,
   saveFavoriteVoiceIds,
   toggleFavoriteVoiceId,
-} from "../src/voice-favorites.js";
+} from "../../src/lib/voice-favorites.js";
 
 describe("Voice Favorites (apps/web/src/voice-favorites.ts)", () => {
   beforeEach(() => {

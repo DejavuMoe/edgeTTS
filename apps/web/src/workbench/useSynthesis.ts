@@ -3,8 +3,8 @@ import type { NativeSpeechRequest } from "@edgetts/shared";
 import { synthesizeSpeech } from "../api/client.js";
 import { StreamPlaybackController } from "../audio/stream-controller.js";
 import type { MessageKey } from "../i18n.js";
-import { createCompletedResultMeta, type GenerationSnapshot } from "../result-metadata.js";
-import { parseSynthesisPlanHeaders } from "../synthesis-telemetry.js";
+import { createCompletedResultMeta, type GenerationSnapshot } from "../lib/result-metadata.js";
+import { parseSynthesisPlanHeaders } from "../lib/synthesis-telemetry.js";
 import { INITIAL_SYNTHESIS_STATE, synthesisReducer } from "./synthesis-state.js";
 
 export interface SynthesisOptions {

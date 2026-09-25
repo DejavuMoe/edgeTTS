@@ -1,4 +1,4 @@
-import { translate, type UiLocale } from "./i18n.js";
+import { translate, type UiLocale } from "../i18n.js";
 import { formatAudioBytes } from "./synthesis-telemetry.js";
 
 export interface CompletedResultMeta {

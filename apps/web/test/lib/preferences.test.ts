@@ -8,7 +8,7 @@ import {
   saveWorkbenchPreferences,
   resolveEffectiveVoiceId,
   type WorkbenchPreferencesV1,
-} from "../src/preferences.js";
+} from "../../src/lib/preferences.js";
 
 const mockVoices: readonly VoiceDto[] = [
   {
