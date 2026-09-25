@@ -111,6 +111,7 @@ curl -X POST http://127.0.0.1:8080/api/speech \
 | [**リリースガバナンス & セキュリティ**](docs/releasing.md)  | 厳格な SemVer 方針、OCI 署名検証、不変ダイジェスト固定の仕組み。               |
 
 - [アブレーション結果（中国語）](docs/ablation.zh-CN.md)
+- [長文合成の性能（中国語）](docs/performance.zh-CN.md)
 
 ## アーキテクチャ
 

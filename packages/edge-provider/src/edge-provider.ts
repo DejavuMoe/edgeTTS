@@ -3,8 +3,11 @@ import { OUTPUT_FORMAT } from "msedge-tts";
 import {
   createAbortError,
   isValidVoiceId,
+  type SessionSynthesisRequest,
   type SynthesisRequest,
   type SynthesisResult,
+  type SynthesisSession,
+  type SynthesisSessionOptions,
   type TtsAudioFormat,
   type TtsProvider,
   type TtsVoice,
@@ -50,9 +53,10 @@ class ManagedEdgeAudioStream implements AsyncIterableIterator<Uint8Array> {
   private closed = false;
   private started = false;
 
+  /** `onClose` runs once when the stream ends, fails, times out or is aborted. */
   constructor(
     private readonly stream: Readable,
-    private readonly client: EdgeClient,
+    private readonly onClose: () => void,
     private readonly signal: AbortSignal,
     private readonly timeoutMs: number,
   ) {
@@ -80,7 +84,7 @@ class ManagedEdgeAudioStream implements AsyncIterableIterator<Uint8Array> {
     if (this.timer !== undefined) clearTimeout(this.timer);
     this.signal.removeEventListener("abort", this.onAbort);
     this.stream.destroy(this.started ? error : undefined);
-    this.client.close();
+    this.onClose();
   }
 
   async next(): Promise<IteratorResult<Uint8Array>> {
@@ -188,22 +192,8 @@ export class EdgeTtsProvider implements TtsProvider {
   }
 
   async synthesize(request: SynthesisRequest, signal: AbortSignal): Promise<SynthesisResult> {
-    if (!request.text || request.text.trim() === "") {
-      throw new Error("Text must not be empty");
-    }
-    if (!request.voice || request.voice.trim() === "") {
-      throw new Error("Voice must not be empty");
-    }
-    if (!isValidVoiceId(request.voice)) {
-      throw new RangeError(`Invalid voice identifier: ${String(request.voice)}`);
-    }
-
-    const format: TtsAudioFormat = request.format ?? "mp3-48k";
-    const formatDetails = FORMAT_CONFIG[format];
-    if (!formatDetails) {
-      throw new Error(`Unsupported audio format: ${String(format)}`);
-    }
-
+    assertText(request.text);
+    const { format, details } = resolveVoiceAndFormat(request.voice, request.format);
     const prosodyOptions = toEdgeProsody(request.prosody);
 
     if (signal.aborted) {
@@ -211,8 +201,61 @@ export class EdgeTtsProvider implements TtsProvider {
     }
 
     const client = this.clientFactory();
+    await this.configure(client, request.voice, details.outputFormat, signal);
+    try {
+      if (signal.aborted) {
+        throw createAbortError(signal.reason);
+      }
+      const { audioStream } = client.toStream(escapeXmlText(request.text), prosodyOptions);
+      return {
+        format,
+        contentType: details.contentType,
+        audio: new ManagedEdgeAudioStream(
+          audioStream,
+          () => client.close(),
+          signal,
+          this.audioIdleTimeoutMs,
+        ),
+      };
+    } catch (error) {
+      client.close();
+      throw error;
+    }
+  }
+
+  /**
+   * Opens one upstream connection for sequential syntheses with the same voice and format,
+   * saving a TLS and WebSocket handshake per segment of long text.
+   */
+  async openSession(
+    options: SynthesisSessionOptions,
+    signal: AbortSignal,
+  ): Promise<SynthesisSession> {
+    const { format, details } = resolveVoiceAndFormat(options.voice, options.format);
+    if (signal.aborted) {
+      throw createAbortError(signal.reason);
+    }
+
+    const client = this.clientFactory();
+    const configure = (setupSignal: AbortSignal) =>
+      this.configure(client, options.voice, details.outputFormat, setupSignal);
+    await configure(signal);
+    return new EdgeSynthesisSession(client, configure, format, details, this.audioIdleTimeoutMs);
+  }
+
+  /**
+   * Connects `client`, or keeps its open connection, within the setup timeout. Closes the
+   * client on failure, including when a setup abandoned by abort or timeout settles later.
+   */
+  private async configure(
+    client: EdgeClient,
+    voice: string,
+    outputFormat: OUTPUT_FORMAT,
+    signal: AbortSignal,
+  ): Promise<void> {
     let setupAbandoned = false;
-    const setMetadataPromise = client.setMetadata(request.voice, formatDetails.outputFormat);
+    // Always pass options: msedge-tts throws on a repeated setMetadata call without them.
+    const setMetadataPromise = client.setMetadata(voice, outputFormat, {});
     void setMetadataPromise
       .then(
         () => {
@@ -235,19 +278,6 @@ export class EdgeTtsProvider implements TtsProvider {
           client.close();
         },
       );
-
-      if (signal.aborted) {
-        throw createAbortError(signal.reason);
-      }
-
-      const escapedText = escapeXmlText(request.text);
-      const { audioStream } = client.toStream(escapedText, prosodyOptions);
-
-      return {
-        format,
-        contentType: formatDetails.contentType,
-        audio: new ManagedEdgeAudioStream(audioStream, client, signal, this.audioIdleTimeoutMs),
-      };
     } catch (error) {
       if (!setupAbandoned) client.close();
       throw error;
@@ -310,5 +340,94 @@ export class EdgeTtsProvider implements TtsProvider {
         },
       );
     });
+  }
+}
+
+function assertText(text: string): void {
+  if (!text || text.trim() === "") {
+    throw new Error("Text must not be empty");
+  }
+}
+
+function resolveVoiceAndFormat(
+  voice: string,
+  requestedFormat: TtsAudioFormat | undefined,
+): { readonly format: TtsAudioFormat; readonly details: FormatDetails } {
+  if (!voice || voice.trim() === "") {
+    throw new Error("Voice must not be empty");
+  }
+  if (!isValidVoiceId(voice)) {
+    throw new RangeError(`Invalid voice identifier: ${String(voice)}`);
+  }
+  const format: TtsAudioFormat = requestedFormat ?? "mp3-48k";
+  const details = FORMAT_CONFIG[format];
+  if (!details) {
+    throw new Error(`Unsupported audio format: ${String(format)}`);
+  }
+  return { format, details };
+}
+
+class EdgeSynthesisSession implements SynthesisSession {
+  private closed = false;
+  private inFlight = false;
+
+  constructor(
+    private readonly client: EdgeClient,
+    private readonly configure: (signal: AbortSignal) => Promise<void>,
+    private readonly format: TtsAudioFormat,
+    private readonly details: FormatDetails,
+    private readonly audioIdleTimeoutMs: number,
+  ) {}
+
+  async synthesize(
+    request: SessionSynthesisRequest,
+    signal: AbortSignal,
+  ): Promise<SynthesisResult> {
+    if (this.closed) {
+      throw new Error("Synthesis session is closed");
+    }
+    if (this.inFlight) {
+      throw new Error("Synthesis session allows one synthesis at a time");
+    }
+    assertText(request.text);
+    const prosodyOptions = toEdgeProsody(request.prosody);
+    if (signal.aborted) {
+      throw createAbortError(signal.reason);
+    }
+
+    this.inFlight = true;
+    try {
+      // A no-op while connected. If the service closed the idle socket, reconnect here under
+      // the setup timeout: msedge-tts would otherwise reconnect inside toStream and leave a
+      // failed reconnect as an unhandled rejection.
+      await this.configure(signal);
+      if (signal.aborted) {
+        throw createAbortError(signal.reason);
+      }
+      const { audioStream } = this.client.toStream(escapeXmlText(request.text), prosodyOptions);
+      return {
+        format: this.format,
+        contentType: this.details.contentType,
+        audio: new ManagedEdgeAudioStream(
+          audioStream,
+          () => {
+            this.inFlight = false;
+          },
+          signal,
+          this.audioIdleTimeoutMs,
+        ),
+      };
+    } catch (error) {
+      this.inFlight = false;
+      // The connection state is unknown after a failed setup; the session cannot continue.
+      this.close();
+      throw error;
+    }
+  }
+
+  close(): void {
+    if (this.closed) return;
+    this.closed = true;
+    this.client.close();
   }
 }

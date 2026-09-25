@@ -109,6 +109,7 @@ curl -X POST http://127.0.0.1:8080/api/speech \
 | [**发布治理与安全供应链**](docs/releasing.md)          | 严格 SemVer 规范、OCI 镜像供应链多架构证明检查及不可变摘要锁定。       |
 
 - [消融实验](docs/ablation.zh-CN.md)
+- [长文本合成性能](docs/performance.zh-CN.md)
 
 ## 项目架构
 

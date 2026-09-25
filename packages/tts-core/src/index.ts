@@ -5,6 +5,9 @@ export type {
   SynthesisRequest,
   SynthesisResult,
   TtsProvider,
+  SynthesisSession,
+  SynthesisSessionOptions,
+  SessionSynthesisRequest,
 } from "./provider.js";
 export { TtsError, isTtsError, createAbortError, type TtsErrorCode } from "./errors.js";
 export { countCodePoints } from "./text.js";
