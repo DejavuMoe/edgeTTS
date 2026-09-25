@@ -32,7 +32,51 @@ Internet (Clients / Browsers / API Consumers)
 
 ## Method 1: Docker Compose with Pre-built Image (Recommended)
 
-See [README](../README.md) for the Compose configuration and first start.
+Runs the published multi-architecture image without cloning or building the source. Create `compose.yaml` in an empty directory, for example `~/edgetts`:
+
+```yaml
+services:
+  edgetts:
+    image: ghcr.io/dejavumoe/edgetts:0.7.0
+    container_name: edgetts
+    restart: unless-stopped
+    init: true
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp
+    stop_grace_period: 35s
+    ports:
+      - "${EDGETTS_BIND_ADDRESS:-127.0.0.1}:${EDGETTS_HOST_PORT:-8080}:8080"
+    environment:
+      - NODE_ENV=production
+      - HOST=0.0.0.0
+      - PORT=8080
+      - API_KEY
+      - REQUIRE_API_KEY=${REQUIRE_API_KEY:-true}
+      - SPEECH_RATE_LIMIT_MAX
+      - SPEECH_RATE_LIMIT_WINDOW_MS
+```
+
+Then create the `.env` file once and start the service:
+
+```bash
+# 1. Work in the directory that contains compose.yaml
+mkdir -p ~/edgetts && cd ~/edgetts
+
+# 2. Generate a random API key; the file is private and never overwritten
+(umask 077; set -C; printf 'API_KEY=%s\n' "$(openssl rand -hex 32)" > .env)
+
+# 3. Pull the published image, start it and check the process
+docker compose pull
+docker compose up -d
+curl --fail http://127.0.0.1:8080/health
+```
+
+Keep `.env` across upgrades. `REQUIRE_API_KEY` defaults to `true`, so the container refuses to start without `API_KEY`. The same `.env` may also set `EDGETTS_BIND_ADDRESS` and `EDGETTS_HOST_PORT` for the host binding (default `127.0.0.1:8080`), and `SPEECH_RATE_LIMIT_MAX` or `SPEECH_RATE_LIMIT_WINDOW_MS`. Compose only passes the variables listed under `environment`: add others from the [configuration reference](configuration.md), such as `TRUST_PROXY` or `METRICS_ENABLED`, to that list before setting them in `.env`. For reproducible deployments, replace the tag with the digest from the release notes (see below).
 
 ## Method 2: Single Container (`docker run`)
 
@@ -87,9 +131,9 @@ Official multi-architecture images support `linux/amd64` and `linux/arm64`.
 
 Each release records its verified multi-arch OCI index digest in the [GitHub Release Notes](https://github.com/DejavuMoe/edgeTTS/releases).
 
-## Method 3: Build from Source with Docker Compose
+## Method 3: Build from Source with Docker Compose (Development)
 
-To compile the container locally from the repository source code:
+The repository `compose.yaml` builds the image from your working tree as `edgetts:local` instead of pulling a published image. Use it to develop and test source changes; production deployments should prefer Method 1.
 
 ```bash
 # 1. Clone repository
@@ -111,6 +155,15 @@ The repository `compose.yaml` uses `.env` variables for host port mapping:
 
 - `EDGETTS_BIND_ADDRESS`: Host IP binding (default: `127.0.0.1`).
 - `EDGETTS_HOST_PORT`: Host port mapping (default: `8080`).
+
+After changing the source, rebuild the image and replace the container:
+
+```bash
+docker compose build
+docker compose up -d
+```
+
+`docker compose up -d --build` does both in one step.
 
 ## Method 4: Bare-Metal Installation (Node.js & Systemd)
 

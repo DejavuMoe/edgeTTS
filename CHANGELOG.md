@@ -7,6 +7,11 @@ the version being released.
 
 ## [Unreleased]
 
+### Changed
+
+- The deployment guide now walks through Docker Compose with the pre-built image in all three
+  languages; building from source with Compose is described as the development workflow.
+
 ## [0.7.0] - 2026-09-25
 
 ### Added

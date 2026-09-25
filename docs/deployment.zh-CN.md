@@ -32,7 +32,51 @@
 
 ## 方案一：Docker Compose 预构建镜像部署（推荐）
 
-完整 Compose 配置和首次启动步骤见 [README](../README.zh-CN.md)。
+直接运行已发布的多架构镜像，无需克隆或编译源码。在一个空目录（例如 `~/edgetts`）中创建 `compose.yaml`：
+
+```yaml
+services:
+  edgetts:
+    image: ghcr.io/dejavumoe/edgetts:0.7.0
+    container_name: edgetts
+    restart: unless-stopped
+    init: true
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp
+    stop_grace_period: 35s
+    ports:
+      - "${EDGETTS_BIND_ADDRESS:-127.0.0.1}:${EDGETTS_HOST_PORT:-8080}:8080"
+    environment:
+      - NODE_ENV=production
+      - HOST=0.0.0.0
+      - PORT=8080
+      - API_KEY
+      - REQUIRE_API_KEY=${REQUIRE_API_KEY:-true}
+      - SPEECH_RATE_LIMIT_MAX
+      - SPEECH_RATE_LIMIT_WINDOW_MS
+```
+
+然后只需创建一次 `.env` 并启动服务：
+
+```bash
+# 1. 进入 compose.yaml 所在目录
+mkdir -p ~/edgetts && cd ~/edgetts
+
+# 2. 生成随机 API Key；文件仅当前用户可读，且不会覆盖已有文件
+(umask 077; set -C; printf 'API_KEY=%s\n' "$(openssl rand -hex 32)" > .env)
+
+# 3. 拉取已发布镜像、启动并检查进程
+docker compose pull
+docker compose up -d
+curl --fail http://127.0.0.1:8080/health
+```
+
+升级时保留 `.env`。`REQUIRE_API_KEY` 默认为 `true`，缺少 `API_KEY` 时容器会拒绝启动。同一个 `.env` 还可以设置宿主机绑定用的 `EDGETTS_BIND_ADDRESS` 与 `EDGETTS_HOST_PORT`（默认 `127.0.0.1:8080`），以及 `SPEECH_RATE_LIMIT_MAX`、`SPEECH_RATE_LIMIT_WINDOW_MS`。Compose 只转发 `environment` 中列出的变量：如需使用[配置参考](configuration.zh-CN.md)中的其他变量（例如 `TRUST_PROXY`、`METRICS_ENABLED`），先把它们加入该列表，再写入 `.env`。需要可复现部署时，可将标签替换为发布说明中的摘要（见下文）。
 
 ## 方案二：Docker 单容器运行 (`docker run`)
 
@@ -87,9 +131,9 @@ docker run -d \
 
 每个稳定发布版本的已验证 OCI 索引摘要均记录在对应的 [GitHub Release 说明](https://github.com/DejavuMoe/edgeTTS/releases) 中。
 
-## 方案三：源码编译与 Docker Compose 部署
+## 方案三：源码编译与 Docker Compose 部署（开发）
 
-若需要对源码进行修改或自编译镜像：
+仓库自带的 `compose.yaml` 会从当前工作区源码构建 `edgetts:local` 镜像，而不是拉取已发布镜像。适合开发和测试源码改动；生产部署建议使用方案一。
 
 ```bash
 # 1. 克隆代码仓库
@@ -111,6 +155,15 @@ docker compose up -d --build
 
 - `EDGETTS_BIND_ADDRESS`：宿主机绑定地址（默认 `127.0.0.1`）。
 - `EDGETTS_HOST_PORT`：宿主机映射端口（默认 `8080`）。
+
+修改源码后，重新构建镜像并替换容器：
+
+```bash
+docker compose build
+docker compose up -d
+```
+
+也可以用 `docker compose up -d --build` 一步完成。
 
 ## 方案四：Linux 原生服务部署（Node.js + Systemd）
 
