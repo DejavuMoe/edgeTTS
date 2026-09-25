@@ -109,6 +109,7 @@ curl -X POST http://127.0.0.1:8080/api/speech \
 | [**Release Governance & Security**](docs/releasing.md) | SemVer policies, OCI supply-chain attestations, and immutable digest pinning.       |
 
 - [Ablation results (Chinese)](docs/ablation.zh-CN.md)
+- [Long-text performance (Chinese)](docs/performance.zh-CN.md)
 
 ## Architecture
 

@@ -131,10 +131,41 @@ class ManagedAudioStream implements AsyncIterableIterator<Uint8Array> {
   }
 }
 
+/** Synthesizes the segments of one request; close() releases any upstream connection. */
+interface SegmentSynthesizer {
+  synthesize(text: string): Promise<SynthesisResult>;
+  close(): void;
+}
+
+/**
+ * Uses one provider session for every segment when the provider supports sessions, saving a
+ * connection handshake per segment; otherwise asks the provider once per segment.
+ */
+async function openSegmentSynthesizer(
+  provider: TtsProvider,
+  request: SynthesisRequest,
+  signal: AbortSignal,
+): Promise<SegmentSynthesizer> {
+  if (!provider.openSession) {
+    return {
+      synthesize: (text) => provider.synthesize({ ...request, text }, signal),
+      close: () => {},
+    };
+  }
+  const session = await provider.openSession(
+    { voice: request.voice, ...(request.format !== undefined ? { format: request.format } : {}) },
+    signal,
+  );
+  const prosody = request.prosody !== undefined ? { prosody: request.prosody } : {};
+  return {
+    synthesize: (text) => session.synthesize({ text, ...prosody }, signal),
+    close: () => session.close(),
+  };
+}
+
 class SegmentedAudioStream implements AsyncIterableIterator<Uint8Array> {
-  private readonly provider: TtsProvider;
+  private readonly synthesizer: SegmentSynthesizer;
   private readonly segments: readonly string[];
-  private readonly request: SynthesisRequest;
   private readonly signal: AbortSignal;
   private readonly permit: Permit;
   private readonly expectedFormat: string;
@@ -146,16 +177,14 @@ class SegmentedAudioStream implements AsyncIterableIterator<Uint8Array> {
   private readonly onAbort: () => void;
 
   constructor(
-    provider: TtsProvider,
+    synthesizer: SegmentSynthesizer,
     firstResult: SynthesisResult,
     segments: readonly string[],
-    request: SynthesisRequest,
     signal: AbortSignal,
     permit: Permit,
   ) {
-    this.provider = provider;
+    this.synthesizer = synthesizer;
     this.segments = segments;
-    this.request = request;
     this.signal = signal;
     this.permit = permit;
     this.expectedFormat = firstResult.format;
@@ -183,6 +212,7 @@ class SegmentedAudioStream implements AsyncIterableIterator<Uint8Array> {
     }
     this.released = true;
     this.signal.removeEventListener("abort", this.onAbort);
+    this.synthesizer.close();
     this.permit.release();
   }
 
@@ -227,13 +257,7 @@ class SegmentedAudioStream implements AsyncIterableIterator<Uint8Array> {
 
         let nextResult: SynthesisResult;
         try {
-          nextResult = await this.provider.synthesize(
-            {
-              ...this.request,
-              text: this.segments[this.currentSegmentIndex]!,
-            },
-            this.signal,
-          );
+          nextResult = await this.synthesizer.synthesize(this.segments[this.currentSegmentIndex]!);
         } catch (error) {
           this.closed = true;
           this.releaseOnce();
@@ -398,16 +422,19 @@ export class TtsService {
       throw createAbortError(signal.reason);
     }
 
+    let synthesizer: SegmentSynthesizer;
+    try {
+      synthesizer = await openSegmentSynthesizer(this.provider, request, signal);
+    } catch (error) {
+      permit.release();
+      throw error;
+    }
+
     let firstResult: SynthesisResult;
     try {
-      firstResult = await this.provider.synthesize(
-        {
-          ...request,
-          text: segmentsToSynthesize[0]!,
-        },
-        signal,
-      );
+      firstResult = await synthesizer.synthesize(segmentsToSynthesize[0]!);
     } catch (error) {
+      synthesizer.close();
       permit.release();
       throw error;
     }
@@ -417,10 +444,9 @@ export class TtsService {
       contentType: firstResult.contentType,
       segmentCount: segmentsToSynthesize.length,
       audio: new SegmentedAudioStream(
-        this.provider,
+        synthesizer,
         firstResult,
         segmentsToSynthesize,
-        request,
         signal,
         permit,
       ),
