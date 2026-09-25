@@ -2,7 +2,7 @@
   "openapi": "3.0.3",
   "info": {
     "title": "edgeTTS API",
-    "version": "0.6.0",
+    "version": "0.7.0",
     "description": "Self-hosted Microsoft Edge speech synthesis. Errors before audio headers use the ApiError shape; failures after streaming starts terminate the connection.",
     "license": {
       "name": "MIT"
