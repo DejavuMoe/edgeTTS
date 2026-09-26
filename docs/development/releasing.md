@@ -46,7 +46,7 @@ pnpm outdated -r           # available updates across the workspace
 pnpm update -r <package>   # update within declared ranges, then run the full validation suite
 ```
 
-Major upgrades, the pinned Node.js and pnpm versions (`package.json`, `Dockerfile`, CI) and the pinned GitHub Actions commit SHAs are updated by hand in a dedicated commit. Keep `patches/msedge-tts@2.0.7.patch` in mind when upgrading msedge-tts: remove it only once upstream ignores frames for destroyed streams.
+Major upgrades, the pinned Node.js and pnpm versions (`package.json`, `Dockerfile`, CI) and the pinned GitHub Actions commit SHAs are updated by hand in a dedicated commit. Keep `patches/msedge-tts@2.0.7.patch` in mind when upgrading msedge-tts: remove it only once upstream ignores frames for destroyed streams and supports abortable voice discovery.
 
 ## Roll back a deployment
 
