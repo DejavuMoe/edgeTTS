@@ -26,16 +26,16 @@ class FakeEdgeClient implements EdgeClient {
   public setMetadataCalls: Array<{ voiceName: string; outputFormat: OUTPUT_FORMAT }> = [];
   public toStreamCalls: Array<{ input: string; options?: ProsodyOptions | undefined }> = [];
   public streamToReturn: Readable;
-  public getVoicesHandler?: () => Promise<readonly Voice[]>;
+  public getVoicesHandler?: (signal: AbortSignal) => Promise<readonly Voice[]>;
   public setMetadataHandler?: (voiceName: string, outputFormat: OUTPUT_FORMAT) => Promise<void>;
 
   constructor(streamToReturn?: Readable) {
     this.streamToReturn = streamToReturn ?? Readable.from([]);
   }
 
-  async getVoices(): Promise<readonly Voice[]> {
+  async getVoices(signal: AbortSignal): Promise<readonly Voice[]> {
     if (this.getVoicesHandler) {
-      return this.getVoicesHandler();
+      return this.getVoicesHandler(signal);
     }
     return [
       {
@@ -555,18 +555,30 @@ describe("EdgeTtsProvider", () => {
   });
 
   describe("timeouts and aborts during handshake", () => {
-    it("listVoices times out after configured timeout and closes client", async () => {
+    it("listVoices cancels its HTTP request on timeout and closes client", async () => {
       let createdClient: FakeEdgeClient | undefined;
+      let requestAborted = false;
       const provider = new EdgeTtsProvider({
         clientFactory: () => {
           createdClient = new FakeEdgeClient();
-          createdClient.getVoicesHandler = () => new Promise(() => {}); // never resolves
+          createdClient.getVoicesHandler = (signal) =>
+            new Promise((_, reject) => {
+              signal.addEventListener(
+                "abort",
+                () => {
+                  requestAborted = true;
+                  reject(new Error("cancelled"));
+                },
+                { once: true },
+              );
+            });
           return createdClient;
         },
         listVoicesTimeoutMs: 50,
       });
 
       await expect(provider.listVoices()).rejects.toThrow("Voice discovery timed out after 50ms");
+      expect(requestAborted).toBe(true);
       expect(createdClient?.closeCallCount).toBe(1);
     });
 

@@ -11,3 +11,19 @@ diff --git a/dist/MsEdgeTTS.js b/dist/MsEdgeTTS.js
                  if (message.includes(`Path:${messageTypes.TURN_START}`)) {
                      // start of turn, ignore
                      this._log("->", message);
+@@ -245,7 +248,7 @@ class MsEdgeTTS {
+-    getVoices() {
++    getVoices(signal) {
+         return new Promise((resolve, reject) => {
+-            axios_1.default.get(MsEdgeTTS.VOICES_URL)
++            axios_1.default.get(MsEdgeTTS.VOICES_URL, { signal })
+                 .then((res) => resolve(res.data))
+                 .catch(reject);
+         });
+     }
+diff --git a/dist/MsEdgeTTS.d.ts b/dist/MsEdgeTTS.d.ts
+--- a/dist/MsEdgeTTS.d.ts
++++ b/dist/MsEdgeTTS.d.ts
+@@ -75 +75 @@
+-    getVoices(): Promise<Voice[]>;
++    getVoices(signal?: AbortSignal): Promise<Voice[]>;

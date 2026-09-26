@@ -162,14 +162,16 @@ export class EdgeTtsProvider implements TtsProvider {
 
   async listVoices(): Promise<readonly TtsVoice[]> {
     const client = this.clientFactory();
+    const controller = new AbortController();
     let timer: NodeJS.Timeout | undefined;
     try {
-      const getVoicesPromise = client.getVoices();
+      const getVoicesPromise = client.getVoices(controller.signal);
       getVoicesPromise.catch(() => {});
 
       const timeoutPromise = new Promise<never>((_, reject) => {
         timer = setTimeout(() => {
           reject(new Error(`Voice discovery timed out after ${this.listVoicesTimeoutMs}ms`));
+          controller.abort();
         }, this.listVoicesTimeoutMs);
       });
 

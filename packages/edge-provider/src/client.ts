@@ -3,7 +3,7 @@ import { MsEdgeTTS, OUTPUT_FORMAT } from "msedge-tts";
 import type { MetadataOptions, ProsodyOptions, Voice } from "msedge-tts";
 
 export interface EdgeClient {
-  getVoices(): Promise<readonly Voice[]>;
+  getVoices(signal: AbortSignal): Promise<readonly Voice[]>;
   /**
    * Connects, or keeps the open connection when voice, format and options are unchanged.
    * Pass metadataOptions on every call: msedge-tts throws on repeat calls without it.

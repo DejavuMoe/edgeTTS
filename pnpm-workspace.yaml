@@ -1,7 +1,7 @@
 packages:
   - "apps/*"
   - "packages/*"
-# Remove the patch once upstream safely ignores frames for disposed streams.
+# Remove the patch once upstream ignores disposed frames and accepts a voice-list AbortSignal.
 patchedDependencies:
   msedge-tts@2.0.7: patches/msedge-tts@2.0.7.patch
 allowBuilds:
