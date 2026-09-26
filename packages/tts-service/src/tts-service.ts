@@ -64,7 +64,7 @@ class ManagedAudioStream implements AsyncIterableIterator<Uint8Array> {
     };
 
     if (signal.aborted) {
-      this.releaseOnce();
+      this.onAbort();
     } else {
       signal.addEventListener("abort", this.onAbort, { once: true });
     }
@@ -377,7 +377,11 @@ export class TtsService {
       throw error;
     }
 
-    return this.wrapSynthesisResult(rawResult, signal, permit);
+    const result = this.wrapSynthesisResult(rawResult, signal, permit);
+    if (signal.aborted) {
+      throw createAbortError(signal.reason);
+    }
+    return result;
   }
 
   async synthesizeSegmented(

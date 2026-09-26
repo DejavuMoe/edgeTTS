@@ -419,6 +419,37 @@ describe("TtsService", () => {
 
       expect(provider.synthesizeCallCount).toBe(1);
     });
+
+    it("closes late upstream audio and rejects when cancelled before the result arrives", async () => {
+      const controller = new AbortController();
+      const provider = new FakeTtsProvider();
+      let returned = 0;
+      provider.customSynthesize = async () => {
+        controller.abort();
+        return {
+          format: "mp3-48k",
+          contentType: "audio/mpeg",
+          audio: {
+            [Symbol.asyncIterator]: () => ({
+              next: async () => ({ done: false as const, value: new Uint8Array([1]) }),
+              return: async () => {
+                returned++;
+                return { done: true as const, value: undefined };
+              },
+            }),
+          },
+        };
+      };
+      const service = new TtsService(provider, { maxConcurrentSyntheses: 1 });
+
+      await expect(
+        service.synthesize({ text: "test", voice: "v" }, controller.signal),
+      ).rejects.toMatchObject({
+        name: "AbortError",
+      });
+      expect(returned).toBe(1);
+      expect(service.getStats().activeSyntheses).toBe(0);
+    });
   });
 
   describe("synthesis concurrency limiter and bounded FIFO queue", () => {
