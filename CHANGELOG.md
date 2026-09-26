@@ -7,6 +7,17 @@ the version being released.
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-09-26
+
+### Fixed
+
+- Non-segmented synthesis now closes late upstream audio and reports cancellation when the caller
+  aborts as the provider returns, instead of yielding an empty successful stream.
+- Voice discovery timeouts now cancel the underlying HTTP request, preventing abandoned requests
+  from overlapping later retries.
+- Takes above 12 MiB now skip the browser's extra Blob read before waveform decoding. The plain
+  timeline and playback controls remain unchanged.
+
 ## [0.9.0] - 2026-09-26
 
 ### Added
@@ -138,7 +149,8 @@ the version being released.
 - First release: an OpenAI-compatible speech API, Edge voice discovery, prosody controls, the
   browser workbench and a container image.
 
-[Unreleased]: https://github.com/DejavuMoe/edgeTTS/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/DejavuMoe/edgeTTS/compare/v0.9.1...HEAD
+[0.9.1]: https://github.com/DejavuMoe/edgeTTS/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/DejavuMoe/edgeTTS/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/DejavuMoe/edgeTTS/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/DejavuMoe/edgeTTS/compare/v0.6.0...v0.7.0
