@@ -1,4 +1,5 @@
 import { useWaveform } from "../audio/useWaveform.js";
+import { MAX_WAVEFORM_SOURCE_BYTES } from "../audio/waveform.js";
 import { useI18n } from "../i18n.js";
 import { formatResultMetadataDisplay, formatResultSummary } from "../lib/result-metadata.js";
 import { formatGeneratingStatusText } from "../lib/synthesis-telemetry.js";
@@ -21,7 +22,11 @@ export interface ResultPanelProps {
 export function ResultPanel({ synthesis }: ResultPanelProps) {
   const { locale, t } = useI18n();
   const { isGenerating, telemetry, error, audioSrc, downloadUrl, completedResult } = synthesis;
-  const peaks = useWaveform(completedResult ? downloadUrl : null);
+  const peaks = useWaveform(
+    completedResult && (completedResult.audioBytes ?? 0) <= MAX_WAVEFORM_SOURCE_BYTES
+      ? downloadUrl
+      : null,
+  );
 
   if (!isGenerating && !error && !audioSrc) return null;
 
