@@ -19,6 +19,7 @@ export const UI_LOCALE_KEY = "edgetts.ui-locale.v1";
 
 const zhCN = {
   界面语言: "界面语言",
+  文字转语音: "文字转语音",
   "API 状态": "API 状态",
   "连接中...": "连接中...",
   正常: "正常",
@@ -124,6 +125,7 @@ export type MessageKey = keyof typeof zhCN;
 
 const zhTW: Record<MessageKey, string> = {
   界面语言: "介面語言",
+  文字转语音: "文字轉語音",
   "API 状态": "API 狀態",
   "连接中...": "連線中...",
   正常: "正常",
@@ -228,6 +230,7 @@ const zhTW: Record<MessageKey, string> = {
 
 const en: Record<MessageKey, string> = {
   界面语言: "Interface language",
+  文字转语音: "Text to speech",
   "API 状态": "API status",
   "连接中...": "Connecting…",
   正常: "Healthy",
@@ -332,6 +335,7 @@ const en: Record<MessageKey, string> = {
 
 const ja: Record<MessageKey, string> = {
   界面语言: "表示言語",
+  文字转语音: "テキスト読み上げ",
   "API 状态": "API の状態",
   "连接中...": "接続中…",
   正常: "正常",
@@ -471,6 +475,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   const [locale, setLocale] = useState(loadUiLocale);
   useEffect(() => {
     document.documentElement.lang = locale;
+    document.title = `edgeTTS · ${translate("文字转语音", locale)}`;
     try {
       localStorage.setItem(UI_LOCALE_KEY, locale);
     } catch {

@@ -61,6 +61,7 @@ describe("workbench localization", () => {
     for (const { value, label } of LANGUAGE_OPTIONS) {
       switchLanguage(label);
       expect(document.documentElement.lang).toBe(value);
+      expect(document.title).toBe(`edgeTTS · ${translate("文字转语音", value)}`);
       expect(screen.getByRole("button", { name: translate("合成语音", value) })).toBeDefined();
       expect(screen.getByRole("textbox").getAttribute("placeholder")).toBe(
         translate("在此输入需要合成为语音的文本内容...", value),

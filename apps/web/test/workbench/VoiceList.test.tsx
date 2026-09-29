@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { VoiceGroup } from "../../src/lib/voice-catalog.js";
 import { VoiceList } from "../../src/workbench/VoiceList.js";
@@ -138,5 +138,17 @@ describe("VoiceList", () => {
     expect(list.textContent).toBe("没有匹配的声音");
     expect(list.getAttribute("aria-disabled")).toBe("true");
     expect(list.getAttribute("aria-activedescendant")).toBeNull();
+  });
+
+  it("draws each voice's portrait once the portraits load", async () => {
+    render(<Harness />);
+    const option = screen.getByRole("option", { name: /Yunxi/ });
+    const avatar = () => option.querySelector(".voice-avatar")!;
+    // Decorative: the name beside it already says who it is.
+    expect(avatar().getAttribute("aria-hidden")).toBe("true");
+    await waitFor(() => expect(avatar().querySelector("img")).not.toBeNull());
+    expect(avatar().hasAttribute("data-portrait")).toBe(true);
+    expect(avatar().querySelector("img")!.getAttribute("src")).toMatch(/^data:image\/svg\+xml/);
+    expect(avatar().querySelector("img")!.getAttribute("alt")).toBe("");
   });
 });

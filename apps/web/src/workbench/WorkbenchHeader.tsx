@@ -13,14 +13,16 @@ export function WorkbenchHeader({ apiStatus }: { readonly apiStatus: ApiStatus }
   return (
     <header className="app-header">
       <h1 className="brand">
-        <svg className="brand-mark" viewBox="0 0 20 20" aria-hidden="true">
-          <rect x="1" y="7" width="2.6" height="6" rx="1.3" />
-          <rect x="5.5" y="3" width="2.6" height="14" rx="1.3" />
-          <rect x="10" y="5.5" width="2.6" height="9" rx="1.3" />
-          <rect x="14.5" y="1" width="2.6" height="18" rx="1.3" />
+        {/* Three lines of text, the middle one breaking into a waveform: text becoming speech. */}
+        <svg className="brand-mark" viewBox="0 0 24 24" aria-hidden="true">
+          <path className="brand-mark-text" d="M3 5.5H10.5M3 18.5H13" />
+          <path
+            className="brand-mark-voice"
+            d="M3 12H8C10 12 9.8 7.6 11.9 7.6C14.2 7.6 14.1 16.4 16.4 16.4C18.4 16.4 18.2 12 20.2 12H21"
+          />
         </svg>
         <span>
-          edge<span className="brand-accent">TTS</span>
+          edge<span className="brand-suffix">TTS</span>
         </span>
       </h1>
       <div className="header-tools">

@@ -150,3 +150,5 @@ flowchart TD
 ## ライセンス
 
 本プロジェクトは [MIT License](LICENSE) のもとで公開されています。
+
+音声のアバターは [DiceBear](https://www.dicebear.com) で生成しています。スタイルは Natalia Spivak による [Dylan! The Avatar Generator](https://www.figma.com/community/file/1356575240759683500) を改変したもので、[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) のもとで提供されています。
