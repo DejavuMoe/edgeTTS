@@ -308,6 +308,12 @@ jobs:
     permissions:
       contents: read
       packages: write
+    outputs:
+      index_digest: ${{ steps.build.outputs.digest }}
+      amd64_digest: ${{ steps.verify-registry.outputs.amd64_digest }}
+      arm64_digest: ${{ steps.verify-registry.outputs.arm64_digest }}
+      release_version: ${{ steps.promote-release.outputs.release_version }}
+      latest_updated: ${{ steps.promote-release.outputs.latest_updated }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -797,4 +803,66 @@ jobs:
               echo "| **Latest Release Alias** | \`ghcr.io/dejavumoe/edgetts:latest\` |"
             fi
             echo ""
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  release:
+    name: Create GitHub Release
+    needs: publish
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    # Only this job may write repository contents, and only to create the release. It runs after
+    # the image is verified and promoted, so a release never points at an unpublished image.
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Create or update GitHub release from the changelog
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          COMMIT_SHA: ${{ github.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          INDEX_DIGEST: ${{ needs.publish.outputs.index_digest }}
+          AMD64_DIGEST: ${{ needs.publish.outputs.amd64_digest }}
+          ARM64_DIGEST: ${{ needs.publish.outputs.arm64_digest }}
+          RELEASE_VERSION: ${{ needs.publish.outputs.release_version }}
+          LATEST_UPDATED: ${{ needs.publish.outputs.latest_updated }}
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF#refs/tags/}"
+          if [ "$RELEASE_VERSION" != "${TAG#v}" ]; then
+            echo "::error::Published version '$RELEASE_VERSION' does not match tag '$TAG'"
+            exit 1
+          fi
+
+          NOTES_FILE="$RUNNER_TEMP/release-notes.md"
+          ./scripts/release-notes.sh "$RELEASE_VERSION" > "$NOTES_FILE"
+
+          # "latest" on GitHub follows the registry: only a release that moved the latest image
+          # alias becomes the latest release, so maintenance releases never displace it.
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG exists; refreshing its notes (idempotent rerun)."
+            gh release edit "$TAG" \
+              --title "edgeTTS $RELEASE_VERSION" \
+              --notes-file "$NOTES_FILE" \
+              --latest="$LATEST_UPDATED"
+          else
+            gh release create "$TAG" \
+              --verify-tag \
+              --title "edgeTTS $RELEASE_VERSION" \
+              --notes-file "$NOTES_FILE" \
+              --latest="$LATEST_UPDATED"
+          fi
+
+          RELEASE_URL=$(gh release view "$TAG" --json url --jq .url)
+          echo "PASS: GitHub release $TAG published at $RELEASE_URL"
+          {
+            echo "## GitHub Release"
+            echo ""
+            echo "[edgeTTS $RELEASE_VERSION]($RELEASE_URL) (latest: \`$LATEST_UPDATED\`)"
           } >> "$GITHUB_STEP_SUMMARY"

@@ -8,6 +8,7 @@
 #   3. Release source ancestry from origin/main
 #   4. Version tag overwrite vs idempotent rerun detection
 #   5. release-check.sh preflight validation behavior
+#   6. GitHub release notes rendering (scripts/release-notes.sh)
 #
 # Runs strictly in isolated temporary directories without mutating the
 # working tree or creating any real git tags in the edgeTTS repository.
@@ -424,6 +425,85 @@ LATEST_BA=$(cat "$STATE_DIR/registry/latest_version")
 assert_eq "Ordering A then B yields latest=1.3.0" "1.3.0" "$LATEST_AB"
 assert_eq "Ordering B then A yields latest=1.3.0" "1.3.0" "$LATEST_BA"
 assert_eq "Cross-release race converges to identical latest" "$LATEST_AB" "$LATEST_BA"
+
+echo ""
+echo "==> [8] GitHub release notes rendering"
+
+NOTES_DIR=$(mktemp -d)
+trap 'rm -rf "$TEMP_GIT_DIR" "$MOCK_REPO" "$ORIGIN_REPO" "$STATE_DIR" "$NOTES_DIR"' EXIT
+mkdir -p "$NOTES_DIR/scripts"
+cp "$REPO_ROOT/scripts/release-notes.sh" "$NOTES_DIR/scripts/"
+cat > "$NOTES_DIR/CHANGELOG.md" <<'EOF'
+# Changelog
+
+## [Unreleased]
+
+## [1.3.0] - 2026-01-02
+
+### Added
+
+- A wrapped entry that continues
+  on the next line.
+
+A paragraph that also
+wraps.
+
+```bash
+keep   this
+  exactly
+```
+
+## [1.2.3] - 2026-01-01
+
+### Fixed
+
+- Older entry.
+
+[1.3.0]: https://example.invalid/compare/v1.2.3...v1.3.0
+EOF
+
+DIGEST_A="sha256:$(printf 'a%.0s' $(seq 64))"
+DIGEST_B="sha256:$(printf 'b%.0s' $(seq 64))"
+DIGEST_C="sha256:$(printf 'c%.0s' $(seq 64))"
+render_notes() {
+  COMMIT_SHA="${NOTES_COMMIT-0123456789abcdef0123456789abcdef01234567}" \
+    RUN_URL="https://example.invalid/runs/1" \
+    INDEX_DIGEST="${NOTES_INDEX-$DIGEST_A}" AMD64_DIGEST="$DIGEST_B" ARM64_DIGEST="$DIGEST_C" \
+    LATEST_UPDATED="${NOTES_LATEST-true}" \
+    bash "$NOTES_DIR/scripts/release-notes.sh" "$@"
+}
+
+NOTES=$(render_notes v1.3.0)
+assert_eq "Wrapped list item is joined into one line" "1" \
+  "$(grep -cx -- '- A wrapped entry that continues on the next line.' <<<"$NOTES")"
+assert_eq "Wrapped paragraph is joined into one line" "1" \
+  "$(grep -cx 'A paragraph that also wraps.' <<<"$NOTES")"
+assert_eq "Code fence content is kept verbatim" "1" "$(grep -cx '  exactly' <<<"$NOTES")"
+assert_eq "Section stops before the next version" "0" "$(grep -c 'Older entry' <<<"$NOTES")"
+assert_eq "Section excludes link references" "0" "$(grep -c 'example.invalid/compare' <<<"$NOTES")"
+assert_eq "Notes pin the immutable OCI index" "1" \
+  "$(grep -cF "ghcr.io/dejavumoe/edgetts@${DIGEST_A}" <<<"$NOTES")"
+# shellcheck disable=SC2016 # The backticks are literal Markdown code spans.
+assert_eq "Latest release lists the latest alias" "1" \
+  "$(grep -cF 'Latest: `ghcr.io/dejavumoe/edgetts:latest`' <<<"$NOTES")"
+assert_eq "Maintenance release omits the latest alias" "0" \
+  "$(NOTES_LATEST=false render_notes 1.2.3 | grep -c 'latest')"
+
+assert_exit_code "Reject version without a changelog section" 1 render_notes 9.9.9
+assert_exit_code "Reject non-SemVer version" 1 render_notes v1.3
+render_bad_digest() { NOTES_INDEX=sha256:short render_notes 1.3.0; }
+render_no_commit() { NOTES_COMMIT="" render_notes 1.3.0; }
+render_bad_latest() { NOTES_LATEST=maybe render_notes 1.3.0; }
+assert_exit_code "Reject malformed index digest" 1 render_bad_digest
+assert_exit_code "Reject missing commit SHA" 1 render_no_commit
+assert_exit_code "Reject unknown latest flag" 1 render_bad_latest
+
+# The package version being released always has renderable notes.
+PACKAGE_VERSION=$(sed -nE 's/^  "version": "([^"]+)",$/\1/p' "$REPO_ROOT/package.json")
+assert_exit_code "Current version $PACKAGE_VERSION renders from CHANGELOG.md" 0 \
+  env COMMIT_SHA=0123456789abcdef0123456789abcdef01234567 RUN_URL=https://example.invalid/runs/1 \
+  INDEX_DIGEST="$DIGEST_A" AMD64_DIGEST="$DIGEST_B" ARM64_DIGEST="$DIGEST_C" LATEST_UPDATED=true \
+  bash "$REPO_ROOT/scripts/release-notes.sh" "$PACKAGE_VERSION"
 
 echo "======================================================================"
 echo " All $PASSED_TESTS / $TOTAL_TESTS Release Governance Tests PASSED"
