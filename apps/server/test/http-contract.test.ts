@@ -124,6 +124,8 @@ describe("HTTP boundary", () => {
         "microphone=(), camera=(), geolocation=()",
       );
       expect(response.headers["content-security-policy"]).toContain("media-src 'self' blob:");
+      // The waveform reads the finished take back from its Blob URL with fetch().
+      expect(response.headers["content-security-policy"]).toContain("connect-src 'self' blob:");
       expect(response.headers["content-security-policy"]).toContain("script-src 'self';");
     }
   });

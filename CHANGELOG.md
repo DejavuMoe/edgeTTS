@@ -25,6 +25,12 @@ the version being released.
   from about 280 MB to 168 MB, and the compressed download from 85 MB to 55 MB. The `node` user
   keeps UID/GID 1000.
 
+### Fixed
+
+- The finished take's waveform now draws when the web app is served by edgeTTS. The Content
+  Security Policy blocked the browser from reading the take back from its local Blob URL, so the
+  plain timeline was always shown; `connect-src` now allows `blob:` alongside the page's origin.
+
 ## [0.9.1] - 2026-09-26
 
 ### Fixed
