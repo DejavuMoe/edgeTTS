@@ -7,6 +7,8 @@ the version being released.
 
 ## [Unreleased]
 
+## [0.9.2] - 2026-09-29
+
 ### Added
 
 - Every voice has a portrait, drawn locally with DiceBear's Dylan style. The locale picks skin
@@ -173,7 +175,8 @@ the version being released.
 - First release: an OpenAI-compatible speech API, Edge voice discovery, prosody controls, the
   browser workbench and a container image.
 
-[Unreleased]: https://github.com/DejavuMoe/edgeTTS/compare/v0.9.1...HEAD
+[Unreleased]: https://github.com/DejavuMoe/edgeTTS/compare/v0.9.2...HEAD
+[0.9.2]: https://github.com/DejavuMoe/edgeTTS/compare/v0.9.1...v0.9.2
 [0.9.1]: https://github.com/DejavuMoe/edgeTTS/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/DejavuMoe/edgeTTS/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/DejavuMoe/edgeTTS/compare/v0.7.0...v0.8.0
