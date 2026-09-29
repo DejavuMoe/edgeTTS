@@ -24,12 +24,13 @@ git push origin vX.Y.Z
 
 The preflight script checks the version, repository state, tag availability, the package version and changelog section, and local validation. It does not create or push tags. On workstations with separate build runtimes, run the complete validation there and use `--skip-tests` for the Git preflight in the canonical checkout.
 
+After the image is published, a final release job creates the [GitHub release](https://github.com/DejavuMoe/edgeTTS/releases) from the version's changelog section, with upgrade steps, the verification facts and the immutable image references rendered by `scripts/release-notes.sh`. It is the only job with `contents: write`. The release becomes GitHub's latest only when the tag also moved the `latest` image alias, and a rerun refreshes the existing release instead of failing.
+
 After publishing:
 
-1. Confirm all four CI jobs succeeded: quality, Docker image, proxy contract and publication.
-2. Record the Git commit, OCI index digest, both platform digests, attestations and CI run URL.
-3. Verify `X.Y.Z` resolves to the candidate digest. Verify `latest` only advances when this is the highest published stable version.
-4. Create the [GitHub release](https://github.com/DejavuMoe/edgeTTS/releases/new) with a changelog and the immutable image reference.
+1. Confirm all five CI jobs succeeded: quality, Docker image, proxy contract, publication and GitHub release.
+2. Verify `X.Y.Z` resolves to the candidate digest. Verify `latest` only advances when this is the highest published stable version.
+3. Review the generated release notes. To rebuild them by hand, pass the published values to the same script: `COMMIT_SHA=… RUN_URL=… INDEX_DIGEST=… AMD64_DIGEST=… ARM64_DIGEST=… LATEST_UPDATED=true ./scripts/release-notes.sh X.Y.Z`.
 
 ```bash
 docker buildx imagetools inspect ghcr.io/dejavumoe/edgetts:X.Y.Z
