@@ -148,3 +148,5 @@ flowchart TD
 ## 开源协议
 
 本项目采用 [MIT License](LICENSE) 开源许可协议。
+
+音色头像由 [DiceBear](https://www.dicebear.com) 生成，所用风格改编自 Natalia Spivak 的 [Dylan! The Avatar Generator](https://www.figma.com/community/file/1356575240759683500)，采用 [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) 许可。

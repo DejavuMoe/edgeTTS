@@ -10,6 +10,8 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@dicebear/core": "^10.7.0",
+    "@dicebear/styles": "^10.6.0",
     "@edgetts/shared": "workspace:*",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"

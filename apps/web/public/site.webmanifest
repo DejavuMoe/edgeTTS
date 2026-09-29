@@ -1,0 +1,14 @@
+{
+  "name": "edgeTTS",
+  "short_name": "edgeTTS",
+  "description": "Self-hosted API and browser workbench for Microsoft Edge speech synthesis.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f3f1ec",
+  "theme_color": "#f3f1ec",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

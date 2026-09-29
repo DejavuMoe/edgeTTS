@@ -246,7 +246,7 @@ EOF
 
 docker run -d --name "$MOCK_CONTAINER" \
   -v "$TMP_DIR/mock-upstream.mjs:/app/mock-upstream.mjs:ro" \
-  node:24.21.0-bookworm-slim node /app/mock-upstream.mjs >/dev/null
+  node:24.21.0-alpine3.24 node /app/mock-upstream.mjs >/dev/null
 
 MOCK_IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$MOCK_CONTAINER")
 echo "Mock upstream IP: $MOCK_IP"

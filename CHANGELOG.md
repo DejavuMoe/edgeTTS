@@ -7,6 +7,24 @@ the version being released.
 
 ## [Unreleased]
 
+### Added
+
+- Every voice has a portrait, drawn locally with DiceBear's Dylan style. The locale picks skin
+  tones and hair colours common where the voice's language is spoken, and the gender picks the
+  haircut; the voice ID seeds the choice, so each voice keeps its face. Portraits load in their own
+  chunk after the first paint, with the monogram in their place until then.
+- The web app has a favicon, Apple touch icon, web app manifest, description and Open Graph
+  metadata, and the page title follows the interface language.
+
+### Changed
+
+- The logo is redrawn as lines of text, one of them breaking into a waveform.
+- The container image is built on Alpine: the runtime stage is plain `alpine:3.24` with the Node
+  binary and `libstdc++` only, without npm, npx, Yarn or Corepack, and source maps, type
+  declarations and Markdown files are pruned from its dependencies. The unpacked image shrinks
+  from about 280 MB to 168 MB, and the compressed download from 85 MB to 55 MB. The `node` user
+  keeps UID/GID 1000.
+
 ## [0.9.1] - 2026-09-26
 
 ### Fixed

@@ -1,7 +1,16 @@
+# syntax=docker/dockerfile:1
+
+# Both stages share one Alpine release so the musl-linked Node binary copied into the runtime
+# matches the C library it was built against.
+ARG NODE_IMAGE=node:24.21.0-alpine3.24
+ARG ALPINE_IMAGE=alpine:3.24
+
+FROM ${NODE_IMAGE} AS node
+
 # ==============================================================================
 # Builder Stage
 # ==============================================================================
-FROM node:24.21.0-bookworm-slim AS builder
+FROM node AS builder
 
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
@@ -34,10 +43,24 @@ RUN pnpm build
 # Prune and deploy production server dependencies
 RUN pnpm --filter @edgetts/server --prod deploy /prod/server
 
+# Drop what Node never loads at runtime: source maps, type declarations and Markdown docs.
+# License files stay, whatever their extension.
+RUN find /prod/server -type f \
+      \( -name '*.map' -o -name '*.d.ts' -o -name '*.d.mts' -o -name '*.d.cts' -o -iname '*.md' \) \
+      ! -iname 'licen[cs]e*' -delete
+
 # ==============================================================================
 # Production Runtime Stage
 # ==============================================================================
-FROM node:24.21.0-bookworm-slim AS runtime
+# Plain Alpine plus the Node binary: no npm, npx, Yarn or Corepack in the shipped image.
+FROM ${ALPINE_IMAGE} AS runtime
+
+# The same runtime library and UID/GID 1000 "node" account the official Node image provides.
+RUN apk add --no-cache libstdc++ \
+  && addgroup -g 1000 node \
+  && adduser -u 1000 -G node -s /bin/sh -D node
+
+COPY --from=node /usr/local/bin/node /usr/local/bin/node
 
 WORKDIR /app
 

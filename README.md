@@ -148,3 +148,5 @@ Solid arrows show the call path; dashed arrows show shared contracts and depende
 ## License
 
 This project is licensed under the [MIT License](LICENSE).
+
+Voice portraits are drawn with [DiceBear](https://www.dicebear.com) using a remix of [Dylan! The Avatar Generator](https://www.figma.com/community/file/1356575240759683500) by Natalia Spivak, licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).

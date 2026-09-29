@@ -118,6 +118,35 @@ jobs:
 
           echo "PASS: Image metadata audit succeeded."
 
+      - name: Audit Alpine runtime footprint
+        run: |
+          set -euo pipefail
+          # Measured inside the container, so the figure does not depend on the image store.
+          # The Alpine runtime unpacks to about 160 MiB; the Debian-based one was about 267 MiB.
+          MAX_ROOTFS_KIB=204800
+          ROOTFS_KIB=$(docker run --rm --user 0 edgetts:ci sh -c "du -sxk / 2>/dev/null | cut -f1")
+          echo "Unpacked root filesystem: $ROOTFS_KIB KiB (budget $MAX_ROOTFS_KIB KiB)"
+          if [ "$ROOTFS_KIB" -gt "$MAX_ROOTFS_KIB" ]; then
+            echo "FAIL: Root filesystem $ROOTFS_KIB KiB exceeds budget $MAX_ROOTFS_KIB KiB" >&2
+            exit 1
+          fi
+
+          ALPINE_RELEASE=$(docker run --rm edgetts:ci cat /etc/alpine-release)
+          echo "Alpine release: $ALPINE_RELEASE"
+
+          # The runtime ships the Node binary alone, without package managers.
+          if docker run --rm edgetts:ci sh -c "command -v npm || command -v npx || command -v yarn || command -v corepack"; then
+            echo "FAIL: A package manager is present in the runtime image" >&2
+            exit 1
+          fi
+
+          RUNTIME_UID=$(docker run --rm edgetts:ci id -u)
+          if [ "$RUNTIME_UID" != "1000" ]; then
+            echo "FAIL: Expected runtime UID 1000, got $RUNTIME_UID" >&2
+            exit 1
+          fi
+          echo "PASS: Alpine runtime footprint audit succeeded."
+
       - name: Test fail-closed container startup without API key
         run: |
           set -euo pipefail
