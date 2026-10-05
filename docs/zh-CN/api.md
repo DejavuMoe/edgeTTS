@@ -35,7 +35,7 @@
 Authorization: Bearer <API_KEY>
 ```
 
-若缺少或密钥不匹配，服务端将返回 HTTP `401 Unauthorized`：
+认证在读取、解析请求体之前执行。若缺少密钥或密钥不匹配，即使请求体格式错误或超限，也会先返回 HTTP `401 Unauthorized`。认证通过后的请求仍遵守原有的内容校验和大小限制：
 
 ```json
 {

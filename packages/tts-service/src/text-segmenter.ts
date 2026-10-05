@@ -29,6 +29,9 @@ export function segmentText(text: string, options: TextSegmentationOptions): rea
     return [];
   }
 
+  // UTF-16 length is an upper bound on code points; short text needs no offset tables.
+  if (text.length <= options.maxCodePoints) return [text];
+
   // Phase A: Build code-point to UTF-16 offset index mapping in a single O(N) pass.
   // cpToUtf16Offset[i] is the UTF-16 offset of code point i.
   // utf16ToCp[j] is the code point index corresponding to UTF-16 offset j.

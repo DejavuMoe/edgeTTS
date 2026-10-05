@@ -122,8 +122,8 @@ jobs:
         run: |
           set -euo pipefail
           # Measured inside the container, so the figure does not depend on the image store.
-          # The Alpine runtime unpacks to about 160 MiB; the Debian-based one was about 267 MiB.
-          MAX_ROOTFS_KIB=204800
+          # Stripped Node plus pruned JS dependencies must stay below 145 MiB.
+          MAX_ROOTFS_KIB=148480
           ROOTFS_KIB=$(docker run --rm --user 0 edgetts:ci sh -c "du -sxk / 2>/dev/null | cut -f1")
           echo "Unpacked root filesystem: $ROOTFS_KIB KiB (budget $MAX_ROOTFS_KIB KiB)"
           if [ "$ROOTFS_KIB" -gt "$MAX_ROOTFS_KIB" ]; then
@@ -146,6 +146,12 @@ jobs:
             exit 1
           fi
           echo "PASS: Alpine runtime footprint audit succeeded."
+
+      - name: Test final image contracts without upstream network
+        run: |
+          docker run --rm -i --network none --cap-drop=ALL \
+            --security-opt=no-new-privileges --memory=256m --cpus=1 --pids-limit=64 \
+            edgetts:ci node --input-type=module < tests/docker-runtime.mjs
 
       - name: Test fail-closed container startup without API key
         run: |
@@ -395,6 +401,9 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           provenance: mode=max
           sbom: true
+          cache-from: type=gha,scope=edgetts-multiarch
+          cache-to: type=gha,mode=max,scope=edgetts-multiarch
+          outputs: type=image,compression=gzip,compression-level=9
 
       - name: Verify registry manifest and digest resolution
         id: verify-registry
@@ -490,10 +499,12 @@ jobs:
           fi
 
           # 7. Export verified outputs for publication summary
-          echo "amd64_digest=$AMD64_CHILD_DIGEST" >> "$GITHUB_OUTPUT"
-          echo "arm64_digest=$ARM64_CHILD_DIGEST" >> "$GITHUB_OUTPUT"
-          echo "provenance=true" >> "$GITHUB_OUTPUT"
-          echo "sbom=true" >> "$GITHUB_OUTPUT"
+          {
+            echo "amd64_digest=$AMD64_CHILD_DIGEST"
+            echo "arm64_digest=$ARM64_CHILD_DIGEST"
+            echo "provenance=true"
+            echo "sbom=true"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Verify multi-arch runtime execution and security posture
         run: |
@@ -574,6 +585,12 @@ jobs:
             exit 1
           fi
           echo "PASS: linux/arm64 UID is $ARM64_UID (non-root)."
+
+          for PLATFORM in linux/amd64 linux/arm64; do
+            docker run --rm -i --platform "$PLATFORM" --network none --cap-drop=ALL \
+              --security-opt=no-new-privileges --memory=256m --cpus=1 --pids-limit=64 \
+              "$IMAGE_TAG" node --input-type=module < tests/docker-runtime.mjs
+          done
 
           # 3. Audit image layer history for credential material
           for PLATFORM in linux/amd64 linux/arm64; do
@@ -757,10 +774,12 @@ jobs:
             fi
           fi
 
-          echo "release_version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "highest_published_version=$HIGHEST_PUBLISHED_VERSION" >> "$GITHUB_OUTPUT"
-          echo "latest_updated=$LATEST_UPDATED" >> "$GITHUB_OUTPUT"
-          echo "latest_target=$HIGHEST_PUBLISHED_VERSION" >> "$GITHUB_OUTPUT"
+          {
+            echo "release_version=$VERSION"
+            echo "highest_published_version=$HIGHEST_PUBLISHED_VERSION"
+            echo "latest_updated=$LATEST_UPDATED"
+            echo "latest_target=$HIGHEST_PUBLISHED_VERSION"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Generate release publication summary
         if: always() && steps.build.outcome == 'success'

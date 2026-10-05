@@ -3,9 +3,13 @@
 **/node_modules
 **/dist
 **/coverage
-.env
-.env.*
-!.env.example
+**/.env
+**/.env.*
+**/.npmrc
+**/test
+**/tests
+**/scripts
+.agents
 *.log
 *.mp3
 *.wav

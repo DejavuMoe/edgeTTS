@@ -7,10 +7,17 @@ ARG ALPINE_IMAGE=alpine:3.24
 
 FROM ${NODE_IMAGE} AS node
 
+# Keep executable code, ICU, TLS and dynamic symbols; only discard debug/linker metadata.
+# Use the target architecture's strip, and leave binutils in this disposable stage.
+RUN apk add --no-cache binutils \
+  && strip --strip-unneeded /usr/local/bin/node
+
 # ==============================================================================
 # Builder Stage
 # ==============================================================================
-FROM node AS builder
+# TypeScript, Vite and the deployed production dependencies are platform-independent JS.
+# Build once on the builder's native CPU instead of compiling again under ARM emulation.
+FROM --platform=$BUILDPLATFORM ${NODE_IMAGE} AS builder
 
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
@@ -30,7 +37,7 @@ COPY packages/edge-provider/package.json ./packages/edge-provider/
 COPY packages/tts-service/package.json ./packages/tts-service/
 
 # Install workspace dependencies using frozen lockfile and cache
-RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store,sharing=locked pnpm install --frozen-lockfile
 
 # Copy project source trees and configs
 COPY tsconfig.base.json ./
@@ -47,7 +54,13 @@ RUN pnpm --filter @edgetts/server --prod deploy /prod/server
 # License files stay, whatever their extension.
 RUN find /prod/server -type f \
       \( -name '*.map' -o -name '*.d.ts' -o -name '*.d.mts' -o -name '*.d.cts' -o -iname '*.md' \) \
-      ! -iname 'licen[cs]e*' -delete
+      ! -iname 'licen[cs]e*' -delete \
+  && find /prod/server/node_modules -type d \
+      \( -name test -o -name tests -o -name __tests__ -o -name docs -o -name examples -o -name benchmarks \) \
+      -prune -exec rm -rf '{}' + \
+  && if find /prod/server -type f \( -name '*.node' -o -name '*.so' \) | grep -q .; then \
+       echo 'Native production dependencies require a target-platform deploy stage' >&2; exit 1; \
+     fi
 
 # ==============================================================================
 # Production Runtime Stage
@@ -61,12 +74,14 @@ RUN apk add --no-cache libstdc++ \
   && adduser -u 1000 -G node -s /bin/sh -D node
 
 COPY --from=node /usr/local/bin/node /usr/local/bin/node
+COPY --from=node /usr/local/LICENSE /usr/local/share/licenses/node/LICENSE
 
 WORKDIR /app
 
-# Copy deployed server runtime and static WebUI assets with non-root ownership
-COPY --from=builder --chown=node:node /prod/server /app
-COPY --from=builder --chown=node:node /build/apps/web/dist /app/web-dist
+# The service reads its code/assets; it must not be able to overwrite them even when
+# an operator omits --read-only. Writable temporary data belongs under /tmp.
+COPY --from=builder /prod/server /app
+COPY --from=builder /build/apps/web/dist /app/web-dist
 
 ENV NODE_ENV=production \
     HOST=0.0.0.0 \
