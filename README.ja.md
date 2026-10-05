@@ -79,6 +79,12 @@ curl -i http://127.0.0.1:8080/health
 
 `.env` は初回だけ生成し、更新時に保持します。`/health` は HTTP プロセスのみを確認します。ローカルでは `http://127.0.0.1:8080`、リモートでは HTTPS プロキシの URL を開き、同じ API キーを入力します。シェル API 例を使う前に `set -a; . ./.env; set +a` でローカル生成キーを読み込みます。その他の配備方法と更新は[配備ガイド](docs/ja/deployment.md)を参照してください。
 
+## STranslate
+
+[STranslate edgeTTS プラグイン](https://github.com/DejavuMoe/STranslate.Plugin.Tts.edgeTTS)を使うと、Windows の STranslate 2.0.10+ から本サービスを利用できます。トークン認証、音色一覧の自動取得と絞り込み、ネイティブと OpenAI 互換の両音声 API に対応しています。
+
+プラグインの [Releases](https://github.com/DejavuMoe/STranslate.Plugin.Tts.edgeTTS/releases/latest) から `.spkg` をダウンロードし、[STranslate 連携ガイド](docs/ja/api.md#stranslate)に従ってインストールし、サーバー URL と API トークンを設定してください。
+
 ## API 利用例
 
 ### ネイティブ長文ストリーミング合成 (`POST /api/speech`)

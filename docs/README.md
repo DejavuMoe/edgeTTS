@@ -3,12 +3,13 @@
 User guides exist in three languages with the same structure. `pnpm test` checks that the
 translations reference the same variables, error codes and routes, and that every link resolves.
 
-| Guide                                    | English                              | 简体中文                           | 日本語                                  |
-| :--------------------------------------- | :----------------------------------- | :--------------------------------- | :-------------------------------------- |
-| Deployment (Compose, container, systemd) | [deployment](en/deployment.md)       | [部署指南](zh-CN/deployment.md)    | [デプロイ](ja/deployment.md)            |
-| Reverse proxy and TLS                    | [reverse-proxy](en/reverse-proxy.md) | [反向代理](zh-CN/reverse-proxy.md) | [リバースプロキシ](ja/reverse-proxy.md) |
-| Configuration (environment variables)    | [configuration](en/configuration.md) | [配置参考](zh-CN/configuration.md) | [設定](ja/configuration.md)             |
-| HTTP API                                 | [api](en/api.md)                     | [API 参考](zh-CN/api.md)           | [API](ja/api.md)                        |
+| Guide                                    | English                              | 简体中文                            | 日本語                                  |
+| :--------------------------------------- | :----------------------------------- | :---------------------------------- | :-------------------------------------- |
+| Deployment (Compose, container, systemd) | [deployment](en/deployment.md)       | [部署指南](zh-CN/deployment.md)     | [デプロイ](ja/deployment.md)            |
+| Reverse proxy and TLS                    | [reverse-proxy](en/reverse-proxy.md) | [反向代理](zh-CN/reverse-proxy.md)  | [リバースプロキシ](ja/reverse-proxy.md) |
+| Configuration (environment variables)    | [configuration](en/configuration.md) | [配置参考](zh-CN/configuration.md)  | [設定](ja/configuration.md)             |
+| HTTP API                                 | [api](en/api.md)                     | [API 参考](zh-CN/api.md)            | [API](ja/api.md)                        |
+| STranslate plugin                        | [setup](en/api.md#stranslate)        | [接入指南](zh-CN/api.md#stranslate) | [連携ガイド](ja/api.md#stranslate)      |
 
 [openapi.json](openapi.json) is the machine-readable API description. It is generated from the
 validation schemas with `pnpm --filter @edgetts/server openapi`; `pnpm test` fails when it is stale.
