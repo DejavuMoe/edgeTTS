@@ -7,6 +7,8 @@ the version being released.
 
 ## [Unreleased]
 
+## [0.9.5] - 2026-10-05
+
 ### Changed
 
 - Reduce the amd64 container root filesystem from about 160 MiB to 136 MiB by stripping Node's
@@ -216,7 +218,8 @@ the version being released.
 - First release: an OpenAI-compatible speech API, Edge voice discovery, prosody controls, the
   browser workbench and a container image.
 
-[Unreleased]: https://github.com/DejavuMoe/edgeTTS/compare/v0.9.4...HEAD
+[Unreleased]: https://github.com/DejavuMoe/edgeTTS/compare/v0.9.5...HEAD
+[0.9.5]: https://github.com/DejavuMoe/edgeTTS/compare/v0.9.4...v0.9.5
 [0.9.4]: https://github.com/DejavuMoe/edgeTTS/compare/v0.9.2...v0.9.4
 [0.9.2]: https://github.com/DejavuMoe/edgeTTS/compare/v0.9.1...v0.9.2
 [0.9.1]: https://github.com/DejavuMoe/edgeTTS/compare/v0.9.0...v0.9.1
