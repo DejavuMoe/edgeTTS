@@ -503,7 +503,7 @@ PACKAGE_VERSION=$(sed -nE 's/^  "version": "([^"]+)",$/\1/p' "$REPO_ROOT/package
 assert_exit_code "Current version $PACKAGE_VERSION renders from CHANGELOG.md" 0 \
   env COMMIT_SHA=0123456789abcdef0123456789abcdef01234567 RUN_URL=https://example.invalid/runs/1 \
   INDEX_DIGEST="$DIGEST_A" AMD64_DIGEST="$DIGEST_B" ARM64_DIGEST="$DIGEST_C" LATEST_UPDATED=true \
-  bash "$REPO_ROOT/scripts/release-notes.sh" "$PACKAGE_VERSION"
+  "$REPO_ROOT/scripts/release-notes.sh" "$PACKAGE_VERSION"
 
 echo "======================================================================"
 echo " All $PASSED_TESTS / $TOTAL_TESTS Release Governance Tests PASSED"
