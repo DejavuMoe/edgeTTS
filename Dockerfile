@@ -71,10 +71,15 @@ FROM ${ALPINE_IMAGE} AS runtime
 # The same runtime library and UID/GID 1000 "node" account the official Node image provides.
 RUN apk add --no-cache libstdc++ \
   && addgroup -g 1000 node \
-  && adduser -u 1000 -G node -s /bin/sh -D node
+  && adduser -u 1000 -G node -s /bin/sh -D node \
+  && mkdir -p /usr/local/share/licenses/node
 
 COPY --from=node /usr/local/bin/node /usr/local/bin/node
-COPY --from=node /usr/local/LICENSE /usr/local/share/licenses/node/LICENSE
+# The source-built arm64 Node image omits /usr/local/LICENSE. Fetch the same release's
+# architecture-independent license with an integrity pin; update it with NODE_IMAGE.
+ADD --checksum=sha256:5888dbb9a1d2b18f2c3e6c5f6af1b39de658372b402a0577b002777f14c62ace --chmod=444 \
+  https://raw.githubusercontent.com/nodejs/node/v24.21.0/LICENSE \
+  /usr/local/share/licenses/node/LICENSE
 
 WORKDIR /app
 
