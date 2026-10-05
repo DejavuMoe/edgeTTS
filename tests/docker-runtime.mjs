@@ -1,10 +1,12 @@
 // Run through stdin in the final image, without network access or source-tree mounts:
-// docker run --rm -i --network none edgetts:ci node --input-type=module < tests/docker-runtime.mjs
+// docker run --rm -i --network none edgetts:ci bun run - < tests/docker-runtime.mjs
 import assert from "node:assert/strict";
 import { Buffer } from "node:buffer";
 import { log } from "node:console";
 import { accessSync, constants, readFileSync } from "node:fs";
 import process from "node:process";
+import { clearTimeout, setTimeout } from "node:timers";
+import { setTimeout as delay } from "node:timers/promises";
 import { rootCertificates } from "node:tls";
 import { TtsService } from "@edgetts/tts-service";
 import { createApp } from "./dist/app.js";
@@ -26,7 +28,10 @@ assert.deepEqual(Intl.DateTimeFormat.supportedLocalesOf(["en", "zh-CN", "ja"]), 
   "zh-CN",
   "ja",
 ]);
-assert.ok(readFileSync("/usr/local/share/licenses/node/LICENSE", "utf8").includes("Node"));
+assert.equal(process.versions.bun, "1.4.2");
+assert.ok(
+  readFileSync("/usr/local/share/licenses/bun/LICENSE.md", "utf8").includes("MIT-licensed"),
+);
 assert.ok(createProductionDependencies().ttsService);
 
 const voice = {
@@ -117,4 +122,98 @@ try {
   );
 } finally {
   await app.close();
+}
+
+// Exercise actual sockets: injection alone cannot prove streaming or disconnect semantics.
+const { fetch, AbortController } = globalThis;
+const deadline = setTimeout(() => {
+  log("FAIL: HTTP streaming contract exceeded 60s");
+  process.exit(1);
+}, 60_000);
+let streamState;
+const streamingService = new TtsService(
+  {
+    listVoices: async () => [voice],
+    synthesize: async (request, signal) => {
+      const state = streamState;
+      if (request.text === "blocked") state.signal = signal;
+      return {
+        format: "mp3-48k",
+        contentType: "audio/mpeg",
+        audio: (async function* () {
+          yield Buffer.from([1, 2, 3]);
+          if (request.text === "blocked") {
+            await state.gate;
+            state.advanced = true;
+          }
+          signal.throwIfAborted();
+          yield Buffer.from([4, 5, 6]);
+        })(),
+      };
+    },
+  },
+  { maxConcurrentSyntheses: 1, maxQueuedSyntheses: 1 },
+);
+const streamingApp = createApp(
+  { ttsService: streamingService },
+  { logger: false, serveStatic: false, requireApiKey: true, apiKey: key },
+);
+async function until(predicate) {
+  for (let i = 0; i < 500 && !predicate(); i++) await delay(10);
+  assert.ok(predicate(), "stream/queue state did not settle within 5s");
+}
+try {
+  await streamingApp.listen({ host: "127.0.0.1", port: 0 });
+  const base = `http://127.0.0.1:${streamingApp.server.address().port}`;
+  for (const endpoint of ["/api/speech", "/v1/audio/speech"]) {
+    const send = (input, signal) =>
+      fetch(base + endpoint, {
+        method: "POST",
+        signal,
+        headers: { ...headers, "content-type": "application/json" },
+        body: JSON.stringify({
+          input,
+          voice: voice.id,
+          ...(endpoint.startsWith("/v1") ? { model: "tts-1" } : {}),
+        }),
+      });
+    for (const cancel of [false, true]) {
+      const gate = Promise.withResolvers();
+      const state = { advanced: false, signal: null, gate: gate.promise, release: gate.resolve };
+      streamState = state;
+      const controller = new AbortController();
+      const response = await send("blocked", controller.signal);
+      assert.equal(response.status, 200);
+      const reader = response.body.getReader();
+      assert.deepEqual(Array.from((await reader.read()).value), [1, 2, 3]);
+      assert.equal(state.advanced, false, "first bytes must arrive before the next chunk is ready");
+      if (cancel) {
+        const queued = send("queued").then(async (result) => {
+          assert.equal(result.status, 200);
+          return new Uint8Array(await result.arrayBuffer());
+        });
+        await until(() => streamingService.getStats().queuedSyntheses === 1);
+        controller.abort();
+        await reader.cancel().catch(() => {});
+        await until(() => state.signal.aborted);
+        assert.deepEqual(Array.from(await queued), [1, 2, 3, 4, 5, 6]);
+        await until(() => streamingService.getStats().activeSyntheses === 0);
+        state.release();
+      } else {
+        state.release();
+        assert.deepEqual(Array.from((await reader.read()).value), [4, 5, 6]);
+        assert.equal((await reader.read()).done, true);
+        await until(() => streamingService.getStats().activeSyntheses === 0);
+      }
+      log(
+        `PASS: ${process.arch} ${endpoint} ${cancel ? "cancellation and queue release" : "HTTP streaming"}`,
+      );
+    }
+  }
+} finally {
+  streamState?.release();
+  const closing = streamingApp.close();
+  streamingApp.server.closeAllConnections();
+  await closing;
+  clearTimeout(deadline);
 }

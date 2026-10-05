@@ -1,16 +1,10 @@
 # syntax=docker/dockerfile:1
 
-# Both stages share one Alpine release so the musl-linked Node binary copied into the runtime
-# matches the C library it was built against.
 ARG NODE_IMAGE=node:24.21.0-alpine3.24
+ARG BUN_IMAGE=oven/bun:1.4.2-alpine@sha256:d888c0ae6c86d7866ff10c5aafdd9077b36aee6455b33dd270fb93c0dd5cef6f
 ARG ALPINE_IMAGE=alpine:3.24
 
-FROM ${NODE_IMAGE} AS node
-
-# Keep executable code, ICU, TLS and dynamic symbols; only discard debug/linker metadata.
-# Use the target architecture's strip, and leave binutils in this disposable stage.
-RUN apk add --no-cache binutils \
-  && strip --strip-unneeded /usr/local/bin/node
+FROM ${BUN_IMAGE} AS bun
 
 # ==============================================================================
 # Builder Stage
@@ -50,7 +44,7 @@ RUN pnpm build
 # Prune and deploy production server dependencies
 RUN pnpm --filter @edgetts/server --prod deploy /prod/server
 
-# Drop what Node never loads at runtime: source maps, type declarations and Markdown docs.
+# Drop source maps, type declarations and Markdown docs from the deployed JavaScript.
 # License files stay, whatever their extension.
 RUN find /prod/server -type f \
       \( -name '*.map' -o -name '*.d.ts' -o -name '*.d.mts' -o -name '*.d.cts' -o -iname '*.md' \) \
@@ -65,21 +59,20 @@ RUN find /prod/server -type f \
 # ==============================================================================
 # Production Runtime Stage
 # ==============================================================================
-# Plain Alpine plus the Node binary: no npm, npx, Yarn or Corepack in the shipped image.
+# Plain Alpine plus the musl Bun binary; Node and its package tools stay in the builder.
 FROM ${ALPINE_IMAGE} AS runtime
 
-# The same runtime library and UID/GID 1000 "node" account the official Node image provides.
+# Keep the existing UID/GID and account name for deployment compatibility.
 RUN apk add --no-cache libstdc++ \
   && addgroup -g 1000 node \
   && adduser -u 1000 -G node -s /bin/sh -D node \
-  && mkdir -p /usr/local/share/licenses/node
+  && mkdir -p /usr/local/share/licenses/bun
 
-COPY --from=node /usr/local/bin/node /usr/local/bin/node
-# The source-built arm64 Node image omits /usr/local/LICENSE. Fetch the same release's
-# architecture-independent license with an integrity pin; update it with NODE_IMAGE.
-ADD --checksum=sha256:5888dbb9a1d2b18f2c3e6c5f6af1b39de658372b402a0577b002777f14c62ace --chmod=444 \
-  https://raw.githubusercontent.com/nodejs/node/v24.21.0/LICENSE \
-  /usr/local/share/licenses/node/LICENSE
+COPY --from=bun /usr/local/bin/bun /usr/local/bin/bun
+# Preserve Bun's license and third-party notices; update the checksum with BUN_IMAGE.
+ADD --checksum=sha256:b9caf52728691b4057e371232c221a132883198be2f3d2ddf92c90404c984b1a --chmod=444 \
+  https://raw.githubusercontent.com/oven-sh/bun/bun-v1.4.2/LICENSE.md \
+  /usr/local/share/licenses/bun/LICENSE.md
 
 WORKDIR /app
 
@@ -89,6 +82,7 @@ COPY --from=builder /prod/server /app
 COPY --from=builder /build/apps/web/dist /app/web-dist
 
 ENV NODE_ENV=production \
+    BUN_RUNTIME_TRANSPILER_CACHE_PATH=0 \
     HOST=0.0.0.0 \
     PORT=8080 \
     WEB_DIST_DIR=/app/web-dist
@@ -100,6 +94,6 @@ USER node
 STOPSIGNAL SIGTERM
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD ["node", "-e", "fetch('http://127.0.0.1:8080/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+  CMD ["bun", "-e", "fetch('http://127.0.0.1:8080/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
 
-CMD ["node", "dist/server.js"]
+CMD ["bun", "dist/server.js"]

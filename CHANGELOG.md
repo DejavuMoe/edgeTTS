@@ -11,12 +11,16 @@ the version being released.
 
 ### Changed
 
-- Reduce the amd64 container root filesystem from about 160 MiB to 136 MiB by stripping Node's
-  non-runtime symbols and pruning dependency tests, examples and documentation. Preserve ICU,
-  TLS, package licenses, the WebUI and both speech APIs.
+- Switch the production container and healthcheck to Bun `1.4.2`, pinned by image digest.
+  Keep Node.js and pnpm for source builds and bare-metal deployments. Preserve API contracts,
+  environment variables, port 8080 and the existing non-root UID/GID 1000.
+- Reduce the amd64 container root filesystem from about 160 MiB to 97 MiB with the Bun musl
+  runtime and pruned dependency tests, examples and documentation. Preserve ICU, TLS, runtime
+  and package licenses, the WebUI and both speech APIs; enforce a 105 MiB image budget in CI.
 - Build the platform-independent JavaScript once on the builder's native CPU, reuse the build
   cache in CI, and compress published layers with gzip level 9. Both target architectures run
-  an offline final-image contract check before publication completes.
+  an offline final-image contract check, including real HTTP streaming, disconnect cancellation
+  and queue release, before publication completes. CI also verifies graceful SIGTERM shutdown.
 - Avoid allocating Unicode offset tables when short text already fits in a single segment.
 
 ### Security

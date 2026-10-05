@@ -30,6 +30,8 @@
 - **源码与裸机部署**：Node.js 24 LTS 与 pnpm 12.3.4。
 - **出站网络**：宿主机必须具备访问微软 Edge TTS 官方节点的出站 HTTPS（TCP 443 端口）网络权限。
 
+容器使用 Bun 1.4.2 运行。源码构建和裸机部署仍使用 Node.js 与 pnpm；Docker 部署无需在宿主机安装 JavaScript 运行时。API 路径、环境变量以及容器的 UID/GID 1000 保持不变。
+
 ## 方案一：Docker Compose 预构建镜像部署（推荐）
 
 直接运行已发布的多架构镜像，无需克隆或编译源码。在一个空目录（例如 `~/edgetts`）中创建 `compose.yaml`。仓库中的 [deploy/compose/compose.yaml](../../deploy/compose/compose.yaml) 是同一份文件：
