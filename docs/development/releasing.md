@@ -49,6 +49,11 @@ pnpm update -r <package>   # update within declared ranges, then run the full va
 
 Major upgrades, the pinned Node.js and pnpm versions (`package.json`, `Dockerfile`, CI) and the pinned GitHub Actions commit SHAs are updated by hand in a dedicated commit. Keep `patches/msedge-tts@2.0.7.patch` in mind when upgrading msedge-tts: remove it only once upstream ignores frames for destroyed streams and supports abortable voice discovery.
 
+The container runtime uses a separately pinned Bun image. When upgrading it, update the
+`BUN_IMAGE` version and multi-architecture digest, the Bun license URL/checksum in `Dockerfile`,
+the version assertion in `tests/docker-runtime.mjs`, and the translated deployment guides.
+Run the final-image contract on both architectures before promoting release aliases.
+
 ## Roll back a deployment
 
 Use the recorded digest of a previously verified image. Keep the existing API key and deployment settings. In `compose.yaml`, restore that image reference:

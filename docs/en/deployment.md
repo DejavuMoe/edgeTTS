@@ -30,6 +30,10 @@ Internet (Clients / Browsers / API Consumers)
 - **Bare-Metal Deployment**: Node.js 24 LTS and pnpm 12.3.4.
 - **Network Egress**: Outbound HTTPS (TCP port 443) connectivity to Microsoft Edge TTS upstream endpoints.
 
+The container runs on Bun 1.4.2. Node.js and pnpm are used for source builds and bare-metal
+deployments; no host JavaScript runtime is needed for Docker. API routes, environment variables
+and the container's UID/GID 1000 remain the same.
+
 ## Method 1: Docker Compose with Pre-built Image (Recommended)
 
 Runs the published multi-architecture image without cloning or building the source. Create `compose.yaml` in an empty directory, for example `~/edgetts`. The same file is kept in the repository as [deploy/compose/compose.yaml](../../deploy/compose/compose.yaml):

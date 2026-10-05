@@ -101,8 +101,8 @@ jobs:
             exit 1
           fi
 
-          if [ "$CMD_CFG" != '["node","dist/server.js"]' ]; then
-            echo "FAIL: Expected Config.Cmd to be '[\"node\",\"dist/server.js\"]', got '$CMD_CFG'" >&2
+          if [ "$CMD_CFG" != '["bun","dist/server.js"]' ]; then
+            echo "FAIL: Expected Config.Cmd to be '[\"bun\",\"dist/server.js\"]', got '$CMD_CFG'" >&2
             exit 1
           fi
 
@@ -122,8 +122,8 @@ jobs:
         run: |
           set -euo pipefail
           # Measured inside the container, so the figure does not depend on the image store.
-          # Stripped Node plus pruned JS dependencies must stay below 145 MiB.
-          MAX_ROOTFS_KIB=148480
+          # Bun plus pruned JS dependencies must stay below 105 MiB.
+          MAX_ROOTFS_KIB=107520
           ROOTFS_KIB=$(docker run --rm --user 0 edgetts:ci sh -c "du -sxk / 2>/dev/null | cut -f1")
           echo "Unpacked root filesystem: $ROOTFS_KIB KiB (budget $MAX_ROOTFS_KIB KiB)"
           if [ "$ROOTFS_KIB" -gt "$MAX_ROOTFS_KIB" ]; then
@@ -134,9 +134,9 @@ jobs:
           ALPINE_RELEASE=$(docker run --rm edgetts:ci cat /etc/alpine-release)
           echo "Alpine release: $ALPINE_RELEASE"
 
-          # The runtime ships the Node binary alone, without package managers.
-          if docker run --rm edgetts:ci sh -c "command -v npm || command -v npx || command -v yarn || command -v corepack"; then
-            echo "FAIL: A package manager is present in the runtime image" >&2
+          # Bun is the only shipped JavaScript runtime; build tools stay in the builder.
+          if docker run --rm edgetts:ci sh -c "command -v node || command -v npm || command -v npx || command -v yarn || command -v corepack"; then
+            echo "FAIL: Node or its package tools are present in the runtime image" >&2
             exit 1
           fi
 
@@ -151,7 +151,7 @@ jobs:
         run: |
           docker run --rm -i --network none --cap-drop=ALL \
             --security-opt=no-new-privileges --memory=256m --cpus=1 --pids-limit=64 \
-            edgetts:ci node --input-type=module < tests/docker-runtime.mjs
+            edgetts:ci bun run - < tests/docker-runtime.mjs
 
       - name: Test fail-closed container startup without API key
         run: |
@@ -280,6 +280,16 @@ jobs:
           fi
 
           echo "PASS: Health probes (200) and unauthenticated voice access (401) verified."
+
+          docker stop --time 5 "$CONTAINER_NAME"
+          EXIT_CODE=$(docker inspect "$CONTAINER_NAME" --format '{{.State.ExitCode}}')
+          if [ "$EXIT_CODE" != "0" ]; then
+            echo "FAIL: SIGTERM did not stop the service cleanly (exit $EXIT_CODE)" >&2
+            docker logs "$CONTAINER_NAME"
+            exit 1
+          fi
+          docker logs "$CONTAINER_NAME" 2>&1 | grep -q 'Received SIGTERM, shutting down gracefully'
+          echo "PASS: Graceful SIGTERM shutdown verified."
 
   proxy-contract:
     name: Deterministic Nginx Reverse Proxy Contract
@@ -535,7 +545,7 @@ jobs:
           # 1. Test linux/amd64 runtime
           run_cmd "Pull linux/amd64 image" docker pull --platform linux/amd64 "$IMAGE_TAG"
 
-          run_cmd "Verify linux/amd64 runtime" docker run --rm --platform linux/amd64 "$IMAGE_TAG" node -e '
+          run_cmd "Verify linux/amd64 runtime" docker run --rm --platform linux/amd64 "$IMAGE_TAG" bun -e '
             const fs = require("node:fs");
             console.log("AMD64 Process Arch:", process.arch);
             if (process.arch !== "x64") {
@@ -562,7 +572,7 @@ jobs:
           # 2. Test linux/arm64 runtime under QEMU
           run_cmd "Pull linux/arm64 image" docker pull --platform linux/arm64 "$IMAGE_TAG"
 
-          run_cmd "Verify linux/arm64 runtime under QEMU" docker run --rm --platform linux/arm64 "$IMAGE_TAG" node -e '
+          run_cmd "Verify linux/arm64 runtime under QEMU" docker run --rm --platform linux/arm64 "$IMAGE_TAG" bun -e '
             const fs = require("node:fs");
             console.log("ARM64 Process Arch:", process.arch);
             if (process.arch !== "arm64") {
@@ -589,7 +599,7 @@ jobs:
           for PLATFORM in linux/amd64 linux/arm64; do
             docker run --rm -i --platform "$PLATFORM" --network none --cap-drop=ALL \
               --security-opt=no-new-privileges --memory=256m --cpus=1 --pids-limit=64 \
-              "$IMAGE_TAG" node --input-type=module < tests/docker-runtime.mjs
+              "$IMAGE_TAG" bun run - < tests/docker-runtime.mjs
           done
 
           # 3. Audit image layer history for credential material
@@ -605,7 +615,7 @@ jobs:
 
           # 4. Audit runtime filesystem for prohibited credential/config artifacts
           for PLATFORM in linux/amd64 linux/arm64; do
-            run_cmd "Audit $PLATFORM runtime filesystem boundary" docker run --rm --platform "$PLATFORM" "$IMAGE_TAG" node -e '
+            run_cmd "Audit $PLATFORM runtime filesystem boundary" docker run --rm --platform "$PLATFORM" "$IMAGE_TAG" bun -e '
               const fs = require("node:fs");
               const prohibited = [
                 "/root/.docker/config.json",

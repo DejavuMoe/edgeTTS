@@ -30,6 +30,8 @@
 - **ソースビルド / ベアメタル**: Node.js 24 LTS および pnpm 12.3.4。
 - **アウトバウンド通信**: Microsoft Edge TTS アップストリームノードへの HTTPS（TCP 443 ポート）外向き接続が必要です。
 
+コンテナは Bun 1.4.2 で実行します。ソースビルドとベアメタルデプロイには引き続き Node.js と pnpm を使用します。Docker デプロイではホストへの JavaScript ランタイムのインストールは不要です。API パス、環境変数、コンテナの UID/GID 1000 は変わりません。
+
 ## 方法 1: Docker Compose ビルド済みイメージデプロイ（推奨）
 
 公開済みのマルチアーキテクチャイメージを、ソースのクローンやビルドなしで実行します。空のディレクトリ（例: `~/edgetts`）に `compose.yaml` を作成します。リポジトリの [deploy/compose/compose.yaml](../../deploy/compose/compose.yaml) と同じ内容です：
