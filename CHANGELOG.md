@@ -7,6 +7,26 @@ the version being released.
 
 ## [Unreleased]
 
+### Changed
+
+- Reduce the amd64 container root filesystem from about 160 MiB to 136 MiB by stripping Node's
+  non-runtime symbols and pruning dependency tests, examples and documentation. Preserve ICU,
+  TLS, package licenses, the WebUI and both speech APIs.
+- Build the platform-independent JavaScript once on the builder's native CPU, reuse the build
+  cache in CI, and compress published layers with gzip level 9. Both target architectures run
+  an offline final-image contract check before publication completes.
+- Avoid allocating Unicode offset tables when short text already fits in a single segment.
+
+### Security
+
+- Authenticate protected routes before reading or parsing request bodies. Missing or invalid
+  credentials take precedence over malformed or oversized bodies; authenticated request
+  validation and the public health/WebUI routes are unchanged.
+- Make container application code and assets root-owned so the non-root service cannot replace
+  them, and exclude nested environment and npm configuration files from the build context.
+- Update Fastify to `5.12.5`, fast-uri to `3.1.8` / `4.2.1`, and ip-address to `10.7.3` within
+  existing dependency ranges, resolving the six known production dependency audit findings.
+
 ## [0.9.4] - 2026-10-05
 
 ### Added

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, preParsingAsyncHookHandler } from "fastify";
 import { createApp } from "../src/app.js";
 
 const key = "contract-test-key-1234567890";
@@ -21,6 +21,43 @@ afterEach(async () => {
 });
 
 describe("HTTP boundary", () => {
+  it.each(["/api/speech", "/v1/audio/speech"])(
+    "authenticates %s before parsing a body and preserves authenticated parser errors",
+    async (url) => {
+      app = createApp({ ttsService: service }, { apiKey: key, serveStatic: false });
+      const preParsing = vi.fn<preParsingAsyncHookHandler>(
+        async (_request, _reply, payload) => payload,
+      );
+      app.addHook("preParsing", preParsing);
+      for (const payload of ['{"input":', JSON.stringify({ input: "x".repeat(256 * 1024) })]) {
+        const response = await app.inject({
+          method: "POST",
+          url,
+          headers: { "content-type": "application/json" },
+          payload,
+        });
+        expect(response.statusCode).toBe(401);
+        expect(response.json().error.code).toBe("UNAUTHORIZED");
+      }
+      expect(preParsing).not.toHaveBeenCalled();
+      expect(service.synthesizeSegmented).not.toHaveBeenCalled();
+
+      for (const [payload, status] of [
+        ['{"input":', 400],
+        [JSON.stringify({ input: "x".repeat(256 * 1024) }), 413],
+      ] as const) {
+        const response = await app.inject({
+          method: "POST",
+          url,
+          headers: { "content-type": "application/json", authorization: `Bearer ${key}` },
+          payload,
+        });
+        expect(response.statusCode).toBe(status);
+      }
+      expect(preParsing).toHaveBeenCalledTimes(2);
+    },
+  );
+
   it("normalizes parser errors, unknown routes and unexpected errors without exposing input or paths", async () => {
     app = createApp({ ttsService: service }, { apiKey: null, serveStatic: false });
     app.get("/unexpected", async () => {

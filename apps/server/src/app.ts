@@ -99,7 +99,8 @@ export function createApp(dependencies: AppDependencies, options?: AppOptions): 
 
   void app.register(async (scope) => {
     if (authPreHandler) {
-      scope.addHook("preHandler", authPreHandler);
+      // Reject unauthorized callers before allocating or parsing their request body.
+      scope.addHook("onRequest", authPreHandler);
     }
     const voicesLimiter = scope.rateLimit({
       max: 60,

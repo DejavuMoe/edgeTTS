@@ -35,7 +35,7 @@ When `API_KEY` is configured, requests must include the API key in the standard 
 Authorization: Bearer <API_KEY>
 ```
 
-If the key is missing or invalid, the server responds with HTTP `401 Unauthorized`:
+Authentication runs before reading or parsing the request body. If the key is missing or invalid, the server responds with HTTP `401 Unauthorized`, even when the body is malformed or oversized. Authenticated requests retain the usual body validation and size limits:
 
 ```json
 {

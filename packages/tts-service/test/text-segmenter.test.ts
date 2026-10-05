@@ -47,6 +47,13 @@ describe("TextSegmenter", () => {
   });
 
   describe("empty and short inputs", () => {
+    it.each(["中".repeat(300), "😀".repeat(150), "😀".repeat(300), " \r\n hello \t "])(
+      "preserves a single chunk within the code-point limit",
+      (text) => {
+        expect(expectLosslessSegmentation(text, 300)).toEqual([text]);
+      },
+    );
+
     it("returns empty array for empty input", () => {
       const chunks = segmentText("", { maxCodePoints: 10 });
       expect(chunks).toEqual([]);
