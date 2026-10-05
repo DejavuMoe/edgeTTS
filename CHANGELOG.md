@@ -7,6 +7,27 @@ the version being released.
 
 ## [Unreleased]
 
+## [0.9.4] - 2026-10-05
+
+### Added
+
+- STranslate integration instructions in the English, Chinese and Japanese guides, with links to
+  the [edgeTTS plugin](https://github.com/DejavuMoe/STranslate.Plugin.Tts.edgeTTS) and its installation
+  package. The guides cover API token authentication, automatic voice discovery, and native and
+  OpenAI-compatible speech APIs.
+
+### Changed
+
+- Stable tag builds now create the GitHub release after the container image passes verification.
+  Release notes include the changelog, upgrade instructions, and immutable multi-architecture
+  image references.
+
+### Security
+
+- Update transitive `brace-expansion` dependencies from `5.0.9` to `5.0.12` and from `1.1.18` to
+  `1.1.21`, addressing recursion denial-of-service advisories and restoring the production
+  dependency audit without advisory exclusions.
+
 ## [0.9.2] - 2026-09-29
 
 ### Added
@@ -175,7 +196,8 @@ the version being released.
 - First release: an OpenAI-compatible speech API, Edge voice discovery, prosody controls, the
   browser workbench and a container image.
 
-[Unreleased]: https://github.com/DejavuMoe/edgeTTS/compare/v0.9.2...HEAD
+[Unreleased]: https://github.com/DejavuMoe/edgeTTS/compare/v0.9.4...HEAD
+[0.9.4]: https://github.com/DejavuMoe/edgeTTS/compare/v0.9.2...v0.9.4
 [0.9.2]: https://github.com/DejavuMoe/edgeTTS/compare/v0.9.1...v0.9.2
 [0.9.1]: https://github.com/DejavuMoe/edgeTTS/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/DejavuMoe/edgeTTS/compare/v0.8.0...v0.9.0
