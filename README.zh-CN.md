@@ -79,6 +79,12 @@ curl -i http://127.0.0.1:8080/health
 
 `.env` 只生成一次，升级时保留。`/health` 只确认 HTTP 进程可用。浏览器在本机访问 `http://127.0.0.1:8080`，远程服务器则使用反向代理的 HTTPS 地址，并输入同一个 API Key。执行下方 shell 示例前，用 `set -a; . ./.env; set +a` 导入本地生成的密钥。其他部署方式和升级步骤见[部署指南](docs/zh-CN/deployment.md)。
 
+## STranslate
+
+通过 [STranslate edgeTTS 插件](https://github.com/DejavuMoe/STranslate.Plugin.Tts.edgeTTS)，可在 Windows 上的 STranslate 2.0.10+ 中使用本服务。插件支持 Token 认证、自动获取和筛选音色，以及原生和 OpenAI 兼容两种接口。
+
+从插件的 [Releases](https://github.com/DejavuMoe/STranslate.Plugin.Tts.edgeTTS/releases/latest) 下载 `.spkg` 安装包，按 [STranslate 接入指南](docs/zh-CN/api.md#stranslate)安装并配置服务地址和 API Token。
+
 ## 接口调用示例
 
 ### 原生长文本流式接口 (`POST /api/speech`)

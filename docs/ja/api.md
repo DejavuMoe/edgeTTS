@@ -2,6 +2,18 @@
 
 このドキュメントでは、`edgeTTS` の全 HTTP API エンドポイント、リクエスト/レスポンス仕様、および主要クライアントとの連携例を解説します。
 
+## STranslate
+
+[STranslate edgeTTS プラグイン](https://github.com/DejavuMoe/STranslate.Plugin.Tts.edgeTTS)は Windows の STranslate 2.0.10+ に対応し、トークン認証、音色一覧の自動取得と絞り込み、両音声 API を利用できます。
+
+1. プラグインの [Releases](https://github.com/DejavuMoe/STranslate.Plugin.Tts.edgeTTS/releases/latest) から `STranslate.Plugin.Tts.edgeTTS.spkg` をダウンロードし、STranslate のプラグイン設定画面にインポートするかドラッグしてください。
+2. 音声合成サービスの設定で **edgeTTS** を追加し、有効にします。
+3. **Server URL** にデプロイ済みの edgeTTS のアドレスを指定します。ローカルなら `http://127.0.0.1:8080`、リモートなら HTTPS URL を使います。リバースプロキシのパスプレフィックスがある場合は、`https://example.com/tts` のように保持してください。
+4. **API Token** にサーバーの `API_KEY` を入力します。`Bearer ` プレフィックスは含めず、サーバーで認証を設定していない場合は空欄にします。
+5. API モードを選び、音色一覧の読み込み後に音色を選択して **Preview / test connection** をクリックします。
+
+デフォルトのネイティブモードは `POST /api/speech` を呼び出し、速度・ピッチ・音量を調整できます。OpenAI 互換モードは `POST /v1/audio/speech` を呼び出し、速度を調整できます。両モードとも `GET /api/voices` から Edge 音色を取得します。STranslate は現在、音声全体のダウンロードが完了してから再生します。
+
 ## エンドポイント一覧
 
 | メソッド | パス               | 認証要否         | 説明                                                       |

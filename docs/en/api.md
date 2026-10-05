@@ -2,6 +2,18 @@
 
 This guide details all HTTP API endpoints, request/response contracts, and client integration examples for `edgeTTS`.
 
+## STranslate
+
+The [STranslate edgeTTS plugin](https://github.com/DejavuMoe/STranslate.Plugin.Tts.edgeTTS) supports STranslate 2.0.10+ on Windows, with token authentication, automatic voice discovery and filtering, and both speech APIs.
+
+1. Download `STranslate.Plugin.Tts.edgeTTS.spkg` from the plugin's [Releases](https://github.com/DejavuMoe/STranslate.Plugin.Tts.edgeTTS/releases/latest) and import or drag it into STranslate's **Settings → Plugins**.
+2. Add and enable **edgeTTS** under **Settings → Services → Speech synthesis**.
+3. Set **Server URL** to your deployed edgeTTS address, such as `http://127.0.0.1:8080` for a local server or an HTTPS URL for a remote server. Preserve any reverse-proxy path prefix, for example `https://example.com/tts`.
+4. Enter the server's `API_KEY` in **API Token**, without the `Bearer ` prefix. Leave it empty if the server has no authentication configured.
+5. Choose an API mode, select a voice after the catalog loads, and click **Preview / test connection**.
+
+The default native mode calls `POST /api/speech` and supports speed, pitch and volume controls. OpenAI-compatible mode calls `POST /v1/audio/speech` and supports speed control. Both modes fetch Edge voices through `GET /api/voices`. STranslate currently waits for the complete audio download before playback.
+
 ## Endpoints Overview
 
 | Method | Path               | Auth Required      | Description                                          |

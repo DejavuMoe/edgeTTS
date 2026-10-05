@@ -2,6 +2,18 @@
 
 本文档介绍 `edgeTTS` 的所有 HTTP API 端点、请求/响应协议规范以及常见客户端的对接示例。
 
+## STranslate
+
+[STranslate edgeTTS 插件](https://github.com/DejavuMoe/STranslate.Plugin.Tts.edgeTTS)适用于 Windows 上的 STranslate 2.0.10+，支持 Token 认证、音色自动获取与筛选，以及两种合成接口。
+
+1. 从插件的 [Releases](https://github.com/DejavuMoe/STranslate.Plugin.Tts.edgeTTS/releases/latest) 下载 `STranslate.Plugin.Tts.edgeTTS.spkg`，在 STranslate 的 **设置 → 插件** 中导入或拖入安装包。
+2. 在 **设置 → 服务 → 语音合成 → 添加** 中选择 **edgeTTS** 并启用。
+3. 将 **服务地址** 设为已部署的 edgeTTS 地址，例如本机的 `http://127.0.0.1:8080` 或远程服务的 HTTPS 地址。反向代理带子路径时保留该前缀，例如 `https://example.com/tts`。
+4. 在 **API Token** 中填写服务端的 `API_KEY`，不包含 `Bearer ` 前缀；服务未启用认证时留空。
+5. 选择接口模式，等待音色列表加载后选择音色，点击 **试听 / 测试连接**。
+
+默认的原生模式调用 `POST /api/speech`，支持语速、音调和音量调节；OpenAI 兼容模式调用 `POST /v1/audio/speech`，支持语速调节。两种模式都通过 `GET /api/voices` 获取 Edge 音色。STranslate 当前在完整音频下载完成后播放。
+
 ## 接口总览
 
 | 请求方法 | 路由路径           | 需携带认证       | 说明                                                |

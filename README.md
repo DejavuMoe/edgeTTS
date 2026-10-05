@@ -79,6 +79,12 @@ Open `http://127.0.0.1:8080` in your web browser to access the Web Workbench.
 
 Generate `.env` only once and preserve it on upgrades. `/health` confirms the HTTP process, not Microsoft availability. Open `http://127.0.0.1:8080` locally, or your reverse proxy’s HTTPS URL for a remote server, then enter the same API key. Before using the shell API examples, load the locally generated key with `set -a; . ./.env; set +a`. Other deployment methods and upgrades are in the [deployment guide](docs/en/deployment.md).
 
+## STranslate
+
+Use this service in STranslate 2.0.10+ on Windows with the [STranslate edgeTTS plugin](https://github.com/DejavuMoe/STranslate.Plugin.Tts.edgeTTS). It supports token authentication, automatic voice discovery and filtering, and both native and OpenAI-compatible speech APIs.
+
+Download the `.spkg` package from the plugin's [Releases](https://github.com/DejavuMoe/STranslate.Plugin.Tts.edgeTTS/releases/latest), then follow the [STranslate setup guide](docs/en/api.md#stranslate) to install it and configure the server URL and API token.
+
 ## API Usage at a Glance
 
 ### Native Long-Text Streaming Synthesis (`POST /api/speech`)
