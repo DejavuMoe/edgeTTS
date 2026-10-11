@@ -10,6 +10,7 @@ describe("real msedge-tts WebSocket lifecycle", () => {
     "cancel-unstarted",
     "cancel-url-init",
     "timeout-url-init",
+    "stale-close",
     "complete",
     "truncated",
   ])("keeps process and stream semantics intact: %s", (scenario) => {
@@ -66,6 +67,48 @@ try {
     resolveUrl("ws://127.0.0.1:" + server.address().port);
     await new Promise(resolve => setTimeout(resolve, 100));
     assert.equal(connections, 0, "abandoned URL lookup must not open a socket");
+  } else if (scenario === "stale-close") {
+    const client = new MsEdgeTTS();
+    const session = await new EdgeTtsProvider({ clientFactory: () => client }).openSession(
+      { voice: "en-US-JennyNeural" }, controller.signal,
+    );
+    const frame = (body) => Buffer.from(
+      "X-RequestId:" + requestId + "\\r\\nPath:" + body + "\\r\\n",
+    );
+    const first = await session.synthesize({ text: "first" }, controller.signal);
+    await requestReceived;
+    upstream.send(frame("turn.end"));
+    for await (const chunk of first.audio) void chunk;
+    const oldSocket = client._ws;
+    const onclose = oldSocket.onclose;
+    let deliverClose;
+    const closeQueued = new Promise(resolve => {
+      // Hold only callback delivery so the replacement is active when the old event runs.
+      oldSocket.onclose = event => {
+        deliverClose = () => onclose.call(oldSocket, event);
+        resolve();
+      };
+    });
+    upstream.close();
+    await closeQueued;
+    const nextRequest = new Promise(resolve => { resolveRequest = resolve; });
+    const second = await session.synthesize({ text: "second" }, controller.signal);
+    await nextRequest;
+    assert.notEqual(client._ws, oldSocket);
+    assert.equal(client._ws.readyState, 1);
+    const consume = (async () => {
+      const chunks = [];
+      for await (const chunk of second.audio) chunks.push(Buffer.from(chunk));
+      return Buffer.concat(chunks).toString();
+    })();
+    deliverClose();
+    upstream.send(Buffer.concat([frame("audio"), Buffer.from("second audio")]));
+    upstream.send(frame("turn.end"));
+    try {
+      assert.equal(await consume, "second audio");
+    } finally {
+      session.close();
+    }
   } else {
   const result = await new EdgeTtsProvider().synthesize(
     { text: "synthetic regression sample", voice: "en-US-JennyNeural" },

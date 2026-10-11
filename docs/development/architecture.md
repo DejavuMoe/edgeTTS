@@ -101,7 +101,9 @@ msedge-tts silently reconnects inside a send when the socket is closed, and a fa
 reconnect there becomes an unhandled rejection that would crash the process. The session
 therefore re-runs setup before every segment: a no-op while connected, and a reconnect
 bounded by the setup timeout otherwise. The repository also patches msedge-tts to ignore
-frames that arrive for a stream that was already cancelled.
+frames that arrive for a stream that was already cancelled, invalidate pending URL
+initialization on close, and prevent an old socket's close callback from ending a new
+connection's streams.
 
 ### Validate voices against the cache without fetching
 
