@@ -1,3 +1,4 @@
+import { once } from "node:events";
 import { Readable } from "node:stream";
 import type {
   FastifyPluginAsync,
@@ -156,7 +157,9 @@ function createSpeechHandler<Body>(ttsService: TtsServicePort, endpoint: SpeechE
         { maxSegmentCodePoints: SPEECH_SEGMENT_CODE_POINTS },
       );
 
-      const audioStream = Readable.from(result.audio);
+      const audioStream = Readable.from(result.audio, { signal: client.signal });
+      // Keep first-read failures inside the pre-stream HTTP error mapping.
+      await once(audioStream, "readable");
       audioStream.on("error", (err: unknown) => {
         request.log.error({ err, ...logContext }, endpoint.logMessages.streamError);
         client.dispose();
