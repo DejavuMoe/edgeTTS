@@ -7,6 +7,41 @@ the version being released.
 
 ## [Unreleased]
 
+## [0.9.6] - 2026-10-11
+
+### Fixed
+
+- Keep synthesis running when Escape dismisses the interface language menu. An unhandled
+  Escape still cancels the active request.
+- Block synthesis while a TXT import is pending, including keyboard shortcuts, so the request
+  and editor cannot refer to different text. Preserve edits and clears that supersede a read.
+- Clear an unavailable active voice when a refreshed catalog is empty, and allow the favorites
+  filter to be turned off after its last matching voice disappears.
+- Remove the UTF-8 import BOM exactly once, preserving a leading U+FEFF in the actual content
+  and enforcing the 20,000-code-point limit against the preserved text.
+- Preserve idle timeout failures between audio reads instead of reporting a successful end.
+  Cancel abandoned WebSocket initialization and ignore delayed close events from replaced sockets.
+- Map upstream failures on the first audio read to HTTP 502 for both speech APIs, before
+  streaming headers are committed.
+- Apply immutable caching only to assets inside the web root; a parent directory named
+  `assets` no longer causes the HTML entry point to be cached for a year.
+- Use the configured `PORT` in the container healthcheck, retaining 8080 as the default.
+- Recheck the highest published stable version before writing a GitHub release, so a delayed
+  older release cannot move GitHub's latest marker backward.
+- Give Nginx proxy test runs unique container names and clean up only resources they created.
+- Discard and close segmented audio that arrives after iterator return, and preserve cancellation
+  errors in non-segmented streams while releasing concurrency permits exactly once.
+- Share an in-flight voice catalog refresh without sharing callers' failure policies: ordinary
+  reads may use the cached catalog, while forced refreshes still report upstream failures.
+- Keep reading the complete audio response when the browser's MediaSource quota is exhausted.
+  Preserve buffered preview playback, then switch to the full downloadable recording while
+  retaining playback position and paused state.
+
+### Compatibility
+
+- Existing API shapes, authentication, configuration and text limits are unchanged. The fixes
+  include regression coverage for all 16 confirmed audit findings and the MediaSource quota case.
+
 ## [0.9.5] - 2026-10-05
 
 ### Changed
@@ -222,7 +257,8 @@ the version being released.
 - First release: an OpenAI-compatible speech API, Edge voice discovery, prosody controls, the
   browser workbench and a container image.
 
-[Unreleased]: https://github.com/DejavuMoe/edgeTTS/compare/v0.9.5...HEAD
+[Unreleased]: https://github.com/DejavuMoe/edgeTTS/compare/v0.9.6...HEAD
+[0.9.6]: https://github.com/DejavuMoe/edgeTTS/compare/v0.9.5...v0.9.6
 [0.9.5]: https://github.com/DejavuMoe/edgeTTS/compare/v0.9.4...v0.9.5
 [0.9.4]: https://github.com/DejavuMoe/edgeTTS/compare/v0.9.2...v0.9.4
 [0.9.2]: https://github.com/DejavuMoe/edgeTTS/compare/v0.9.1...v0.9.2
