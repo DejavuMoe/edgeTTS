@@ -1,6 +1,6 @@
 import React from "react";
 import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from "vitest";
-import { render, screen, waitFor, fireEvent, cleanup, within } from "@testing-library/react";
+import { act, render, screen, waitFor, fireEvent, cleanup, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { VoiceDto } from "@edgetts/shared";
 import { App, isValidApiKeyFormat, MIN_API_KEY_LENGTH } from "../src/App.js";
@@ -2105,6 +2105,94 @@ describe("EdgeTTS Web Workbench", () => {
       await waitFor(() => {
         expect(textarea.value).toBe("Auth locked import text");
       });
+    });
+
+    it.each(["success", "failure"])(
+      "blocks synthesis until a pending TXT import settles with %s",
+      async (outcome) => {
+        render(<App />);
+        await screen.findByLabelText(/选择声音/i);
+
+        const textarea = screen.getByLabelText("文本内容") as HTMLTextAreaElement;
+        const generate = screen.getByRole("button", { name: "合成语音" });
+        fireEvent.change(textarea, { target: { value: "Document A" } });
+
+        let resolveFile!: (buffer: ArrayBuffer) => void;
+        let rejectFile!: (error: Error) => void;
+        const pending = new Promise<ArrayBuffer>((resolve, reject) => {
+          resolveFile = resolve;
+          rejectFile = reject;
+        });
+        const file = createTxtFile("Document B", "pending.txt");
+        vi.spyOn(file, "arrayBuffer").mockReturnValue(pending);
+        fireEvent.change(document.querySelector('input[type="file"]')!, {
+          target: { files: [file] },
+        });
+
+        expect(generate.hasAttribute("disabled")).toBe(true);
+        fireEvent.click(generate);
+        fireEvent.keyDown(textarea, { key: "Enter", ctrlKey: true });
+        fireEvent.keyDown(textarea, { key: "Enter", metaKey: true });
+        expect(fetchMock).not.toHaveBeenCalledWith("/api/speech", expect.any(Object));
+        expect(textarea.value).toBe("Document A");
+
+        await act(async () => {
+          if (outcome === "success") {
+            resolveFile(new TextEncoder().encode("Document B").buffer);
+          } else {
+            rejectFile(new Error("Read failed"));
+          }
+        });
+
+        const expectedText = outcome === "success" ? "Document B" : "Document A";
+        expect(textarea.value).toBe(expectedText);
+        expect(generate.hasAttribute("disabled")).toBe(false);
+        if (outcome === "failure") {
+          expect(screen.getByRole("alert").textContent).toBe("无法读取 TXT 文件");
+        }
+
+        fireEvent.click(generate);
+        await screen.findByLabelText("下载合成音频");
+        const speechCall = fetchMock.mock.calls.find(
+          ([input]) => requestUrl(input) === "/api/speech",
+        );
+        expect(JSON.parse(speechCall![1]!.body as string).input).toBe(expectedText);
+      },
+    );
+
+    it("keeps synthesis blocked when an older import finishes before the latest import", async () => {
+      render(<App />);
+      await screen.findByLabelText(/选择声音/i);
+
+      const textarea = screen.getByLabelText("文本内容") as HTMLTextAreaElement;
+      const generate = screen.getByRole("button", { name: "合成语音" });
+      const fileInput = document.querySelector('input[type="file"]')!;
+      fireEvent.change(textarea, { target: { value: "Original document" } });
+
+      let resolveOlder!: (buffer: ArrayBuffer) => void;
+      const older = createTxtFile("Older file", "older.txt");
+      vi.spyOn(older, "arrayBuffer").mockReturnValue(
+        new Promise((resolve) => {
+          resolveOlder = resolve;
+        }),
+      );
+      let resolveLatest!: (buffer: ArrayBuffer) => void;
+      const latest = createTxtFile("Latest file", "latest.txt");
+      vi.spyOn(latest, "arrayBuffer").mockReturnValue(
+        new Promise((resolve) => {
+          resolveLatest = resolve;
+        }),
+      );
+
+      fireEvent.change(fileInput, { target: { files: [older] } });
+      fireEvent.change(fileInput, { target: { files: [latest] } });
+      await act(async () => resolveOlder(new TextEncoder().encode("Older file").buffer));
+      expect(textarea.value).toBe("Original document");
+      expect(generate.hasAttribute("disabled")).toBe(true);
+
+      await act(async () => resolveLatest(new TextEncoder().encode("Latest file").buffer));
+      expect(textarea.value).toBe("Latest file");
+      expect(generate.hasAttribute("disabled")).toBe(false);
     });
 
     it("latest selected file wins async race", async () => {

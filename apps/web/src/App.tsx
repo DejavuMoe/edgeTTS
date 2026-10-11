@@ -45,6 +45,7 @@ function Workbench() {
 
   const canGenerate =
     !isGenerating &&
+    !textDocument.isImporting &&
     !textDocument.isEmpty &&
     !textDocument.isOverLimit &&
     Boolean(selectedVoiceId) &&
