@@ -1,6 +1,19 @@
 diff --git a/dist/MsEdgeTTS.js b/dist/MsEdgeTTS.js
 --- a/dist/MsEdgeTTS.js
 +++ b/dist/MsEdgeTTS.js
+@@ -73,3 +73,4 @@ class MsEdgeTTS {
+     _ws;
++    _connectionGeneration = 0;
+     _voice;
+     _outputFormat;
+@@ -102,3 +103,7 @@ class MsEdgeTTS {
+     async _initClient() {
++        const generation = ++this._connectionGeneration;
+         const synthUrl = await MsEdgeTTS.getSynthUrl();
++        if (generation !== this._connectionGeneration) {
++            throw new Error("WebSocket initialization was closed or superseded");
++        }
+         const options = {
 @@ -132,6 +132,9 @@ class MsEdgeTTS {
                  const buffer = index_1.Buffer.from(m.data);
                  const message = buffer.toString();
@@ -20,6 +33,11 @@ diff --git a/dist/MsEdgeTTS.js b/dist/MsEdgeTTS.js
                  .then((res) => resolve(res.data))
                  .catch(reject);
          });
+     }
+@@ -299,3 +307,4 @@ class MsEdgeTTS {
+     close() {
++        this._connectionGeneration++;
+         this._ws?.close();
      }
 diff --git a/dist/MsEdgeTTS.d.ts b/dist/MsEdgeTTS.d.ts
 --- a/dist/MsEdgeTTS.d.ts
