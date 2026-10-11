@@ -124,12 +124,12 @@ docker run -d \
 
 官方多架构镜像同时原生支持 `linux/amd64` 与 `linux/arm64`（Apple Silicon、树莓派等）。
 
-| 镜像标签                                    | 描述                               | 适用场景                 |
-| :------------------------------------------ | :--------------------------------- | :----------------------- |
-| `ghcr.io/dejavumoe/edgetts:0.9.6`           | 严格语义化版本发布标签             | 生产环境常规部署         |
-| `ghcr.io/dejavumoe/edgetts:latest`          | 始终指向最新稳定发布版本           | 自动化环境跟踪           |
-| `ghcr.io/dejavumoe/edgetts:main`            | 跟踪 `main` 分支最新构建的代码快照 | 测试最新特性或缺陷修复   |
-| `ghcr.io/dejavumoe/edgetts@sha256:<digest>` | 基于内容寻址的不可变镜像摘要       | 严格可复现的生产基线锁定 |
+| 镜像标签                                    | 描述                                 | 适用场景                 |
+| :------------------------------------------ | :----------------------------------- | :----------------------- |
+| `ghcr.io/dejavumoe/edgetts:0.9.6`           | 严格语义化版本发布标签               | 生产环境常规部署         |
+| `ghcr.io/dejavumoe/edgetts:latest`          | 始终指向最新稳定发布版本             | 自动化环境跟踪           |
+| `ghcr.io/dejavumoe/edgetts:master`          | 跟踪 `master` 分支最新构建的代码快照 | 测试最新特性或缺陷修复   |
+| `ghcr.io/dejavumoe/edgetts@sha256:<digest>` | 基于内容寻址的不可变镜像摘要         | 严格可复现的生产基线锁定 |
 
 每个稳定发布版本的已验证 OCI 索引摘要均记录在对应的 [GitHub Release 说明](https://github.com/DejavuMoe/edgeTTS/releases) 中。
 

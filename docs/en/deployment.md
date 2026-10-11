@@ -130,7 +130,7 @@ Official multi-architecture images support `linux/amd64` and `linux/arm64`.
 | :------------------------------------------ | :------------------------------------------ | :---------------------------------------- |
 | `ghcr.io/dejavumoe/edgetts:0.9.6`           | Exact stable SemVer release                 | Production standard                       |
 | `ghcr.io/dejavumoe/edgetts:latest`          | Tracks the highest published stable release | Automatic update environments             |
-| `ghcr.io/dejavumoe/edgetts:main`            | Continuous snapshot built from `main`       | Testing latest fixes                      |
+| `ghcr.io/dejavumoe/edgetts:master`          | Continuous snapshot built from `master`     | Testing latest fixes                      |
 | `ghcr.io/dejavumoe/edgetts@sha256:<digest>` | Content-addressed immutable image           | Mission-critical reproducible deployments |
 
 Each release records its verified multi-arch OCI index digest in the [GitHub Release Notes](https://github.com/DejavuMoe/edgeTTS/releases).

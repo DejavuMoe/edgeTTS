@@ -101,30 +101,30 @@ if [ -n "$(git status --porcelain)" ]; then
 fi
 echo "[PASS] Working tree is clean."
 
-# 3. Check current branch is 'main'
+# 3. Check current branch is 'master'
 CURRENT_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
-if [ "$CURRENT_BRANCH" != "main" ]; then
-  echo "ERROR: Releases must be initiated from the 'main' branch (current: '$CURRENT_BRANCH')." >&2
+if [ "$CURRENT_BRANCH" != "master" ]; then
+  echo "ERROR: Releases must be initiated from the 'master' branch (current: '$CURRENT_BRANCH')." >&2
   exit 1
 fi
-echo "[PASS] Current branch is 'main'."
+echo "[PASS] Current branch is 'master'."
 
-# 4. Check local 'main' is synchronized with 'origin/main'
-echo "Fetching origin/main to verify synchronization..."
-if ! git fetch origin main:refs/remotes/origin/main --quiet; then
-  echo "ERROR: Failed to fetch origin/main; refusing to verify stale remote state." >&2
+# 4. Check local 'master' is synchronized with 'origin/master'
+echo "Fetching origin/master to verify synchronization..."
+if ! git fetch origin master:refs/remotes/origin/master --quiet; then
+  echo "ERROR: Failed to fetch origin/master; refusing to verify stale remote state." >&2
   exit 1
 fi
 
 LOCAL_HEAD="$(git rev-parse HEAD)"
-REMOTE_HEAD="$(git rev-parse origin/main)"
+REMOTE_HEAD="$(git rev-parse origin/master)"
 
 if [ "$LOCAL_HEAD" != "$REMOTE_HEAD" ]; then
-  echo "ERROR: Local HEAD ($LOCAL_HEAD) does not match origin/main ($REMOTE_HEAD)." >&2
+  echo "ERROR: Local HEAD ($LOCAL_HEAD) does not match origin/master ($REMOTE_HEAD)." >&2
   echo "Ensure all local commits are pushed and you are up to date with remote." >&2
   exit 1
 fi
-echo "[PASS] Local HEAD is in sync with origin/main ($LOCAL_HEAD)."
+echo "[PASS] Local HEAD is in sync with origin/master ($LOCAL_HEAD)."
 
 # 5. Check local tag does not already exist
 if git rev-parse --verify "refs/tags/$TAG_NAME" >/dev/null 2>&1; then

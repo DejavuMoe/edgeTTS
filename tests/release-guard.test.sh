@@ -5,7 +5,7 @@
 # Deterministic test suite for edgeTTS release governance contracts:
 #   1. Strict stable SemVer format enforcement
 #   2. Reject moved release tags (github.event.before == all-zeros)
-#   3. Release source ancestry from origin/main
+#   3. Release source ancestry from origin/master
 #   4. Version tag overwrite vs idempotent rerun detection
 #   5. release-check.sh preflight validation behavior
 #   6. GitHub release notes rendering (scripts/release-notes.sh)
@@ -105,14 +105,14 @@ assert_exit_code "Reject moved tag (non-zero previous commit)" 1 validate_tag_ev
 assert_exit_code "Reject arbitrary non-zero SHA" 1 validate_tag_event "1111111111111111111111111111111111111111"
 
 # ------------------------------------------------------------------------------
-# Test Suite 3: Release Source Ancestry From origin/main
+# Test Suite 3: Release Source Ancestry From origin/master
 # ------------------------------------------------------------------------------
 echo "--- Suite 3: Release Source Ancestry Verification ---"
 
 TEMP_GIT_DIR=$(mktemp -d)
 trap 'rm -rf "$TEMP_GIT_DIR"' EXIT
 
-git -C "$TEMP_GIT_DIR" init --initial-branch=main --quiet
+git -C "$TEMP_GIT_DIR" init --initial-branch=master --quiet
 git -C "$TEMP_GIT_DIR" config user.email "ci@example.com"
 git -C "$TEMP_GIT_DIR" config user.name "CI"
 git -C "$TEMP_GIT_DIR" config commit.gpgsign false
@@ -120,36 +120,55 @@ git -C "$TEMP_GIT_DIR" config tag.gpgsign false
 
 echo "initial" > "$TEMP_GIT_DIR/file.txt"
 git -C "$TEMP_GIT_DIR" add file.txt
-git -C "$TEMP_GIT_DIR" commit -m "commit 1 on main" --quiet
+git -C "$TEMP_GIT_DIR" commit -m "commit 1 on master" --quiet
 COMMIT_1=$(git -C "$TEMP_GIT_DIR" rev-parse HEAD)
 
 echo "second" >> "$TEMP_GIT_DIR/file.txt"
 git -C "$TEMP_GIT_DIR" add file.txt
-git -C "$TEMP_GIT_DIR" commit -m "commit 2 on main" --quiet
+git -C "$TEMP_GIT_DIR" commit -m "commit 2 on master" --quiet
 COMMIT_2=$(git -C "$TEMP_GIT_DIR" rev-parse HEAD)
 
-# Simulate origin/main pointing to COMMIT_2
-git -C "$TEMP_GIT_DIR" update-ref refs/remotes/origin/main "$COMMIT_2"
+# Simulate origin/master pointing to COMMIT_2
+git -C "$TEMP_GIT_DIR" update-ref refs/remotes/origin/master "$COMMIT_2"
 
-# Create a divergent branch not reachable from main
+# Create a divergent branch not reachable from master
 git -C "$TEMP_GIT_DIR" checkout --orphan divergent-branch --quiet
 echo "divergent" > "$TEMP_GIT_DIR/divergent.txt"
 git -C "$TEMP_GIT_DIR" add divergent.txt
 git -C "$TEMP_GIT_DIR" commit -m "commit on divergent branch" --quiet
 COMMIT_DIVERGENT=$(git -C "$TEMP_GIT_DIR" rev-parse HEAD)
-git -C "$TEMP_GIT_DIR" checkout main --quiet
+git -C "$TEMP_GIT_DIR" checkout master --quiet
 
-# Ancestry check: COMMIT_1 is an ancestor of origin/main -> ACCEPT
-assert_exit_code "Older main commit is ancestor of origin/main" 0 \
-  git -C "$TEMP_GIT_DIR" merge-base --is-ancestor "$COMMIT_1" refs/remotes/origin/main
+# Ancestry check: COMMIT_1 is an ancestor of origin/master -> ACCEPT
+assert_exit_code "Older master commit is ancestor of origin/master" 0 \
+  git -C "$TEMP_GIT_DIR" merge-base --is-ancestor "$COMMIT_1" refs/remotes/origin/master
 
-# Ancestry check: COMMIT_2 (HEAD) is ancestor of origin/main -> ACCEPT
-assert_exit_code "Current HEAD is ancestor of origin/main" 0 \
-  git -C "$TEMP_GIT_DIR" merge-base --is-ancestor "$COMMIT_2" refs/remotes/origin/main
+# Ancestry check: COMMIT_2 (HEAD) is ancestor of origin/master -> ACCEPT
+assert_exit_code "Current HEAD is ancestor of origin/master" 0 \
+  git -C "$TEMP_GIT_DIR" merge-base --is-ancestor "$COMMIT_2" refs/remotes/origin/master
 
-# Ancestry check: COMMIT_DIVERGENT is NOT an ancestor of origin/main -> REJECT
-assert_exit_code "Divergent commit is NOT ancestor of origin/main" 1 \
-  git -C "$TEMP_GIT_DIR" merge-base --is-ancestor "$COMMIT_DIVERGENT" refs/remotes/origin/main
+# Ancestry check: COMMIT_DIVERGENT is NOT an ancestor of origin/master -> REJECT
+assert_exit_code "Divergent commit is NOT ancestor of origin/master" 1 \
+  git -C "$TEMP_GIT_DIR" merge-base --is-ancestor "$COMMIT_DIVERGENT" refs/remotes/origin/master
+
+# Exercise the workflow itself with only origin/master available.
+awk '
+  /^      - name: Validate release tag governance$/ { found = 1; next }
+  found && /^      - name:/ { exit }
+  found && /^        run: \|$/ { script = 1; next }
+  script { sub(/^          /, ""); print }
+' "$REPO_ROOT/.github/workflows/ci.yml" > "$TEMP_GIT_DIR/tag-governance.sh"
+
+run_tag_governance() (
+  cd "$TEMP_GIT_DIR"
+  env GITHUB_REF=refs/tags/v1.0.0 GITHUB_SHA="$1" \
+    EVENT_BEFORE=0000000000000000000000000000000000000000 \
+    bash "$TEMP_GIT_DIR/tag-governance.sh"
+)
+assert_exit_code "Actual tag governance accepts origin/master without main" 0 \
+  run_tag_governance "$COMMIT_2"
+assert_exit_code "Actual tag governance rejects a commit outside origin/master" 1 \
+  run_tag_governance "$COMMIT_DIVERGENT"
 
 # ------------------------------------------------------------------------------
 # Test Suite 4: Version Tag Overwrite & Idempotent Rerun Contract
@@ -211,12 +230,12 @@ mkdir -p "$MOCK_REPO/scripts"
 cp "$REPO_ROOT/scripts/release-check.sh" "$MOCK_REPO/scripts/release-check.sh"
 chmod +x "$MOCK_REPO/scripts/release-check.sh"
 
-# In mock repo on branch 'feature', release-check.sh must reject because branch != main
-assert_exit_code "release-check.sh rejects non-main branch" 1 \
+# In mock repo on branch 'feature', release-check.sh must reject because branch != master
+assert_exit_code "release-check.sh rejects non-master branch" 1 \
   "$MOCK_REPO/scripts/release-check.sh" "v1.0.0" --skip-tests
 
-# Switch to main
-git -C "$MOCK_REPO" checkout -b main --quiet
+# Switch to master
+git -C "$MOCK_REPO" checkout -b master --quiet
 
 # Create a dirty working tree
 echo "dirty" > "$MOCK_REPO/dirty.txt"
@@ -230,7 +249,7 @@ git -C "$MOCK_REPO" add scripts/
 git -C "$MOCK_REPO" commit -m "add release-check" --quiet
 
 # Setup fake origin remote
-git -C "$MOCK_REPO" update-ref refs/remotes/origin/main "$(git -C "$MOCK_REPO" rev-parse HEAD)"
+git -C "$MOCK_REPO" update-ref refs/remotes/origin/master "$(git -C "$MOCK_REPO" rev-parse HEAD)"
 
 # Now tag check: add a local tag v1.0.0
 git -C "$MOCK_REPO" tag v1.0.0
@@ -250,7 +269,7 @@ git -C "$MOCK_REPO" remote add origin "$ORIGIN_REPO"
 commit_and_push() {
   git -C "$MOCK_REPO" add -A
   git -C "$MOCK_REPO" commit -m "$1" --quiet
-  git -C "$MOCK_REPO" push --quiet origin main
+  git -C "$MOCK_REPO" push --quiet origin master
 }
 
 printf '{\n  "version": "1.0.0"\n}\n' > "$MOCK_REPO/package.json"
@@ -274,6 +293,16 @@ printf '{\n  "version": "1.0.0"\n}\n' > "$MOCK_REPO/package.json"
 commit_and_push "prepare 1.0.0"
 assert_exit_code "release-check.sh accepts a documented release" 0 \
   "$MOCK_REPO/scripts/release-check.sh" "v1.0.0" --skip-tests
+
+git -C "$MOCK_REPO" checkout -b main --quiet
+set +e
+RETIRED_BRANCH_OUTPUT=$("$MOCK_REPO/scripts/release-check.sh" "v1.0.0" --skip-tests 2>&1)
+RETIRED_BRANCH_EXIT=$?
+set -e
+assert_eq "release-check.sh rejects the retired main branch" "1" "$RETIRED_BRANCH_EXIT"
+assert_eq "Retired branch rejection requires master before querying origin" "1" \
+  "$(grep -c "Releases must be initiated from the 'master' branch (current: 'main')" <<< "$RETIRED_BRANCH_OUTPUT")"
+git -C "$MOCK_REPO" checkout master --quiet
 
 # ------------------------------------------------------------------------------
 # Test Suite 6: Strict SemVer Version Ordering (sort -V)
