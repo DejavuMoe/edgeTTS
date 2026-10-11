@@ -28,6 +28,12 @@ export function useSynthesis({ getApiKey, onUnauthorized }: SynthesisOptions) {
   const generationIdRef = useRef(0);
   const abortControllerRef = useRef<AbortController | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const playbackRestoreRef = useRef<{
+    mediaUrl: string;
+    generation: number;
+    currentTime: number;
+    paused: boolean;
+  } | null>(null);
   const streamControllerRef = useRef<StreamPlaybackController | null>(null);
   streamControllerRef.current ??= new StreamPlaybackController();
 
@@ -57,6 +63,7 @@ export function useSynthesis({ getApiKey, onUnauthorized }: SynthesisOptions) {
 
     const currentGen = ++generationIdRef.current;
     const isCurrent = () => generationIdRef.current === currentGen;
+    playbackRestoreRef.current = null;
 
     // Clean up previous playback stream, download URL, and completed metadata
     streamControllerRef.current?.cleanup();
@@ -88,11 +95,23 @@ export function useSynthesis({ getApiKey, onUnauthorized }: SynthesisOptions) {
       dispatch({ type: "planned", plan });
 
       let latestBytesReceived = 0;
+      let previewUrl: string | null = null;
 
       // Stream playback via MediaSource or Blob fallback
       await streamControllerRef.current?.startStream(response, controller.signal, {
         onStreamReady: (mediaUrl: string) => {
-          if (isCurrent()) dispatch({ type: "streamReady", mediaUrl });
+          if (!isCurrent()) return;
+          const audio = audioRef.current;
+          if (previewUrl && audio?.getAttribute("src") === previewUrl) {
+            playbackRestoreRef.current = {
+              mediaUrl,
+              generation: currentGen,
+              currentTime: audio.currentTime,
+              paused: audio.paused,
+            };
+          }
+          previewUrl = mediaUrl;
+          dispatch({ type: "streamReady", mediaUrl });
         },
         onProgress: (bytesReceived: number) => {
           if (!isCurrent()) return;
@@ -132,11 +151,29 @@ export function useSynthesis({ getApiKey, onUnauthorized }: SynthesisOptions) {
   };
 
   useEffect(() => {
-    if (state.audioSrc) {
-      audioRef.current?.play().catch(() => {
-        // Autoplay policy prevented playback; user can use the visible controls.
-      });
+    const audio = audioRef.current;
+    if (!state.audioSrc || !audio) return;
+    const restore = playbackRestoreRef.current;
+    playbackRestoreRef.current = null;
+    if (restore?.mediaUrl === state.audioSrc) {
+      const restorePlayback = () => {
+        if (
+          generationIdRef.current !== restore.generation ||
+          audioRef.current !== audio ||
+          audio.currentSrc !== restore.mediaUrl
+        )
+          return;
+        audio.removeEventListener("loadedmetadata", restorePlayback);
+        audio.currentTime = restore.currentTime;
+        if (!restore.paused) void audio.play().catch(() => {});
+      };
+      audio.addEventListener("loadedmetadata", restorePlayback);
+      if (audio.readyState >= HTMLMediaElement.HAVE_METADATA) restorePlayback();
+      return () => audio.removeEventListener("loadedmetadata", restorePlayback);
     }
+    void audio.play().catch(() => {
+      // Autoplay policy prevented playback; user can use the visible controls.
+    });
   }, [state.audioSrc]);
 
   const cancel = useCallback((): void => {

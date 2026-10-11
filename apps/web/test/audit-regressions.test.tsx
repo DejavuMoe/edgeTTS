@@ -2,6 +2,10 @@ import React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { App } from "../src/App.js";
+import {
+  StreamPlaybackController,
+  type StreamPlaybackCallbacks,
+} from "../src/audio/stream-controller.js";
 
 const voices = {
   voices: [{ id: "en-US-AriaNeural", displayName: "Aria", locale: "en-US", gender: "Female" }],
@@ -27,6 +31,62 @@ afterEach(() => {
 });
 
 describe("audit regressions", () => {
+  it.each(["playing", "paused", "cancelled", "unmounted"] as const)(
+    "preserves playback state across quota fallback: %s",
+    async (mode) => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (url: string) => {
+          if (url === "/api/health") return json({ status: "ok" });
+          if (url === "/api/voices") return json(voices);
+          return new Response(null);
+        }),
+      );
+      const play = vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
+      let callbacks!: StreamPlaybackCallbacks;
+      let finish!: () => void;
+      vi.spyOn(StreamPlaybackController.prototype, "startStream").mockImplementation(
+        async (_response, _signal, streamCallbacks) => {
+          callbacks = streamCallbacks;
+          await new Promise<void>((resolve) => {
+            finish = resolve;
+          });
+        },
+      );
+      const view = render(<App />);
+      await screen.findByRole("option", { name: /Aria/ });
+      fireEvent.change(screen.getByLabelText("文本内容"), {
+        target: { value: "quota regression" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "合成语音" }));
+      await waitFor(() => expect(callbacks).toBeDefined());
+      act(() => callbacks.onStreamReady("blob:preview"));
+      const audio = document.querySelector("audio")!;
+      audio.currentTime = 12.5;
+      Object.defineProperty(audio, "paused", { value: mode === "paused", configurable: true });
+      play.mockClear();
+      act(() => {
+        callbacks.onStreamReady("blob:complete");
+        // The browser resets currentTime when the media resource changes.
+        audio.currentTime = 0;
+      });
+      Object.defineProperty(audio, "currentSrc", { value: "blob:preview", configurable: true });
+      fireEvent.loadedMetadata(audio);
+      expect(audio.currentTime).toBe(0);
+      expect(play).not.toHaveBeenCalled();
+      if (mode === "cancelled") fireEvent.click(screen.getByRole("button", { name: "取消合成" }));
+      if (mode === "unmounted") view.unmount();
+      Object.defineProperty(audio, "currentSrc", { value: "blob:complete", configurable: true });
+      fireEvent.loadedMetadata(audio);
+
+      expect(audio.currentTime).toBe(mode === "cancelled" || mode === "unmounted" ? 0 : 12.5);
+      expect(play).toHaveBeenCalledTimes(mode === "playing" ? 1 : 0);
+      await act(async () => {
+        finish();
+      });
+    },
+  );
+
   it("allows leaving favorites-only after the catalog loses every favorite", async () => {
     let voiceRequests = 0;
     const replacement = {

@@ -326,7 +326,7 @@ export class StreamPlaybackController {
         return;
       }
 
-      let sourceBuffer: SourceBuffer;
+      let sourceBuffer: SourceBuffer | null;
       try {
         sourceBuffer = mediaSource.addSourceBuffer("audio/mpeg");
         session.sourceBuffer = sourceBuffer;
@@ -368,17 +368,26 @@ export class StreamPlaybackController {
             lastReportedBytes = totalBytes;
           }
 
-          if (sourceBuffer.updating) {
+          if (sourceBuffer?.updating) {
             await waitForUpdateEnd(sourceBuffer, signal);
           }
 
           if (
+            sourceBuffer &&
             mediaSource.readyState === "open" &&
             this.isCurrentSession(session) &&
             !signal.aborted
           ) {
-            sourceBuffer.appendBuffer(value);
-            await waitForUpdateEnd(sourceBuffer, signal);
+            try {
+              sourceBuffer.appendBuffer(value);
+            } catch (error) {
+              if (!(error instanceof DOMException) || error.name !== "QuotaExceededError") {
+                throw error;
+              }
+              // Keep the buffered preview playing while receiving the complete download.
+              sourceBuffer = null;
+            }
+            if (sourceBuffer) await waitForUpdateEnd(sourceBuffer, signal);
           }
         }
       }
@@ -393,7 +402,7 @@ export class StreamPlaybackController {
         lastReportedBytes = totalBytes;
       }
 
-      if (sourceBuffer.updating) {
+      if (sourceBuffer?.updating) {
         await waitForUpdateEnd(sourceBuffer, signal);
       }
 
@@ -409,6 +418,12 @@ export class StreamPlaybackController {
       const finalBlob = new Blob(chunks as unknown as BlobPart[], { type: "audio/mpeg" });
       const downloadUrl = URL.createObjectURL(finalBlob);
       session.downloadUrl = downloadUrl;
+
+      if (!sourceBuffer && this.isCurrentSession(session) && !signal.aborted) {
+        this.cleanupMediaSourceResources(session);
+        session.mediaUrl = downloadUrl;
+        callbacks.onStreamReady(downloadUrl);
+      }
 
       if (this.isCurrentSession(session) && !signal.aborted) {
         callbacks.onDownloadReady(downloadUrl);
