@@ -202,7 +202,8 @@ jobs:
             --tmpfs /tmp \
             -e REQUIRE_API_KEY=true \
             -e "API_KEY=$TEST_KEY" \
-            -p "127.0.0.1:$TEST_PORT:8080" \
+            -e PORT=9090 \
+            -p "127.0.0.1:$TEST_PORT:9090" \
             edgetts:ci
 
           echo "Verifying runtime security posture..."
