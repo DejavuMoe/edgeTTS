@@ -505,6 +505,148 @@ assert_exit_code "Current version $PACKAGE_VERSION renders from CHANGELOG.md" 0 
   INDEX_DIGEST="$DIGEST_A" AMD64_DIGEST="$DIGEST_B" ARM64_DIGEST="$DIGEST_C" LATEST_UPDATED=true \
   "$REPO_ROOT/scripts/release-notes.sh" "$PACKAGE_VERSION"
 
+echo "--- Suite 9: Execute GitHub Release Workflow Under Reordered Completion ---"
+RELEASE_STATE="$NOTES_DIR/release-state"
+mkdir -p "$RELEASE_STATE/published" "$RELEASE_STATE/releases" "$NOTES_DIR/bin"
+awk '
+  { sub(/\r$/, "") }
+  /^      - name: Create or update GitHub release from the changelog$/ { found = 1; next }
+  found && /^        run: \|$/ { body = 1; next }
+  body && /^          / { sub(/^          /, ""); print; next }
+  body && /^$/ { print; next }
+  body { exit }
+' "$REPO_ROOT/.github/workflows/ci.yml" > "$NOTES_DIR/release-step.sh"
+assert_eq "Extracted the actual GitHub release shell" "1" \
+  "$(grep -c 'gh release create' "$NOTES_DIR/release-step.sh")"
+
+cat > "$NOTES_DIR/bin/gh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+[[ "$1" = release ]] || exit 90
+operation="$2"
+tag="$3"
+shift 3
+case "$operation" in
+  view)
+    [ -f "$RELEASE_STATE/releases/$tag" ] || exit 1
+    if [ "$#" -gt 0 ]; then printf 'https://example.invalid/releases/%s\n' "$tag"; fi
+    ;;
+  create|edit)
+    [ "$MOCK_GH_FAILURE" = 0 ] || exit 1
+    latest=""
+    verify=false
+    for arg in "$@"; do
+      case "$arg" in
+        --latest=*) latest="${arg#--latest=}" ;;
+        --verify-tag) verify=true ;;
+      esac
+    done
+    if [ "$operation" = create ]; then [ "$verify" = true ] || exit 91; fi
+    case "$latest" in true|false) ;; *) exit 92 ;; esac
+    cp "$RUNNER_TEMP/release-notes.md" "$RELEASE_STATE/releases/$tag"
+    printf '%s %s %s\n' "$operation" "$tag" "$latest" >> "$RELEASE_STATE/writes"
+    if [ "$latest" = true ]; then printf '%s\n' "$tag" > "$RELEASE_STATE/latest"; fi
+    ;;
+  *) exit 93 ;;
+esac
+EOF
+cat > "$NOTES_DIR/bin/git" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+[[ "$*" = "ls-remote --tags --refs origin v*" ]] || exit 90
+[ "$MOCK_GIT_FAILURE" = 0 ] || exit 1
+cat "$RELEASE_STATE/tags"
+EOF
+cat > "$NOTES_DIR/bin/docker" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+[[ "$1 $2 $3" = "buildx imagetools inspect" && "$5" = --raw ]] || exit 90
+if [ -n "$MOCK_REGISTRY_FAILURE" ]; then echo "$MOCK_REGISTRY_FAILURE" >&2; exit 1; fi
+version="${4##*:}"
+if [ -f "$RELEASE_STATE/published/$version" ]; then
+  cat "$RELEASE_STATE/published/$version"
+else
+  echo "manifest unknown" >&2
+  exit 1
+fi
+EOF
+chmod +x "$NOTES_DIR/bin/"* "$NOTES_DIR/scripts/release-notes.sh"
+printf 'aaaa\trefs/tags/v1.2.3\nbbbb\trefs/tags/v1.3.0\n' > "$RELEASE_STATE/tags"
+# Different versions may have the same OCI index; digest equality is not version ordering.
+printf 'same verified index' > "$RELEASE_STATE/published/1.2.3"
+cp "$RELEASE_STATE/published/1.2.3" "$RELEASE_STATE/published/1.3.0"
+
+run_release() (
+  cd "$NOTES_DIR"
+  env PATH="$NOTES_DIR/bin:$PATH" RELEASE_STATE="$RELEASE_STATE" \
+    MOCK_GIT_FAILURE="${MOCK_GIT_FAILURE:-0}" \
+    MOCK_GH_FAILURE="${MOCK_GH_FAILURE:-0}" \
+    MOCK_REGISTRY_FAILURE="${MOCK_REGISTRY_FAILURE:-}" \
+    RUNNER_TEMP="$NOTES_DIR" GITHUB_STEP_SUMMARY="$NOTES_DIR/summary" \
+    GH_TOKEN=synthetic GH_REPO=example/fixture GITHUB_REF="refs/tags/$1" \
+    RELEASE_VERSION="${1#v}" LATEST_UPDATED="${2:-true}" \
+    COMMIT_SHA=0123456789abcdef0123456789abcdef01234567 RUN_URL=https://example.invalid/runs/1 \
+    INDEX_DIGEST="$DIGEST_A" AMD64_DIGEST="$DIGEST_B" ARM64_DIGEST="$DIGEST_C" \
+    bash "$NOTES_DIR/release-step.sh"
+)
+run_release v1.3.0 >/dev/null
+run_release v1.2.3 >/dev/null
+assert_eq "Delayed lower release cannot roll GitHub latest backward" "v1.3.0" \
+  "$(cat "$RELEASE_STATE/latest")"
+assert_eq "Both per-version releases are retained" "2" \
+  "$(find "$RELEASE_STATE/releases" -type f | wc -l)"
+assert_eq "Lower release creation does not claim latest" "create v1.2.3 false" \
+  "$(tail -n 1 "$RELEASE_STATE/writes")"
+assert_eq "Delayed lower release notes omit the latest alias" "0" \
+  "$(grep -c 'Latest:' "$RELEASE_STATE/releases/v1.2.3")"
+run_release v1.2.3 >/dev/null
+assert_eq "Lower rerun uses edit without claiming latest" "edit v1.2.3 false" \
+  "$(tail -n 1 "$RELEASE_STATE/writes")"
+printf 'cccc\trefs/tags/v9.0.0\ncccc\trefs/tags/v99.0.0-rc.1\ncccc\trefs/tags/v09.0.0\n' >> "$RELEASE_STATE/tags"
+run_release v1.3.0 false >/dev/null
+assert_eq "Unpublished higher tags do not suppress the published latest" "edit v1.3.0 true" \
+  "$(tail -n 1 "$RELEASE_STATE/writes")"
+
+cat >> "$NOTES_DIR/CHANGELOG.md" <<'EOF'
+
+## [1.10.0] - 2026-01-04
+- Newer numeric version.
+
+## [1.9.9] - 2026-01-03
+- Older numeric version.
+EOF
+printf 'dddd\trefs/tags/v1.10.0\neeee\trefs/tags/v1.9.9\n' >> "$RELEASE_STATE/tags"
+cp "$RELEASE_STATE/published/1.3.0" "$RELEASE_STATE/published/1.10.0"
+cp "$RELEASE_STATE/published/1.3.0" "$RELEASE_STATE/published/1.9.9"
+run_release v1.10.0 >/dev/null
+run_release v1.9.9 >/dev/null
+assert_eq "Release ownership uses numeric SemVer ordering" "v1.10.0" \
+  "$(cat "$RELEASE_STATE/latest")"
+assert_eq "Numeric maintenance release still exists" "create v1.9.9 false" \
+  "$(tail -n 1 "$RELEASE_STATE/writes")"
+
+writes_before=$(wc -l < "$RELEASE_STATE/writes")
+MOCK_GIT_FAILURE=1 assert_exit_code "Actual release step rejects ref listing failure" 1 run_release v1.2.3
+for error in "401 unauthorized" "403 forbidden" "500 server error" "connection reset"; do
+  MOCK_REGISTRY_FAILURE="$error" assert_exit_code "Registry $error stops release writes" 1 run_release v1.2.3
+done
+MOCK_GH_FAILURE=1 assert_exit_code "GitHub write failure is reported" 1 run_release v1.3.0
+assert_eq "Failed lookups and writes leave release state unchanged" "$writes_before" \
+  "$(wc -l < "$RELEASE_STATE/writes")"
+
+for job in publish release; do
+  job_block=$(awk -v job="$job" '
+    $0 == "  " job ":" { found = 1; next }
+    found && /^  [a-z-]+:/ { exit }
+    found { print }
+  ' "$REPO_ROOT/.github/workflows/ci.yml")
+  assert_eq "$job shares the publication concurrency group" "1" \
+    "$(grep -c 'group: edgetts-ghcr-publish' <<< "$job_block")"
+  assert_eq "$job keeps running work" "1" "$(grep -c 'cancel-in-progress: false' <<< "$job_block")"
+  assert_eq "$job queues pending jobs instead of replacing them" "1" \
+    "$(grep -c 'queue: max' <<< "$job_block")"
+done
+
 echo "======================================================================"
 echo " All $PASSED_TESTS / $TOTAL_TESTS Release Governance Tests PASSED"
 echo "======================================================================"
