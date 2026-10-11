@@ -122,6 +122,18 @@ describe("readImportedTextFile", () => {
     }
   });
 
+  it("preserves a content U+FEFF after the UTF-8 BOM", async () => {
+    const bytes = new Uint8Array([0xef, 0xbb, 0xbf, 0xef, 0xbb, 0xbf, 0x41]);
+    const result = await readImportedTextFile(makeTxtFile(bytes));
+    expect(result).toEqual({ success: true, text: "\uFEFFA" });
+  });
+
+  it("counts a content U+FEFF after the BOM toward the import limit", async () => {
+    const bytes = new TextEncoder().encode("\uFEFF\uFEFF" + "a".repeat(20_000));
+    const result = await readImportedTextFile(makeTxtFile(bytes));
+    expect(result).toEqual({ success: false, error: "TXT 内容超过 20,000 字符上限" });
+  });
+
   it("preserves leading and trailing whitespace without trimming", async () => {
     const file = makeTxtFile("  \n\t leading and trailing \t\n  ");
     const result = await readImportedTextFile(file);

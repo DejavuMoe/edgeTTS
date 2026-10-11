@@ -26,7 +26,7 @@ export function isTxtFilename(filename: string): boolean {
 }
 
 /**
- * Decodes an ArrayBuffer using strict UTF-8 decoding.
+ * Decodes an ArrayBuffer using strict UTF-8 decoding, removing one leading BOM.
  * Throws TypeError if the buffer contains invalid UTF-8 byte sequences.
  */
 export function decodeUtf8Text(buffer: ArrayBuffer): string {
@@ -60,17 +60,11 @@ export async function readImportedTextFile(file: File): Promise<TextImportResult
     return { success: false, error: "无法读取 TXT 文件" };
   }
 
-  let decoded: string;
+  let text: string;
   try {
-    decoded = decodeUtf8Text(arrayBuffer);
+    text = decodeUtf8Text(arrayBuffer);
   } catch {
     return { success: false, error: "TXT 文件不是有效的 UTF-8 文本" };
-  }
-
-  // Strip single leading UTF-8 BOM if present
-  let text = decoded;
-  if (text.startsWith("\uFEFF")) {
-    text = text.slice(1);
   }
 
   // Reject binary-like content containing NUL byte
