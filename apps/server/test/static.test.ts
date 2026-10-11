@@ -76,6 +76,26 @@ describe("Production Static Web Hosting & SPA Fallback", () => {
     expect(response.body).toContain("EdgeTTS Workbench");
   });
 
+  it("classifies cache paths relative to the web root inside an assets ancestor", async () => {
+    const webDistDir = path.join(tempDir, "assets", "deployment");
+    fs.mkdirSync(path.join(webDistDir, "assets"), { recursive: true });
+    fs.copyFileSync(path.join(tempDir, "index.html"), path.join(webDistDir, "index.html"));
+    fs.copyFileSync(
+      path.join(tempDir, "assets", "index-test1234.js"),
+      path.join(webDistDir, "assets", "index-test1234.js"),
+    );
+    app = createApp({ ttsService: dummyService }, { serveStatic: true, webDistDir });
+
+    for (const url of ["/", "/index.html", "/workbench"]) {
+      const response = await app.inject(url);
+      expect(response.statusCode).toBe(200);
+      expect(response.headers["cache-control"], url).toBe("no-cache");
+    }
+    const asset = await app.inject("/assets/index-test1234.js");
+    expect(asset.statusCode).toBe(200);
+    expect(asset.headers["cache-control"]).toBe("public, max-age=31536000, immutable");
+  });
+
   it("serves direct request to '/index.html' with no-cache header", async () => {
     app = createApp({ ttsService: dummyService }, { serveStatic: true, webDistDir: tempDir });
 
