@@ -69,30 +69,31 @@ export class VoiceCache {
       }
     }
 
-    if (this.inFlight !== null) {
-      return this.inFlight.then(cloneVoices);
+    if (this.inFlight === null) {
+      this.inFlight = (async () => {
+        try {
+          const voices = await this.provider.listVoices();
+          const snapshot = cloneVoices(voices);
+          this.cachedAt = this.now();
+          this.cachedVoices = snapshot;
+          this.lastErrorAt = null;
+          return snapshot;
+        } catch (err) {
+          this.lastErrorAt = this.now();
+          throw err;
+        } finally {
+          this.inFlight = null;
+        }
+      })();
     }
 
-    const fetchPromise = (async () => {
-      try {
-        const voices = await this.provider.listVoices();
-        const snapshot = cloneVoices(voices);
-        this.cachedAt = this.now();
-        this.cachedVoices = snapshot;
-        this.lastErrorAt = null;
-        return snapshot;
-      } catch (err) {
-        this.lastErrorAt = this.now();
-        if (this.cachedVoices !== null && !forceRefresh) {
-          return cloneVoices(this.cachedVoices);
-        }
-        throw err;
-      } finally {
-        this.inFlight = null;
+    try {
+      return cloneVoices(await this.inFlight);
+    } catch (err) {
+      if (this.cachedVoices !== null && !forceRefresh) {
+        return cloneVoices(this.cachedVoices);
       }
-    })();
-
-    this.inFlight = fetchPromise;
-    return fetchPromise.then(cloneVoices);
+      throw err;
+    }
   }
 }
