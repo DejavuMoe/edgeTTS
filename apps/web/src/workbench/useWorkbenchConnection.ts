@@ -35,8 +35,8 @@ export function useWorkbenchConnection(preferredVoiceId: string) {
     setVoices(voiceList);
     setVoiceError(null);
     const targetId = resolveEffectiveVoiceId(voiceList, savedVoiceIdRef.current);
+    setSelectedVoiceId(targetId);
     if (targetId) {
-      setSelectedVoiceId(targetId);
       savedVoiceIdRef.current = targetId;
     }
   }, []);
