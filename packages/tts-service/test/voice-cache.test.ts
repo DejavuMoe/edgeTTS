@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { TtsProvider, TtsVoice } from "@edgetts/tts-core";
 import {
   DEFAULT_VOICE_CACHE_ERROR_BACKOFF_MS,
@@ -162,6 +162,36 @@ describe("VoiceCache", () => {
     expect(cached).toEqual(initial);
     expect(provider.listVoicesCallCount).toBe(2);
   });
+
+  it.each([false, true])(
+    "applies fallback per caller when refreshes share a failed fetch (force first=%s)",
+    async (forceFirst) => {
+      let now = 1000;
+      const provider = new MockProvider();
+      const cache = new VoiceCache(provider, { ttlMs: 5000, now: () => now });
+      const initial = await cache.getVoices();
+      now = 7000;
+
+      let rejectRefresh!: (reason: Error) => void;
+      const pending = new Promise<readonly TtsVoice[]>((_, reject) => {
+        rejectRefresh = reject;
+      });
+      const refresh = vi.spyOn(provider, "listVoices").mockReturnValueOnce(pending);
+      const results = Promise.allSettled([
+        cache.getVoices(forceFirst),
+        cache.getVoices(!forceFirst),
+      ]);
+      const error = new Error("shared refresh failed");
+      rejectRefresh(error);
+      const [first, second] = await results;
+
+      expect(forceFirst ? first : second).toEqual({ status: "rejected", reason: error });
+      expect(forceFirst ? second : first).toEqual({ status: "fulfilled", value: initial });
+      expect(refresh).toHaveBeenCalledTimes(1);
+      expect(await cache.getVoices()).toEqual(initial);
+      expect(refresh).toHaveBeenCalledTimes(1);
+    },
+  );
 
   it("returns isolated copies to prevent caller mutations from affecting cache", async () => {
     const provider = new MockProvider();
