@@ -27,6 +27,36 @@ afterEach(() => {
 });
 
 describe("audit regressions", () => {
+  it("clears the active voice when reauthentication returns an empty catalog", async () => {
+    let voiceRequests = 0;
+    let speechRequests = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (url === "/api/health") return json({ status: "ok" });
+        if (url === "/api/voices") return json(++voiceRequests === 1 ? voices : { voices: [] });
+        speechRequests++;
+        return json({ error: { code: "UNAUTHORIZED", message: "Unauthorized" } }, 401);
+      }),
+    );
+    render(<App />);
+    await screen.findByRole("option", { name: /Aria/ });
+    const textarea = screen.getByLabelText("文本内容");
+    fireEvent.change(textarea, { target: { value: "example" } });
+    fireEvent.click(screen.getByRole("button", { name: "合成语音" }));
+    fireEvent.change(await screen.findByLabelText("API Key"), {
+      target: { value: "repro-only-key-0001" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "解锁" }));
+
+    await waitFor(() => expect(screen.queryByLabelText("API Key")).toBeNull());
+    expect(screen.queryAllByRole("option")).toHaveLength(0);
+    expect(screen.queryByLabelText("当前声音详情")).toBeNull();
+    expect(screen.getByRole("button", { name: "合成语音" }).hasAttribute("disabled")).toBe(true);
+    fireEvent.keyDown(textarea, { key: "Enter", ctrlKey: true });
+    expect(speechRequests).toBe(1);
+  });
+
   it("does not let a completed import overwrite a newer manual edit", async () => {
     vi.stubGlobal(
       "fetch",
