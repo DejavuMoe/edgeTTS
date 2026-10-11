@@ -322,6 +322,7 @@ jobs:
     concurrency:
       group: edgetts-ghcr-publish
       cancel-in-progress: false
+      queue: max
     permissions:
       contents: read
       packages: write
@@ -330,7 +331,6 @@ jobs:
       amd64_digest: ${{ steps.verify-registry.outputs.amd64_digest }}
       arm64_digest: ${{ steps.verify-registry.outputs.arm64_digest }}
       release_version: ${{ steps.promote-release.outputs.release_version }}
-      latest_updated: ${{ steps.promote-release.outputs.latest_updated }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -841,15 +841,30 @@ jobs:
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    concurrency:
+      group: edgetts-ghcr-publish
+      cancel-in-progress: false
+      queue: max
     # Only this job may write repository contents, and only to create the release. It runs after
     # the image is verified and promoted, so a release never points at an unpublished image.
     permissions:
       contents: write
+      packages: read
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+
+      - name: Log in to GHCR for published version inspection
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
 
       - name: Create or update GitHub release from the changelog
         env:
@@ -861,7 +876,6 @@ jobs:
           AMD64_DIGEST: ${{ needs.publish.outputs.amd64_digest }}
           ARM64_DIGEST: ${{ needs.publish.outputs.arm64_digest }}
           RELEASE_VERSION: ${{ needs.publish.outputs.release_version }}
-          LATEST_UPDATED: ${{ needs.publish.outputs.latest_updated }}
         run: |
           set -euo pipefail
           TAG="${GITHUB_REF#refs/tags/}"
@@ -870,11 +884,29 @@ jobs:
             exit 1
           fi
 
+          KNOWN_VERSIONS=$(git ls-remote --tags --refs origin 'v*' |
+            sed -nE 's@^[[:xdigit:]]+[[:space:]]+refs/tags/v((0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*))$@\1@p')
+          ORDERED_VERSIONS=$(printf '%s\n%s\n' "$RELEASE_VERSION" "$KNOWN_VERSIONS" |
+            sed '/^$/d' | sort -u | sort -V -r)
+
+          # Recheck ownership while holding the same group as registry publication.
+          export LATEST_UPDATED=true
+          for VERSION in $ORDERED_VERSIONS; do
+            [ "$VERSION" != "$RELEASE_VERSION" ] || break
+            if OUTPUT=$(docker buildx imagetools inspect "ghcr.io/dejavumoe/edgetts:$VERSION" --raw 2>&1); then
+              LATEST_UPDATED=false
+              break
+            fi
+            case "$OUTPUT" in
+              *"manifest unknown"*|*"not found"*|*"404"*) ;;
+              *) printf '%s\n' "$OUTPUT" >&2; exit 1 ;;
+            esac
+          done
+
           NOTES_FILE="$RUNNER_TEMP/release-notes.md"
           ./scripts/release-notes.sh "$RELEASE_VERSION" > "$NOTES_FILE"
 
-          # "latest" on GitHub follows the registry: only a release that moved the latest image
-          # alias becomes the latest release, so maintenance releases never displace it.
+          # Use current published-version ownership, not a previous job's promotion result.
           if gh release view "$TAG" >/dev/null 2>&1; then
             echo "Release $TAG exists; refreshing its notes (idempotent rerun)."
             gh release edit "$TAG" \

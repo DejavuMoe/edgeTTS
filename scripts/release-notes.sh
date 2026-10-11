@@ -16,7 +16,7 @@
 #   INDEX_DIGEST    OCI index digest of the published image (sha256:...).
 #   AMD64_DIGEST    linux/amd64 manifest digest.
 #   ARM64_DIGEST    linux/arm64 manifest digest.
-#   LATEST_UPDATED  "true" when this release moved the latest alias.
+#   LATEST_UPDATED  "true" when this release owns latest at notes-rendering time.
 #
 # Contract:
 #   - Writes Markdown to stdout and never contacts GitHub or the registry.

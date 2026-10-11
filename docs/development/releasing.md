@@ -8,7 +8,7 @@ Container images are published to GHCR as `ghcr.io/dejavumoe/edgetts`. The [CI w
 - Publication follows the quality, Docker image and deterministic proxy jobs. Both `main` pushes and stable tag pushes can publish candidates; pull requests do not publish.
 - Candidates use `sha-<full-git-sha>`; `main` also receives a development image tag. Verification covers `linux/amd64`, `linux/arm64` (under QEMU), runtime permissions, provenance and SBOM attestations.
 - Stable aliases are promoted from the verified OCI index digest without rebuilding. An existing version with another digest is rejected; an identical digest permits an idempotent rerun.
-- `latest` follows the highest successfully published stable SemVer. Older maintenance releases and reruns do not move it backward. Registry publication is serialized.
+- `latest` follows the highest successfully published stable SemVer. Older maintenance releases and reruns do not move it backward. Registry publication and GitHub release creation share a concurrency group with a queue of up to 100 pending jobs; canceled runs must be rerun.
 
 ## Create a release
 
@@ -24,13 +24,13 @@ git push origin vX.Y.Z
 
 The preflight script checks the version, repository state, tag availability, the package version and changelog section, and local validation. It does not create or push tags. On workstations with separate build runtimes, run the complete validation there and use `--skip-tests` for the Git preflight in the canonical checkout.
 
-After the image is published, a final release job creates the [GitHub release](https://github.com/DejavuMoe/edgeTTS/releases) from the version's changelog section, with upgrade steps, the verification facts and the immutable image references rendered by `scripts/release-notes.sh`. It is the only job with `contents: write`. The release becomes GitHub's latest only when the tag also moved the `latest` image alias, and a rerun refreshes the existing release instead of failing.
+After the image is published, a final release job creates the [GitHub release](https://github.com/DejavuMoe/edgeTTS/releases) from the version's changelog section, with upgrade steps, the verification facts and the immutable image references rendered by `scripts/release-notes.sh`. It is the only job with `contents: write`. While holding the publication concurrency group, it freshly queries stable Git tags and their published images. Only the highest published version becomes GitHub's latest; a delayed lower version still gets its own release. A rerun refreshes the existing release instead of failing.
 
 After publishing:
 
 1. Confirm all five CI jobs succeeded: quality, Docker image, proxy contract, publication and GitHub release.
 2. Verify `X.Y.Z` resolves to the candidate digest. Verify `latest` only advances when this is the highest published stable version.
-3. Review the generated release notes. To rebuild them by hand, pass the published values to the same script: `COMMIT_SHA=… RUN_URL=… INDEX_DIGEST=… AMD64_DIGEST=… ARM64_DIGEST=… LATEST_UPDATED=true ./scripts/release-notes.sh X.Y.Z`.
+3. Review the generated release notes. To rebuild them by hand, pass the published values to the same script and set `LATEST_UPDATED` according to current ownership: `COMMIT_SHA=… RUN_URL=… INDEX_DIGEST=… AMD64_DIGEST=… ARM64_DIGEST=… LATEST_UPDATED=true ./scripts/release-notes.sh X.Y.Z`.
 
 ```bash
 docker buildx imagetools inspect ghcr.io/dejavumoe/edgetts:X.Y.Z
