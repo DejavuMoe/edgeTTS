@@ -52,6 +52,7 @@ class ManagedEdgeAudioStream implements AsyncIterableIterator<Uint8Array> {
   private timer: NodeJS.Timeout | undefined;
   private closed = false;
   private started = false;
+  private terminalError: Error | undefined;
 
   /** `onClose` runs once when the stream ends, fails, times out or is aborted. */
   constructor(
@@ -81,6 +82,7 @@ class ManagedEdgeAudioStream implements AsyncIterableIterator<Uint8Array> {
   private close(error?: Error): void {
     if (this.closed) return;
     this.closed = true;
+    this.terminalError = error;
     if (this.timer !== undefined) clearTimeout(this.timer);
     this.signal.removeEventListener("abort", this.onAbort);
     this.stream.destroy(this.started ? error : undefined);
@@ -92,6 +94,7 @@ class ManagedEdgeAudioStream implements AsyncIterableIterator<Uint8Array> {
       this.close(createAbortError(this.signal.reason));
       throw createAbortError(this.signal.reason);
     }
+    if (this.terminalError) throw this.terminalError;
     if (this.closed) return { done: true, value: undefined };
 
     this.started = true;
