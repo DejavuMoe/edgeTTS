@@ -59,4 +59,50 @@ describe("speech route domain error mapping", () => {
       error: { code: "UPSTREAM_ERROR", message: "Unable to synthesize speech" },
     });
   });
+
+  it.each(REQUESTS)("maps first-read failures to UPSTREAM_ERROR on $url", async (request) => {
+    const service = failingService(new Error("unexpected setup failure"));
+    app = createApp({
+      ttsService: {
+        ...service,
+        synthesizeSegmented: async () => ({
+          format: "mp3-48k",
+          contentType: "audio/mpeg",
+          segmentCount: 1,
+          audio: (async function* () {
+            yield await Promise.reject<Uint8Array>(new Error("upstream first read failed"));
+          })(),
+        }),
+      },
+    });
+
+    const response = await app.inject({ method: "POST", ...request });
+
+    expect(response.statusCode).toBe(502);
+    expect(response.headers["content-type"]).toContain("application/json");
+    expect(response.json()).toEqual({
+      error: { code: "UPSTREAM_ERROR", message: "Unable to synthesize speech" },
+    });
+  });
+
+  it.each(REQUESTS)("finishes an empty audio stream on $url", async (request) => {
+    app = createApp({
+      ttsService: {
+        ...failingService(new Error("unexpected setup failure")),
+        synthesizeSegmented: async () => ({
+          format: "mp3-48k",
+          contentType: "audio/mpeg",
+          segmentCount: 1,
+          audio: (async function* () {
+            yield* [];
+          })(),
+        }),
+      },
+    });
+
+    const response = await app.inject({ method: "POST", ...request });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.payload).toBe("");
+  });
 });
