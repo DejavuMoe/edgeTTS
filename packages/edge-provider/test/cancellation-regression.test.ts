@@ -8,6 +8,8 @@ describe("real msedge-tts WebSocket lifecycle", () => {
     "cancel-audio",
     "cancel-audio.metadata",
     "cancel-unstarted",
+    "cancel-url-init",
+    "timeout-url-init",
     "complete",
     "truncated",
   ])("keeps process and stream semantics intact: %s", (scenario) => {
@@ -33,10 +35,12 @@ const server = new WebSocketServer({ host: "127.0.0.1", port: 0 });
 await once(server, "listening");
 MsEdgeTTS.getSynthUrl = async () => "ws://127.0.0.1:" + server.address().port;
 let upstream;
+let connections = 0;
 let requestId;
 let resolveRequest;
 const requestReceived = new Promise(resolve => { resolveRequest = resolve; });
 server.on("connection", socket => {
+  connections++;
   upstream = socket;
   socket.on("message", data => {
     const message = data.toString();
@@ -49,6 +53,20 @@ server.on("connection", socket => {
 const controller = new AbortController();
 const scenario = ${JSON.stringify(scenario)};
 try {
+  if (scenario.endsWith("url-init")) {
+    let resolveUrl;
+    MsEdgeTTS.getSynthUrl = () => new Promise(resolve => { resolveUrl = resolve; });
+    const opening = new EdgeTtsProvider({ setupTimeoutMs: 25 }).openSession(
+      { voice: "en-US-JennyNeural" }, controller.signal,
+    );
+    const rejected = assert.rejects(opening,
+      scenario === "cancel-url-init" ? { name: "AbortError" } : /setup timed out/);
+    if (scenario === "cancel-url-init") controller.abort();
+    await rejected;
+    resolveUrl("ws://127.0.0.1:" + server.address().port);
+    await new Promise(resolve => setTimeout(resolve, 100));
+    assert.equal(connections, 0, "abandoned URL lookup must not open a socket");
+  } else {
   const result = await new EdgeTtsProvider().synthesize(
     { text: "synthetic regression sample", voice: "en-US-JennyNeural" },
     controller.signal,
@@ -78,6 +96,7 @@ try {
     };
     if (scenario === "complete") assert.equal(await consume(), "audio bytes");
     else await assert.rejects(consume(), /no turn.end received/);
+  }
   }
 } finally {
   controller.abort();
