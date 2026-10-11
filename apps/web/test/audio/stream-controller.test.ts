@@ -551,6 +551,148 @@ describe("StreamPlaybackController Session Isolation & URL Lifecycle", () => {
     expect(revokedUrls).not.toContain("blob:mock-url-3");
   });
 
+  describe("MediaSource quota fallback", () => {
+    function installQuotaBuffer(successfulAppends: number) {
+      class MockSourceBuffer extends EventTarget {
+        updating = false;
+        appendBuffer = vi.fn(() => {
+          if (this.appendBuffer.mock.calls.length > successfulAppends) {
+            throw new DOMException("SourceBuffer is full", "QuotaExceededError");
+          }
+          queueMicrotask(() => this.dispatchEvent(new Event("updateend")));
+        });
+        abort = vi.fn();
+      }
+      const buffer = new MockSourceBuffer();
+      class MockMediaSource extends EventTarget {
+        readyState = "open";
+        addSourceBuffer = vi.fn(() => buffer as unknown as SourceBuffer);
+        endOfStream = vi.fn(() => {
+          this.readyState = "ended";
+        });
+        static isTypeSupported = vi.fn(() => true);
+      }
+      // @ts-expect-error Mocking MediaSource
+      window.MediaSource = MockMediaSource;
+      return buffer;
+    }
+
+    it.each([0, 1])(
+      "keeps all download bytes and completes Blob playback after quota (%i successful appends)",
+      async (successfulAppends) => {
+        const buffer = installQuotaBuffer(successfulAppends);
+        const cancel = vi.fn();
+        const chunks = [new Uint8Array([1, 2]), new Uint8Array([3, 4]), new Uint8Array([5, 6])];
+        const stream = new ReadableStream<Uint8Array>({
+          start(reader) {
+            for (const chunk of chunks) reader.enqueue(chunk);
+            reader.close();
+          },
+          cancel,
+        });
+        const callbacks = {
+          onStreamReady: vi.fn(),
+          onDownloadReady: vi.fn(),
+          onError: vi.fn(),
+          onFinish: vi.fn(),
+          onProgress: vi.fn(),
+        };
+        const controller = new StreamPlaybackController();
+        await controller.startStream(
+          { body: stream } as Response,
+          new AbortController().signal,
+          callbacks,
+        );
+
+        expect(callbacks.onError).not.toHaveBeenCalled();
+        expect(cancel).not.toHaveBeenCalled();
+        expect(buffer.appendBuffer).toHaveBeenCalledTimes(successfulAppends + 1);
+        expect(callbacks.onStreamReady.mock.calls).toEqual([
+          ["blob:mock-url-1"],
+          ["blob:mock-url-2"],
+        ]);
+        expect(callbacks.onDownloadReady).toHaveBeenCalledExactlyOnceWith("blob:mock-url-2");
+        expect(callbacks.onProgress).toHaveBeenLastCalledWith(6);
+        expect(callbacks.onFinish).toHaveBeenCalledTimes(1);
+        const blob = vi.mocked(URL.createObjectURL).mock.calls[1]![0] as Blob;
+        const data = await new Promise<ArrayBuffer>((resolve) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as ArrayBuffer);
+          reader.readAsArrayBuffer(blob);
+        });
+        expect(new Uint8Array(data)).toEqual(new Uint8Array([1, 2, 3, 4, 5, 6]));
+        expect(revokedUrls).toEqual(["blob:mock-url-1"]);
+        controller.cleanup();
+        controller.cleanup();
+        expect(revokedUrls).toEqual(["blob:mock-url-1", "blob:mock-url-2"]);
+      },
+    );
+
+    it.each(["abort", "replacement", "reader error"] as const)(
+      "retains lifecycle handling while receiving the tail after quota: %s",
+      async (termination) => {
+        const buffer = installQuotaBuffer(0);
+        const cancel = vi.fn();
+        let tail!: ReadableStreamDefaultController<Uint8Array>;
+        const stream = new ReadableStream<Uint8Array>({
+          start(reader) {
+            tail = reader;
+            reader.enqueue(new Uint8Array([1, 2]));
+          },
+          cancel,
+        });
+        const callbacks = {
+          onStreamReady: vi.fn(),
+          onDownloadReady: vi.fn(),
+          onError: vi.fn(),
+          onFinish: vi.fn(),
+        };
+        const controller = new StreamPlaybackController();
+        const signal = new AbortController();
+        const running = controller.startStream(
+          { body: stream } as Response,
+          signal.signal,
+          callbacks,
+        );
+        await vi.waitFor(() => expect(buffer.appendBuffer).toHaveBeenCalledTimes(1));
+        expect(callbacks.onError).not.toHaveBeenCalled();
+        expect(cancel).not.toHaveBeenCalled();
+
+        const error = new Error("network failed after quota");
+        if (termination === "abort") signal.abort();
+        else if (termination === "reader error") tail.error(error);
+        else {
+          // @ts-expect-error Mocking window.MediaSource
+          delete window.MediaSource;
+          await controller.startStream(
+            { blob: async () => new Blob(["next"]) } as Response,
+            new AbortController().signal,
+            {
+              onStreamReady: vi.fn(),
+              onDownloadReady: vi.fn(),
+              onError: vi.fn(),
+              onFinish: vi.fn(),
+            },
+          );
+        }
+        await running;
+
+        expect(callbacks.onDownloadReady).not.toHaveBeenCalled();
+        expect(callbacks.onFinish).not.toHaveBeenCalled();
+        if (termination === "reader error")
+          expect(callbacks.onError).toHaveBeenCalledExactlyOnceWith(error);
+        else {
+          expect(callbacks.onError).not.toHaveBeenCalled();
+          expect(cancel).toHaveBeenCalledTimes(1);
+        }
+        expect(revokedUrls).toEqual(["blob:mock-url-1"]);
+        controller.cleanup();
+        if (termination === "replacement")
+          expect(revokedUrls).toEqual(["blob:mock-url-1", "blob:mock-url-2"]);
+      },
+    );
+  });
+
   describe("Streaming Telemetry & Byte Accounting", () => {
     it.each([32768, 1024])(
       "accumulates bytes with %i-byte chunks, throttles progress, and reports final bytes",
