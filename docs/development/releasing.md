@@ -4,15 +4,23 @@ Container images are published to GHCR as `ghcr.io/dejavumoe/edgetts`. The [CI w
 
 ## Publication contract
 
-- Stable Git tags use `vX.Y.Z` with no leading zeros, prerelease suffixes or build metadata. The tagged commit must be reachable from `origin/main`; moved tags are rejected.
-- Publication follows the quality, Docker image and deterministic proxy jobs. Both `main` pushes and stable tag pushes can publish candidates; pull requests do not publish.
-- Candidates use `sha-<full-git-sha>`; `main` also receives a development image tag. Verification covers `linux/amd64`, `linux/arm64` (under QEMU), runtime permissions, provenance and SBOM attestations.
+- Stable Git tags use `vX.Y.Z` with no leading zeros, prerelease suffixes or build metadata. The tagged commit must be reachable from `origin/master`; moved tags are rejected.
+- Publication follows the quality, Docker image and deterministic proxy jobs. Both `master` pushes and stable tag pushes can publish candidates; pull requests do not publish.
+- Candidates use `sha-<full-git-sha>`; `master` also receives a development image tag. Verification covers `linux/amd64`, `linux/arm64` (under QEMU), runtime permissions, provenance and SBOM attestations.
 - Stable aliases are promoted from the verified OCI index digest without rebuilding. An existing version with another digest is rejected; an identical digest permits an idempotent rerun.
 - `latest` follows the highest successfully published stable SemVer. Older maintenance releases and reruns do not move it backward. Registry publication and GitHub release creation share a concurrency group with a queue of up to 100 pending jobs; canceled runs must be rerun.
 
+The primary branch is `master`, and development images follow `ghcr.io/dejavumoe/edgetts:master`.
+The former `:main` image tag no longer receives updates. Published version tags and images remain immutable.
+
+Release tags created before this migration, including `v0.9.6`, retain workflows that require
+`origin/main`. After that branch is removed, rerunning their publication jobs fails the ancestry
+check. Use published image digests for rollback and the current `master` workflow for future
+releases; do not move existing tags to change their workflows.
+
 ## Create a release
 
-Start from a clean, synchronized `main` with successful CI. Update package versions and release examples consistently, and move the `[Unreleased]` entries of [CHANGELOG.md](../../CHANGELOG.md) under a `## [X.Y.Z] - YYYY-MM-DD` section. `pnpm test` fails if any documented image tag no longer matches the package version. Then validate before creating the tag:
+Start from a clean, synchronized `master` with successful CI. Update package versions and release examples consistently, and move the `[Unreleased]` entries of [CHANGELOG.md](../../CHANGELOG.md) under a `## [X.Y.Z] - YYYY-MM-DD` section. `pnpm test` fails if any documented image tag no longer matches the package version. Then validate before creating the tag:
 
 ```bash
 git fetch origin
@@ -74,4 +82,4 @@ The health endpoint confirms the HTTP process only; verify an authenticated synt
 
 ## Repository protection
 
-Repository administrators can require review and the quality, Docker and proxy checks for `main`, block force pushes and deletion, and restrict release-tag creation to maintainers. Do not require the publication job as a pull-request check. Protect stable tags against updates and deletion. These settings are administrative controls, not changes performed by CI.
+Repository administrators can require review and the quality, Docker and proxy checks for `master`, block force pushes and deletion, and restrict release-tag creation to maintainers. Do not require the publication job as a pull-request check. Protect stable tags against updates and deletion. These settings are administrative controls, not changes performed by CI.

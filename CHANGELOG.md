@@ -7,6 +7,12 @@ the version being released.
 
 ## [Unreleased]
 
+### Changed
+
+- Use `master` as the primary branch for CI, release ancestry checks and local release preflight.
+  Development images now follow `ghcr.io/dejavumoe/edgetts:master`; the former `:main` tag stops
+  receiving updates. Existing stable release tags and images are unchanged.
+
 ## [0.9.6] - 2026-10-11
 
 ### Fixed

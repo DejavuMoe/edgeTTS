@@ -3,7 +3,7 @@ name: CI
 on:
   push:
     branches:
-      - main
+      - master
     tags:
       - "v*.*.*"
   pull_request:
@@ -316,7 +316,7 @@ jobs:
       - quality
       - docker
       - proxy-contract
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v'))
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     concurrency:
@@ -362,15 +362,15 @@ jobs:
           fi
           echo "PASS: Tag creation verified (not a moved or republished tag)."
 
-          # 3. Release source must originate from origin/main history
-          if ! git rev-parse --verify origin/main >/dev/null 2>&1; then
-            git fetch origin main:refs/remotes/origin/main
+          # 3. Release source must originate from origin/master history
+          if ! git rev-parse --verify origin/master >/dev/null 2>&1; then
+            git fetch origin master:refs/remotes/origin/master
           fi
-          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
-            echo "::error::release tag target is not reachable from main"
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/master; then
+            echo "::error::release tag target is not reachable from master"
             exit 1
           fi
-          echo "PASS: Commit $GITHUB_SHA is an ancestor of origin/main."
+          echo "PASS: Commit $GITHUB_SHA is an ancestor of origin/master."
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@1f40c72289eff860ee54a304f1438e3cff362e0a # v4.3.0
@@ -384,7 +384,7 @@ jobs:
         with:
           images: ghcr.io/dejavumoe/edgetts
           tags: |
-            type=raw,value=main,enable=${{ github.ref == 'refs/heads/main' }}
+            type=raw,value=master,enable=${{ github.ref == 'refs/heads/master' }}
             type=sha,format=long,prefix=sha-
           labels: |
             org.opencontainers.image.source=https://github.com/DejavuMoe/edgeTTS
@@ -497,16 +497,16 @@ jobs:
           fi
           echo "PASS: Tag sha-${GITHUB_SHA} resolves to exact build digest $DIGEST."
 
-          # 6. Verify main tag resolves to identical digest (when on main branch)
-          if [ "${GITHUB_REF}" = "refs/heads/main" ]; then
-            echo "Verifying main branch tag resolution..."
-            MAIN_RAW=$(docker buildx imagetools inspect "ghcr.io/dejavumoe/edgetts:main" --raw)
-            MAIN_DIGEST="sha256:$(printf "%s" "$MAIN_RAW" | sha256sum | awk '{print $1}')"
-            if [ "$MAIN_DIGEST" != "$DIGEST" ]; then
-              echo "FAIL: main tag digest $MAIN_DIGEST does not match build digest $DIGEST" >&2
+          # 6. Verify master tag resolves to identical digest (when on master branch)
+          if [ "${GITHUB_REF}" = "refs/heads/master" ]; then
+            echo "Verifying master branch tag resolution..."
+            MASTER_RAW=$(docker buildx imagetools inspect "ghcr.io/dejavumoe/edgetts:master" --raw)
+            MASTER_DIGEST="sha256:$(printf "%s" "$MASTER_RAW" | sha256sum | awk '{print $1}')"
+            if [ "$MASTER_DIGEST" != "$DIGEST" ]; then
+              echo "FAIL: master tag digest $MASTER_DIGEST does not match build digest $DIGEST" >&2
               exit 1
             fi
-            echo "PASS: Tag main resolves to exact build digest $DIGEST."
+            echo "PASS: Tag master resolves to exact build digest $DIGEST."
           fi
 
           # 7. Export verified outputs for publication summary
@@ -817,8 +817,8 @@ jobs:
             echo "| **SPDX SBOM** | \`${HAS_SBOM}\` |"
             echo "| **Candidate Ref** | \`ghcr.io/dejavumoe/edgetts:sha-${{ github.sha }}\` |"
 
-            if [ "${GITHUB_REF}" = "refs/heads/main" ]; then
-              echo "| **Branch Snapshot Ref** | \`ghcr.io/dejavumoe/edgetts:main\` |"
+            if [ "${GITHUB_REF}" = "refs/heads/master" ]; then
+              echo "| **Branch Snapshot Ref** | \`ghcr.io/dejavumoe/edgetts:master\` |"
             elif echo "${GITHUB_REF}" | grep -q '^refs/tags/v'; then
               RELEASE_VER="${{ steps.promote-release.outputs.release_version }}"
               HIGHEST_VER="${{ steps.promote-release.outputs.highest_published_version }}"

@@ -124,12 +124,12 @@ docker run -d \
 
 公式マルチアーキテクチャイメージは `linux/amd64` および `linux/arm64` をネイティブサポートしています。
 
-| タグ                                        | 説明                                         | 推奨用途                     |
-| :------------------------------------------ | :------------------------------------------- | :--------------------------- |
-| `ghcr.io/dejavumoe/edgetts:0.9.6`           | 厳格な SemVer リリースタグ                   | 本番環境の通常デプロイ       |
-| `ghcr.io/dejavumoe/edgetts:latest`          | 公開された最新の安定リリース                 | 自動更新環境                 |
-| `ghcr.io/dejavumoe/edgetts:main`            | `main` ブランチの最新ビルドスナップショット  | 最新機能のテスト             |
-| `ghcr.io/dejavumoe/edgetts@sha256:<digest>` | コンテンツアドレス指定による不変ダイジェスト | 厳格な再現性を求める本番環境 |
+| タグ                                        | 説明                                          | 推奨用途                     |
+| :------------------------------------------ | :-------------------------------------------- | :--------------------------- |
+| `ghcr.io/dejavumoe/edgetts:0.9.6`           | 厳格な SemVer リリースタグ                    | 本番環境の通常デプロイ       |
+| `ghcr.io/dejavumoe/edgetts:latest`          | 公開された最新の安定リリース                  | 自動更新環境                 |
+| `ghcr.io/dejavumoe/edgetts:master`          | `master` ブランチの最新ビルドスナップショット | 最新機能のテスト             |
+| `ghcr.io/dejavumoe/edgetts@sha256:<digest>` | コンテンツアドレス指定による不変ダイジェスト  | 厳格な再現性を求める本番環境 |
 
 各リリースの検証済み OCI インデックスダイジェストは [GitHub Release ページ](https://github.com/DejavuMoe/edgeTTS/releases) に記載されています。
 
