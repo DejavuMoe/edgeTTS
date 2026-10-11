@@ -156,7 +156,7 @@ export function useSynthesis({ getApiKey, onUnauthorized }: SynthesisOptions) {
     }
 
     const handleKeyDown = (e: KeyboardEvent): void => {
-      if (e.key === "Escape") {
+      if (e.key === "Escape" && !e.defaultPrevented) {
         e.preventDefault();
         cancel();
       }
