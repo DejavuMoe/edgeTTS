@@ -66,8 +66,8 @@ export function registerStaticHosting(
     prefix: "/",
     wildcard: true,
     setHeaders(reply: FastifyReply, filePath: string): void {
-      const normalized = filePath.replace(/\\/g, "/");
-      if (normalized.includes("/assets/")) {
+      const normalized = path.relative(webDistDir, filePath).replace(/\\/g, "/");
+      if (normalized.startsWith("assets/")) {
         reply.header("Cache-Control", "public, max-age=31536000, immutable");
       } else if (normalized.endsWith("index.html")) {
         reply.header("Cache-Control", "no-cache");
