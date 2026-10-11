@@ -294,6 +294,40 @@ describe("EdgeTtsProvider", () => {
   });
 
   describe("audio resource lifecycle", () => {
+    it.each([false, true])(
+      "preserves an idle timeout when no next call is pending (started=%s)",
+      async (started) => {
+        vi.useFakeTimers();
+        try {
+          const stream = new Readable({ read() {} });
+          const client = new FakeEdgeClient(stream);
+          const provider = new EdgeTtsProvider({
+            clientFactory: () => client,
+            audioIdleTimeoutMs: 10,
+          });
+          const result = await provider.synthesize(
+            { text: "hello", voice: "zh-CN-XiaoxiaoNeural" },
+            new AbortController().signal,
+          );
+          const iterator = result.audio[Symbol.asyncIterator]();
+          if (started) {
+            stream.push(Buffer.from("first"));
+            expect((await iterator.next()).done).toBe(false);
+          }
+
+          await vi.advanceTimersByTimeAsync(10);
+
+          await expect(iterator.next()).rejects.toThrow(
+            "Speech synthesis audio timed out after 10ms",
+          );
+          expect(client.closeCallCount).toBe(1);
+          expect(stream.destroyed).toBe(true);
+        } finally {
+          vi.useRealTimers();
+        }
+      },
+    );
+
     it("closes and destroys an unstarted stream when the consumer returns immediately", async () => {
       const stream = Readable.from([Buffer.from("data")]);
       const client = new FakeEdgeClient(stream);
