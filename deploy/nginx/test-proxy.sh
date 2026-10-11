@@ -34,17 +34,26 @@ TEST_API_KEY="test-nginx-api-key-1234567890"
 TMP_DIR="$(mktemp -d -t edgetts-nginx-test-XXXXXX)"
 CONF_EXAMPLE="deploy/nginx/edgetts.conf.example"
 
-MOCK_CONTAINER="edgetts-test-mock-upstream"
-MOCK_NGINX_CONTAINER="edgetts-test-mock-nginx"
-REAL_BACKEND_CONTAINER="edgetts-test-real-backend"
-REAL_NGINX_CONTAINER="edgetts-test-real-nginx"
+RUN_ID="${TMP_DIR##*/}"
+MOCK_CONTAINER="$RUN_ID-mock-upstream"
+MOCK_NGINX_CONTAINER="$RUN_ID-mock-nginx"
+REAL_BACKEND_CONTAINER="$RUN_ID-real-backend"
+REAL_NGINX_CONTAINER="$RUN_ID-real-nginx"
+CREATED_CONTAINERS=()
+
+start_container() {
+  local container_id
+  container_id=$(docker run -d "$@")
+  CREATED_CONTAINERS+=("$container_id")
+}
 
 cleanup() {
   local exit_code=$?
   echo "==> Cleaning up test containers and artifacts..."
-  docker rm -f "$MOCK_CONTAINER" "$MOCK_NGINX_CONTAINER" "$REAL_BACKEND_CONTAINER" "$REAL_NGINX_CONTAINER" 2>/dev/null || true
+  if [ "${#CREATED_CONTAINERS[@]}" -gt 0 ]; then
+    docker rm -f "${CREATED_CONTAINERS[@]}" 2>/dev/null || true
+  fi
   rm -rf "$TMP_DIR"
-  rm -f /tmp/edgetts-nginx-test-*.mp3 /tmp/edgetts-stream-*.tmp 2>/dev/null || true
   echo "==> Cleanup complete (exit code: $exit_code)."
   exit "$exit_code"
 }
@@ -244,7 +253,7 @@ server.listen(8080, '0.0.0.0', () => {
 });
 EOF
 
-docker run -d --name "$MOCK_CONTAINER" \
+start_container --name "$MOCK_CONTAINER" \
   -v "$TMP_DIR/mock-upstream.mjs:/app/mock-upstream.mjs:ro" \
   node:24.21.0-alpine3.24 node /app/mock-upstream.mjs >/dev/null
 
@@ -262,7 +271,7 @@ done
 # Mechanically derive mock config from production template
 generate_test_conf "$MOCK_IP" "$TMP_DIR/fullchain.pem" "$TMP_DIR/privkey.pem" "$TMP_DIR/mock-nginx.conf"
 
-docker run -d --name "$MOCK_NGINX_CONTAINER" \
+start_container --name "$MOCK_NGINX_CONTAINER" \
   -p "127.0.0.1:$TEST_PORT:443" \
   -v "$TMP_DIR:$TMP_DIR:ro" \
   -v "$TMP_DIR/mock-nginx.conf:/etc/nginx/conf.d/default.conf:ro" \
@@ -360,7 +369,8 @@ grep -qi "x-frame-options: SAMEORIGIN" "$RESP_429_HEADERS" || { echo "FAIL: X-Fr
 echo "PASS: HTTP 429 status, Retry-After, X-Frame-Options: SAMEORIGIN, and RATE_LIMITED JSON body preserved over HTTPS."
 
 # Clean up mock containers
-docker rm -f "$MOCK_CONTAINER" "$MOCK_NGINX_CONTAINER" >/dev/null
+docker rm -f "${CREATED_CONTAINERS[@]}" >/dev/null
+CREATED_CONTAINERS=()
 
 if [ "$SKIP_LIVE" = "1" ]; then
   echo ""
@@ -378,7 +388,7 @@ fi
 # ------------------------------------------------------------
 echo ""
 echo "--- [4/5] Real EdgeTTS Container Integration (HTTPS) ---"
-docker run -d --name "$REAL_BACKEND_CONTAINER" \
+start_container --name "$REAL_BACKEND_CONTAINER" \
   --read-only \
   --cap-drop=ALL \
   --security-opt=no-new-privileges \
@@ -401,7 +411,7 @@ done
 # Mechanically derive real proxy config from production template
 generate_test_conf "$REAL_IP" "$TMP_DIR/fullchain.pem" "$TMP_DIR/privkey.pem" "$TMP_DIR/real-nginx.conf"
 
-docker run -d --name "$REAL_NGINX_CONTAINER" \
+start_container --name "$REAL_NGINX_CONTAINER" \
   -p "127.0.0.1:$TEST_PORT:443" \
   -v "$TMP_DIR:$TMP_DIR:ro" \
   -v "$TMP_DIR/real-nginx.conf:/etc/nginx/conf.d/default.conf:ro" \
@@ -461,7 +471,7 @@ echo "PASS: Valid Bearer key returned 200 OK with $VOICE_COUNT voices over HTTPS
 # ------------------------------------------------------------
 echo ""
 echo "--- [5/5] Real Speech Synthesis via Nginx Reverse Proxy (HTTPS) ---"
-AUDIO_OUTPUT="/tmp/edgetts-nginx-test-audio.mp3"
+AUDIO_OUTPUT="$TMP_DIR/audio.mp3"
 rm -f "$AUDIO_OUTPUT"
 
 REAL_SPEECH_HEADERS="$TMP_DIR/speech_headers.txt"
