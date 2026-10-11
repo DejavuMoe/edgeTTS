@@ -11,6 +11,7 @@ import { countLines } from "../lib/text-stats.js";
 export function useTextDocument() {
   const [text, setText] = useState<string>("");
   const [importError, setImportError] = useState<MessageKey | null>(null);
+  const [isImporting, setIsImporting] = useState(false);
   const importGenerationIdRef = useRef<number>(0);
   const isMountedRef = useRef<boolean>(false);
 
@@ -29,6 +30,7 @@ export function useTextDocument() {
 
   const edit = (value: string): void => {
     ++importGenerationIdRef.current;
+    setIsImporting(false);
     setText(value);
     if (importError) {
       setImportError(null);
@@ -37,12 +39,14 @@ export function useTextDocument() {
 
   const importFile = async (file: File): Promise<void> => {
     const currentGen = ++importGenerationIdRef.current;
+    setIsImporting(true);
     const result = await readImportedTextFile(file);
 
     if (!isMountedRef.current || importGenerationIdRef.current !== currentGen) {
       return;
     }
 
+    setIsImporting(false);
     if (result.success) {
       setText(result.text);
       setImportError(null);
@@ -53,6 +57,7 @@ export function useTextDocument() {
 
   const clear = (): void => {
     ++importGenerationIdRef.current;
+    setIsImporting(false);
     setText("");
     setImportError(null);
   };
@@ -60,6 +65,7 @@ export function useTextDocument() {
   return {
     text,
     importError,
+    isImporting,
     codePointCount,
     lineCount,
     isOverLimit: codePointCount > MAX_NATIVE_INPUT_CODE_POINTS,

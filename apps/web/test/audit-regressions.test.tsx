@@ -1,6 +1,6 @@
 import React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { App } from "../src/App.js";
 
 const voices = {
@@ -33,6 +33,7 @@ describe("audit regressions", () => {
       vi.fn(async (url: string) => (url === "/api/health" ? json({ status: "ok" }) : json(voices))),
     );
     render(<App />);
+    await screen.findByRole("option", { name: /Aria/ });
 
     let resolve!: (value: ArrayBuffer) => void;
     const pending = new Promise<ArrayBuffer>((done) => {
@@ -41,12 +42,17 @@ describe("audit regressions", () => {
     const file = new File([], "pending.txt", { type: "text/plain" });
     Object.defineProperty(file, "arrayBuffer", { value: () => pending });
 
-    fireEvent.change(document.querySelector('input[type="file"]')!, { target: { files: [file] } });
     const textarea = screen.getByLabelText("文本内容") as HTMLTextAreaElement;
+    const generate = screen.getByRole("button", { name: "合成语音" });
+    fireEvent.change(textarea, { target: { value: "original text" } });
+    fireEvent.change(document.querySelector('input[type="file"]')!, { target: { files: [file] } });
+    expect(generate.hasAttribute("disabled")).toBe(true);
     fireEvent.change(textarea, { target: { value: "newer manual edit" } });
-    resolve(new TextEncoder().encode("older imported text").buffer);
+    expect(generate.hasAttribute("disabled")).toBe(false);
+    await act(async () => resolve(new TextEncoder().encode("older imported text").buffer));
 
-    await waitFor(() => expect(textarea.value).toBe("newer manual edit"));
+    expect(textarea.value).toBe("newer manual edit");
+    expect(generate.hasAttribute("disabled")).toBe(false);
   });
 
   it("loads voices even while the independent health probe is pending", async () => {
