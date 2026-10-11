@@ -383,6 +383,32 @@ describe("TtsService", () => {
   });
 
   describe("synthesis delegation", () => {
+    it.each([undefined, new Error("caller cancellation")])(
+      "rejects a read after cancellation rather than reporting EOF (reason=%s)",
+      async (reason) => {
+        const provider = new FakeTtsProvider();
+        provider.synthesisResult = {
+          format: "mp3-48k",
+          contentType: "audio/mpeg",
+          audio: (async function* () {
+            yield new Uint8Array([1]);
+            yield new Uint8Array([2]);
+          })(),
+        };
+        const service = new TtsService(provider);
+        const controller = new AbortController();
+        const result = await service.synthesize({ text: "sample", voice: "v" }, controller.signal);
+        const iterator = result.audio[Symbol.asyncIterator]();
+        expect((await iterator.next()).value).toEqual(new Uint8Array([1]));
+
+        controller.abort(reason);
+
+        if (reason) await expect(iterator.next()).rejects.toBe(reason);
+        else await expect(iterator.next()).rejects.toMatchObject({ name: "AbortError" });
+        expect(service.getStats().activeSyntheses).toBe(0);
+      },
+    );
+
     it("delegates to provider.synthesize without calling listVoices", async () => {
       const provider = new FakeTtsProvider();
       const service = new TtsService(provider);
@@ -992,10 +1018,14 @@ describe("TtsService", () => {
       });
 
       // Consumer consumes A AND aborts A
-      for await (const chunk of resA.audio) {
-        expect(chunk).toBeDefined();
-        acA.abort();
-      }
+      await expect(
+        (async () => {
+          for await (const chunk of resA.audio) {
+            expect(chunk).toBeDefined();
+            acA.abort();
+          }
+        })(),
+      ).rejects.toMatchObject({ name: "AbortError" });
 
       // Only B should be dispatched, C should remain queued
       await pB;
