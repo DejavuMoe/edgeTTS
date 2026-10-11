@@ -84,6 +84,9 @@ class ManagedAudioStream implements AsyncIterableIterator<Uint8Array> {
   }
 
   async next(): Promise<IteratorResult<Uint8Array>> {
+    if (this.signal.aborted) {
+      throw createAbortError(this.signal.reason);
+    }
     if (this.released) {
       return { done: true, value: undefined };
     }
