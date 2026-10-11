@@ -27,6 +27,41 @@ afterEach(() => {
 });
 
 describe("audit regressions", () => {
+  it("allows leaving favorites-only after the catalog loses every favorite", async () => {
+    let voiceRequests = 0;
+    const replacement = {
+      voices: [{ id: "en-US-GuyNeural", displayName: "Guy", locale: "en-US", gender: "Male" }],
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (url === "/api/health") return json({ status: "ok" });
+        if (url === "/api/voices") return json(++voiceRequests === 1 ? voices : replacement);
+        return json({ error: { code: "UNAUTHORIZED", message: "Unauthorized" } }, 401);
+      }),
+    );
+    render(<App />);
+    await screen.findByRole("option", { name: /Aria/ });
+    fireEvent.click(screen.getByRole("button", { name: "收藏当前声音" }));
+    const favoritesOnly = screen.getByRole("checkbox", { name: "只看收藏" }) as HTMLInputElement;
+    fireEvent.click(favoritesOnly);
+    fireEvent.change(screen.getByLabelText("文本内容"), { target: { value: "example" } });
+    fireEvent.click(screen.getByRole("button", { name: "合成语音" }));
+    fireEvent.change(await screen.findByLabelText("API Key"), {
+      target: { value: "repro-only-key-0001" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "解锁" }));
+
+    await waitFor(() => expect(screen.queryByLabelText("API Key")).toBeNull());
+    expect(favoritesOnly.checked).toBe(true);
+    expect(screen.queryAllByRole("option")).toHaveLength(0);
+    expect(favoritesOnly.disabled).toBe(false);
+    fireEvent.click(favoritesOnly);
+    expect(favoritesOnly.checked).toBe(false);
+    expect(screen.getByRole("option", { name: /Guy/ })).toBeDefined();
+    expect(favoritesOnly.disabled).toBe(true);
+  });
+
   it("clears the active voice when reauthentication returns an empty catalog", async () => {
     let voiceRequests = 0;
     let speechRequests = 0;

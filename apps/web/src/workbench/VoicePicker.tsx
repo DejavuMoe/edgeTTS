@@ -60,7 +60,7 @@ export function VoicePicker({
           id={favoriteOnlyId}
           checked={filters.favoriteOnly}
           onChange={filters.setFavoriteOnly}
-          disabled={disabled || filters.totalFavoritesInCatalog === 0}
+          disabled={disabled || (filters.totalFavoritesInCatalog === 0 && !filters.favoriteOnly)}
           label={t("只看收藏")}
         />
       </div>
