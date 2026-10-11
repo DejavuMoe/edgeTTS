@@ -2266,7 +2266,7 @@ describe("EdgeTTS Web Workbench", () => {
       await screen.findByText(/已取消生成/i);
     });
 
-    it("Escape key cancels active synthesis once, but does nothing when idle", async () => {
+    it("Escape closes an open language menu before canceling synthesis, and does nothing when idle", async () => {
       let abortCount = 0;
       fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
         const url = requestUrl(input);
@@ -2299,7 +2299,17 @@ describe("EdgeTTS Web Workbench", () => {
       fireEvent.click(screen.getByRole("button", { name: /合成语音/i }));
       await screen.findByRole("button", { name: /取消合成/i });
 
-      // Press Escape
+      // The open language menu consumes Escape without canceling synthesis.
+      const languagePicker = screen.getByRole("combobox", { name: "界面语言" });
+      fireEvent.click(languagePicker);
+      expect(languagePicker.getAttribute("aria-expanded")).toBe("true");
+      fireEvent.keyDown(languagePicker, { key: "Escape" });
+      expect(languagePicker.getAttribute("aria-expanded")).toBe("false");
+      expect(abortCount).toBe(0);
+      expect(screen.queryByText(/已取消生成/i)).toBeNull();
+      expect(screen.getByRole("button", { name: /取消合成/i })).toBeDefined();
+
+      // With the menu closed, Escape still cancels synthesis.
       fireEvent.keyDown(window, { key: "Escape" });
       await screen.findByText(/已取消生成/i);
       expect(abortCount).toBe(1);
