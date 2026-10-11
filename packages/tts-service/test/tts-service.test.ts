@@ -1229,6 +1229,63 @@ describe("TtsService", () => {
   });
 
   describe("synthesizeSegmented", () => {
+    it.each(["synthesis", "read"])(
+      "discards late segment work after return during %s",
+      async (stage) => {
+        const provider = new FakeTtsProvider();
+        const started = createDeferred<void>();
+        const setup = createDeferred<SynthesisResult>();
+        const read = createDeferred<IteratorResult<Uint8Array>>();
+        let returns = 0;
+        let reads = 0;
+        const lateAudio: AsyncIterableIterator<Uint8Array> = {
+          [Symbol.asyncIterator]() {
+            return this;
+          },
+          async next() {
+            reads++;
+            started.resolve();
+            return stage === "read" ? read.promise : { done: false, value: new Uint8Array([2]) };
+          },
+          async return() {
+            returns++;
+            return { done: true, value: undefined };
+          },
+        };
+        const lateResult: SynthesisResult = {
+          format: "mp3-48k",
+          contentType: "audio/mpeg",
+          audio: lateAudio,
+        };
+        provider.customSynthesize = async () => {
+          if (provider.synthesizeCallCount === 1) return provider.synthesisResult;
+          if (stage === "read") return lateResult;
+          started.resolve();
+          return setup.promise;
+        };
+        const service = new TtsService(provider, { maxConcurrentSyntheses: 1 });
+        const result = await service.synthesizeSegmented(
+          { text: "aaaa bbbb", voice: "v" },
+          new AbortController().signal,
+          { maxSegmentCodePoints: 5 },
+        );
+        const iterator = result.audio[Symbol.asyncIterator]();
+        expect((await iterator.next()).done).toBe(false);
+        const pending = iterator.next();
+        await started.promise;
+        await iterator.return?.();
+        expect(service.getStats().activeSyntheses).toBe(0);
+
+        setup.resolve(lateResult);
+        read.resolve({ done: false, value: new Uint8Array([2]) });
+
+        expect(await pending).toEqual({ done: true, value: undefined });
+        expect(returns).toBe(1);
+        expect(reads).toBe(stage === "read" ? 1 : 0);
+        expect(provider.synthesizeCallCount).toBe(2);
+      },
+    );
+
     it("rejects invalid maxSegmentCodePoints with RangeError", async () => {
       const provider = new FakeTtsProvider();
       const service = new TtsService(provider);

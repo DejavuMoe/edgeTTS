@@ -265,6 +265,13 @@ class SegmentedAudioStream implements AsyncIterableIterator<Uint8Array> {
           throw error;
         }
 
+        if (this.closed) {
+          this.currentIterator = nextResult.audio[Symbol.asyncIterator]();
+          await this.cleanupCurrent();
+          if (this.signal.aborted) throw createAbortError(this.signal.reason);
+          return { done: true, value: undefined };
+        }
+
         if (
           nextResult.format !== this.expectedFormat ||
           nextResult.contentType !== this.expectedContentType
@@ -290,6 +297,10 @@ class SegmentedAudioStream implements AsyncIterableIterator<Uint8Array> {
         }
 
         const item = await this.currentIterator.next();
+        if (this.closed) {
+          if (this.signal.aborted) throw createAbortError(this.signal.reason);
+          return { done: true, value: undefined };
+        }
         if (!item.done) {
           return item;
         }
