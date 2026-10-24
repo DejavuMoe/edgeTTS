@@ -87,6 +87,7 @@ function runFixture(fixture) {
       LANG: "C.UTF-8",
     };
     const results = [];
+    runs.push({ id, results });
     for (const check of checks) {
       const started = performance.now();
       const child = spawnSync(pnpm, [check], {
@@ -107,13 +108,12 @@ function runFixture(fixture) {
         [0, 1, 2].includes(child.status),
         `${id}/${check}: unexpected exit ${child.status}`,
       );
-      if (!file) assert.equal(child.status, 0, `${id}/${check}: baseline failed; inspect logs`);
       results.push({ check, passed: child.status === 0, seconds });
+      if (!file) assert.equal(child.status, 0, `${id}/${check}: baseline failed; inspect logs`);
       process.stdout.write(
         `${id}: ${check} ${child.status === 0 ? "pass" : "detect"} ${seconds.toFixed(2)}s\n`,
       );
     }
-    runs.push({ id, results });
   } finally {
     rmSync(scratch, { recursive: true, force: true });
   }
@@ -134,7 +134,10 @@ try {
     path.join(output, "runs.json"),
     JSON.stringify(
       {
-        schedule: parallel ? "build-then-parallel" : "sequential",
+        schedule: parallel ? "build-static-parallel-test" : "sequential",
+        command: parallel
+          ? JSON.parse(readFileSync(path.join(root, "package.json"), "utf8")).scripts["ci:parallel"]
+          : null,
         checks,
         fixtures: fixtures.map(([id, file]) => ({ id, file })),
         runs,
@@ -195,5 +198,22 @@ const report = [
   "No production CI gate is removed by this experiment. A redundant detection in this sample does not establish that a check is unnecessary.",
   "",
 ].join("\n");
-writeFileSync(path.join(output, "report.md"), report);
-process.stdout.write(report);
+const summary = parallel
+  ? [
+      "# Parallel scheduling acceptance",
+      "",
+      "Actual ci:parallel command wall time on fresh copies, excluding copying and installation. Build and static checks precede the test phase. A failed prerequisite stops later phases; every concurrent static check is awaited. No assertion or timeout is relaxed.",
+      "",
+      "| Fixture | Result | Command seconds |",
+      "| --- | --- | ---: |",
+      ...runs.map(
+        (run) =>
+          `| ${run.id} | ${run.results[0].passed ? "pass" : "detected"} | ${run.results[0].seconds.toFixed(2)} |`,
+      ),
+      "",
+      "Compare the two clean controls with the sequential experiment on the same runner. A failing clean control invalidates the scheduling candidate.",
+      "",
+    ].join("\n")
+  : report;
+writeFileSync(path.join(output, "report.md"), summary);
+process.stdout.write(summary);

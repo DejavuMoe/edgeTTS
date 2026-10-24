@@ -112,8 +112,11 @@ Dependency Review coverage. A disabled `NO_PROXY` bypass is checked separately
 on Node and the production Bun runtime, with clean controls on both.
 
 `pnpm experiment:ci --parallel` repeats the six quality fixtures using the actual
-`ci:parallel` command: build first, then typecheck, lint, tests and formatting
-together. `concurrently` waits for every process and returns failure if any fails.
+`ci:parallel` command: build first, then typecheck, lint and formatting together,
+then tests with the runner to themselves. An earlier four-way variant caused a
+clean-baseline backpressure-test timeout on GitHub and was rejected without
+changing test assertions or timeouts. `concurrently` waits for every static check
+and returns failure if any fails.
 The manual workflow compares this with sequential execution on the same runner.
 Two independent GHA cache trials compare fresh builds, cold cache export, warm
 cache import into a different builder, and source-change invalidation. All images
