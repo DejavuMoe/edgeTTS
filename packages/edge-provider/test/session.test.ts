@@ -1,38 +1,29 @@
 import { PassThrough, Readable } from "node:stream";
 import { describe, expect, it } from "vitest";
-import { OUTPUT_FORMAT, type MetadataOptions, type ProsodyOptions, type Voice } from "msedge-tts";
+import type { EdgeOutputFormat, EdgeVoice } from "../src/client.js";
+import type { EdgeProsody } from "../src/prosody.js";
 import { EdgeTtsProvider } from "../src/edge-provider.js";
 import type { EdgeClient } from "../src/client.js";
 
-/**
- * Mirrors the msedge-tts contract that matters for sessions: setMetadata keeps an open
- * connection when nothing changed, and a repeated call without options throws.
- */
+/** A connected client keeps its socket when the voice and format stay unchanged. */
 class SessionFakeClient implements EdgeClient {
   closeCalls = 0;
-  readonly setMetadataCalls: Array<MetadataOptions | undefined> = [];
+  readonly setMetadataCalls: Array<{ voice: string; format: EdgeOutputFormat }> = [];
   readonly inputs: string[] = [];
-  readonly prosody: Array<ProsodyOptions | undefined> = [];
+  readonly prosody: Array<EdgeProsody | undefined> = [];
   setMetadataHandler?: () => Promise<void>;
   nextStream: () => Readable = () => Readable.from([Buffer.from([1, 2])]);
 
-  getVoices(): Promise<readonly Voice[]> {
+  getVoices(): Promise<readonly EdgeVoice[]> {
     return Promise.resolve([]);
   }
 
-  setMetadata(
-    _voice: string,
-    _format: OUTPUT_FORMAT,
-    metadataOptions?: MetadataOptions,
-  ): Promise<void> {
-    if (this.setMetadataCalls.length > 0 && metadataOptions === undefined) {
-      return Promise.reject(new TypeError("Cannot read properties of undefined"));
-    }
-    this.setMetadataCalls.push(metadataOptions);
+  setMetadata(voice: string, format: EdgeOutputFormat): Promise<void> {
+    this.setMetadataCalls.push({ voice, format });
     return this.setMetadataHandler?.() ?? Promise.resolve();
   }
 
-  toStream(input: string, options?: ProsodyOptions): { audioStream: Readable } {
+  toStream(input: string, options?: EdgeProsody): { audioStream: Readable } {
     this.inputs.push(input);
     this.prosody.push(options);
     return { audioStream: this.nextStream() };
@@ -82,8 +73,12 @@ describe("EdgeTtsProvider sessions", () => {
     const client = clients[0]!;
     expect(client.inputs).toEqual(["第一段 &lt;a&gt;", "second &amp; last"]);
     expect(client.prosody.map((options) => options?.rate)).toEqual([1.5, 1.5]);
-    // Every setMetadata call passes options, or msedge-tts would throw on the repeat call.
-    expect(client.setMetadataCalls).toEqual([{}, {}, {}]);
+    expect(client.setMetadataCalls).toEqual(
+      Array(3).fill({
+        voice: "zh-CN-XiaoxiaoNeural",
+        format: "audio-24khz-96kbitrate-mono-mp3",
+      }),
+    );
     expect(client.closeCalls).toBe(0);
 
     session.close();

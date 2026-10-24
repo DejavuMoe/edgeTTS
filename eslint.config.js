@@ -11,7 +11,7 @@ const ARCHITECTURE_BOUNDARIES = [
     files: ["packages/tts-core/src/**/*.ts"],
     message:
       "tts-core is the provider-neutral domain: no workspace, provider, HTTP, schema or Node.js dependencies.",
-    group: ["@edgetts/*", "msedge-tts", "zod", "node:*", ...HTTP_FRAMEWORK],
+    group: ["@edgetts/*", "ws", "zod", "node:*", ...HTTP_FRAMEWORK],
   },
   {
     files: ["packages/shared/src/**/*.ts"],
@@ -20,7 +20,7 @@ const ARCHITECTURE_BOUNDARIES = [
     group: [
       "@edgetts/tts-service",
       "@edgetts/edge-provider",
-      "msedge-tts",
+      "ws",
       "node:*",
       ...APPLICATIONS,
       ...HTTP_FRAMEWORK,
@@ -33,7 +33,7 @@ const ARCHITECTURE_BOUNDARIES = [
     group: [
       "@edgetts/edge-provider",
       "@edgetts/shared",
-      "msedge-tts",
+      "ws",
       "zod",
       ...APPLICATIONS,
       ...HTTP_FRAMEWORK,
@@ -49,12 +49,12 @@ const ARCHITECTURE_BOUNDARIES = [
     files: ["apps/server/src/**/*.ts"],
     message:
       "HTTP code must reach providers only through TtsService; only composition.ts may construct EdgeTtsProvider.",
-    group: ["@edgetts/edge-provider", "msedge-tts", "@edgetts/web"],
+    group: ["@edgetts/edge-provider", "ws", "@edgetts/web"],
   },
   {
     files: ["apps/server/src/composition.ts"],
-    message: "The composition root wires EdgeTtsProvider; it must not import msedge-tts directly.",
-    group: ["msedge-tts", "@edgetts/web"],
+    message: "The composition root wires EdgeTtsProvider; it must not import ws directly.",
+    group: ["ws", "@edgetts/web"],
   },
   {
     files: ["apps/web/src/**/*.{ts,tsx}"],
@@ -65,7 +65,7 @@ const ARCHITECTURE_BOUNDARIES = [
       "@edgetts/tts-service",
       "@edgetts/edge-provider",
       "@edgetts/server",
-      "msedge-tts",
+      "ws",
       "node:*",
       ...HTTP_FRAMEWORK,
     ],

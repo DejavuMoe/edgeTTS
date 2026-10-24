@@ -55,7 +55,7 @@ pnpm outdated -r           # available updates across the workspace
 pnpm update -r <package>   # update within declared ranges, then run the full validation suite
 ```
 
-Major upgrades, the pinned Node.js and pnpm versions (`package.json`, `Dockerfile`, CI) and the pinned GitHub Actions commit SHAs are updated by hand in a dedicated commit. Keep `patches/msedge-tts@2.0.7.patch` in mind when upgrading msedge-tts: remove it only once upstream ignores frames for destroyed streams, cancels pending connection initialization, isolates old socket close callbacks, and supports abortable voice discovery.
+Major upgrades, the pinned Node.js and pnpm versions (`package.json`, `Dockerfile`, CI) and the pinned GitHub Actions commit SHAs are updated by hand in a dedicated commit. The Edge protocol client lives in `packages/edge-provider`; it uses `ws` for transport and native `fetch` for voice discovery. When changing authentication or transport, run its offline token, framing and lifecycle regressions plus all three live smoke scripts (provider, service and server). Verify the final Bun container as well as the Node.js development runtime.
 
 The container runtime uses a separately pinned Bun image. When upgrading it, update the
 `BUN_IMAGE` version and multi-architecture digest, the Bun license URL/checksum in `Dockerfile`,

@@ -1,6 +1,7 @@
 import { Readable } from "node:stream";
 import { describe, it, expect, vi } from "vitest";
-import { OUTPUT_FORMAT, type Voice, type ProsodyOptions } from "msedge-tts";
+import type { EdgeOutputFormat, EdgeVoice } from "../src/client.js";
+import type { EdgeProsody } from "../src/prosody.js";
 import type { TtsAudioFormat } from "@edgetts/tts-core";
 import { EdgeTtsProvider } from "../src/edge-provider.js";
 import type { EdgeClient } from "../src/client.js";
@@ -23,17 +24,17 @@ async function flushMicrotasks(): Promise<void> {
 
 class FakeEdgeClient implements EdgeClient {
   public closeCallCount = 0;
-  public setMetadataCalls: Array<{ voiceName: string; outputFormat: OUTPUT_FORMAT }> = [];
-  public toStreamCalls: Array<{ input: string; options?: ProsodyOptions | undefined }> = [];
+  public setMetadataCalls: Array<{ voiceName: string; outputFormat: EdgeOutputFormat }> = [];
+  public toStreamCalls: Array<{ input: string; options?: EdgeProsody | undefined }> = [];
   public streamToReturn: Readable;
-  public getVoicesHandler?: (signal: AbortSignal) => Promise<readonly Voice[]>;
-  public setMetadataHandler?: (voiceName: string, outputFormat: OUTPUT_FORMAT) => Promise<void>;
+  public getVoicesHandler?: (signal: AbortSignal) => Promise<readonly EdgeVoice[]>;
+  public setMetadataHandler?: (voiceName: string, outputFormat: EdgeOutputFormat) => Promise<void>;
 
   constructor(streamToReturn?: Readable) {
     this.streamToReturn = streamToReturn ?? Readable.from([]);
   }
 
-  async getVoices(signal: AbortSignal): Promise<readonly Voice[]> {
+  async getVoices(signal: AbortSignal): Promise<readonly EdgeVoice[]> {
     if (this.getVoicesHandler) {
       return this.getVoicesHandler(signal);
     }
@@ -50,14 +51,14 @@ class FakeEdgeClient implements EdgeClient {
     ];
   }
 
-  async setMetadata(voiceName: string, outputFormat: OUTPUT_FORMAT): Promise<void> {
+  async setMetadata(voiceName: string, outputFormat: EdgeOutputFormat): Promise<void> {
     this.setMetadataCalls.push({ voiceName, outputFormat });
     if (this.setMetadataHandler) {
       return this.setMetadataHandler(voiceName, outputFormat);
     }
   }
 
-  toStream(input: string, options?: ProsodyOptions): { audioStream: Readable } {
+  toStream(input: string, options?: EdgeProsody): { audioStream: Readable } {
     this.toStreamCalls.push({ input, options });
     return { audioStream: this.streamToReturn };
   }
@@ -93,7 +94,7 @@ describe("EdgeTtsProvider", () => {
   });
 
   describe("format handling", () => {
-    it("defaults to mp3-48k with correct OUTPUT_FORMAT and contentType", async () => {
+    it("defaults to mp3-48k with correct EdgeOutputFormat and contentType", async () => {
       let createdClient: FakeEdgeClient | undefined;
       const provider = new EdgeTtsProvider(() => {
         createdClient = new FakeEdgeClient();
@@ -110,28 +111,28 @@ describe("EdgeTtsProvider", () => {
       expect(result.contentType).toBe("audio/mpeg");
       expect(createdClient?.setMetadataCalls[0]).toEqual({
         voiceName: "zh-CN-XiaoxiaoNeural",
-        outputFormat: OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3,
+        outputFormat: "audio-24khz-48kbitrate-mono-mp3",
       });
     });
 
     const formatCases: Array<{
       format: TtsAudioFormat;
-      expectedOutputFormat: OUTPUT_FORMAT;
+      expectedOutputFormat: EdgeOutputFormat;
       expectedContentType: "audio/mpeg" | "audio/webm";
     }> = [
       {
         format: "mp3-48k",
-        expectedOutputFormat: OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3,
+        expectedOutputFormat: "audio-24khz-48kbitrate-mono-mp3",
         expectedContentType: "audio/mpeg",
       },
       {
         format: "mp3-96k",
-        expectedOutputFormat: OUTPUT_FORMAT.AUDIO_24KHZ_96KBITRATE_MONO_MP3,
+        expectedOutputFormat: "audio-24khz-96kbitrate-mono-mp3",
         expectedContentType: "audio/mpeg",
       },
       {
         format: "webm-opus",
-        expectedOutputFormat: OUTPUT_FORMAT.WEBM_24KHZ_16BIT_MONO_OPUS,
+        expectedOutputFormat: "webm-24khz-16bit-mono-opus",
         expectedContentType: "audio/webm",
       },
     ];

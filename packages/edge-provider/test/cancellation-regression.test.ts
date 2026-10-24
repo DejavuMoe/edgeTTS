@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-describe("real msedge-tts WebSocket lifecycle", () => {
+describe("native Edge WebSocket lifecycle", () => {
   it.each([
     "cancel-turn.end",
     "cancel-audio",
@@ -15,7 +15,7 @@ describe("real msedge-tts WebSocket lifecycle", () => {
     "truncated",
   ])("keeps process and stream semantics intact: %s", (scenario) => {
     // Isolate uncaught dependency callbacks in a child, not Vitest's error handlers.
-    // Resolve ws through the real dependency so no new test dependency is needed.
+    // Exercise real ws frames and isolate any unhandled client callback failures.
     const child = spawnSync(
       process.execPath,
       [
@@ -26,15 +26,12 @@ describe("real msedge-tts WebSocket lifecycle", () => {
         `
 import assert from "node:assert/strict";
 import { once } from "node:events";
-import { createRequire } from "node:module";
+import { WebSocketServer } from "ws";
 import { EdgeTtsProvider } from "./src/index.ts";
-const require = createRequire(import.meta.url);
-const { MsEdgeTTS } = require("msedge-tts");
-const dependencyRequire = createRequire(require.resolve("msedge-tts"));
-const { WebSocketServer } = createRequire(dependencyRequire.resolve("isomorphic-ws"))("ws");
+import { NativeEdgeClient } from "./src/client.ts";
 const server = new WebSocketServer({ host: "127.0.0.1", port: 0 });
 await once(server, "listening");
-MsEdgeTTS.getSynthUrl = async () => "ws://127.0.0.1:" + server.address().port;
+NativeEdgeClient.getSynthUrl = async () => "ws://127.0.0.1:" + server.address().port;
 let upstream;
 let connections = 0;
 let requestId;
@@ -53,10 +50,17 @@ server.on("connection", socket => {
 });
 const controller = new AbortController();
 const scenario = ${JSON.stringify(scenario)};
+const frame = (path, body = "") => {
+  const headers = "X-RequestId:" + requestId + "\\r\\nPath:" + path + "\\r\\n";
+  if (path !== "audio") return headers + "\\r\\n" + body;
+  const length = Buffer.alloc(2);
+  length.writeUInt16BE(Buffer.byteLength(headers));
+  return Buffer.concat([length, Buffer.from(headers), Buffer.from(body)]);
+};
 try {
   if (scenario.endsWith("url-init")) {
     let resolveUrl;
-    MsEdgeTTS.getSynthUrl = () => new Promise(resolve => { resolveUrl = resolve; });
+    NativeEdgeClient.getSynthUrl = () => new Promise(resolve => { resolveUrl = resolve; });
     const opening = new EdgeTtsProvider({ setupTimeoutMs: 25 }).openSession(
       { voice: "en-US-JennyNeural" }, controller.signal,
     );
@@ -68,41 +72,39 @@ try {
     await new Promise(resolve => setTimeout(resolve, 100));
     assert.equal(connections, 0, "abandoned URL lookup must not open a socket");
   } else if (scenario === "stale-close") {
-    const client = new MsEdgeTTS();
+    const client = new NativeEdgeClient();
     const session = await new EdgeTtsProvider({ clientFactory: () => client }).openSession(
       { voice: "en-US-JennyNeural" }, controller.signal,
-    );
-    const frame = (body) => Buffer.from(
-      "X-RequestId:" + requestId + "\\r\\nPath:" + body + "\\r\\n",
     );
     const first = await session.synthesize({ text: "first" }, controller.signal);
     await requestReceived;
     upstream.send(frame("turn.end"));
     for await (const chunk of first.audio) void chunk;
-    const oldSocket = client._ws;
-    const onclose = oldSocket.onclose;
+    const oldSocket = client.socket;
+    const onclose = oldSocket.listeners("close")[0];
+    oldSocket.removeListener("close", onclose);
     let deliverClose;
     const closeQueued = new Promise(resolve => {
       // Hold only callback delivery so the replacement is active when the old event runs.
-      oldSocket.onclose = event => {
+      oldSocket.once("close", event => {
         deliverClose = () => onclose.call(oldSocket, event);
         resolve();
-      };
+      });
     });
     upstream.close();
     await closeQueued;
     const nextRequest = new Promise(resolve => { resolveRequest = resolve; });
     const second = await session.synthesize({ text: "second" }, controller.signal);
     await nextRequest;
-    assert.notEqual(client._ws, oldSocket);
-    assert.equal(client._ws.readyState, 1);
+    assert.notEqual(client.socket, oldSocket);
+    assert.equal(client.socket.readyState, 1);
     const consume = (async () => {
       const chunks = [];
       for await (const chunk of second.audio) chunks.push(Buffer.from(chunk));
       return Buffer.concat(chunks).toString();
     })();
     deliverClose();
-    upstream.send(Buffer.concat([frame("audio"), Buffer.from("second audio")]));
+    upstream.send(frame("audio", "second audio"));
     upstream.send(frame("turn.end"));
     try {
       assert.equal(await consume, "second audio");
@@ -115,9 +117,6 @@ try {
     controller.signal,
   );
   await requestReceived;
-  const frame = (path, body = "") => Buffer.from(
-    "X-RequestId:" + requestId + "\\r\\nPath:" + path + "\\r\\n" + body,
-  );
   const iterator = result.audio[Symbol.asyncIterator]();
   if (scenario.startsWith("cancel-")) {
     const pending = scenario === "cancel-unstarted" ? null : iterator.next();

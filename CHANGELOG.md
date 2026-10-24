@@ -9,6 +9,12 @@ the version being released.
 
 ### Changed
 
+- Replace `msedge-tts` and its lifecycle patch with a native Edge protocol client using
+  `fetch` and `ws`, preserving streaming, cancellation, timeouts and session reuse.
+- Restore Microsoft synthesis after the v1 handshake was rejected with HTTP 403 by generating
+  Sec-MS-GEC v2 tokens with the matching version prefix. Cover captured tokens, frame parsing,
+  connection lifecycle and voice catalog validation with offline regressions.
+
 - Use `master` as the primary branch for CI, release ancestry checks and local release preflight.
   Development images now follow `ghcr.io/dejavumoe/edgetts:master`; the former `:main` tag stops
   receiving updates. Existing stable release tags and images are unchanged.

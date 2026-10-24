@@ -15,7 +15,7 @@ TtsProvider (packages/tts-core)    provider-neutral contract and domain errors
       ↓
 EdgeTtsProvider (edge-provider)    connection setup, timeouts, XML escaping
       ↓
-msedge-tts                         Microsoft Edge Read Aloud WebSocket client
+NativeEdgeClient (edge-provider)  HTTPS voices, v2 authentication, ws transport
 ```
 
 `packages/shared` holds the request and response schemas used by the server and the browser.
@@ -97,13 +97,19 @@ half of that gain while doubling concurrent upstream connections. See the
 
 ### Reconnect explicitly before each session segment
 
-msedge-tts silently reconnects inside a send when the socket is closed, and a failed
-reconnect there becomes an unhandled rejection that would crash the process. The session
-therefore re-runs setup before every segment: a no-op while connected, and a reconnect
-bounded by the setup timeout otherwise. The repository also patches msedge-tts to ignore
-frames that arrive for a stream that was already cancelled, invalidate pending URL
-initialization on close, and prevent an old socket's close callback from ending a new
-connection's streams.
+The session re-runs setup before every segment: a no-op while connected, and a reconnect
+bounded by the setup timeout otherwise. The native client never reconnects implicitly
+while sending. It ignores frames for cancelled turns, invalidates pending initialization
+on close, and associates every active turn with its socket so old close callbacks cannot
+truncate a replacement connection. Binary audio starts at the protocol's declared header
+length; stream backpressure pauses the socket until the consumer resumes reading.
+
+The client implements the Sec-MS-GEC v2 token (CS64 plus salted SHA-256) and its matching
+`2-` version prefix. A captured browser token and the five-minute rotation boundary are
+covered by offline tests. The former `msedge-tts` dependency and its lifecycle patch are
+removed. `ws` supplies only WebSocket transport; voice discovery uses native `fetch` with
+the provider's abort signal. Microsoft can change this private protocol again, so upstream
+changes require the provider, service and HTTP live smoke tests, not just unit tests.
 
 ### Validate voices against the cache without fetching
 
