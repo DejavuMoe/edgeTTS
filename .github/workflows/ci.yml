@@ -17,6 +17,26 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  codeql:
+    uses: ./.github/workflows/codeql.yml
+    permissions:
+      contents: read
+      security-events: write
+
+  dependency-review:
+    name: Dependency Review
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: high
+          comment-summary-in-pr: never
+
   quality:
     name: Code Quality & Tests
     runs-on: ubuntu-24.04
@@ -42,9 +62,9 @@ jobs:
       - name: Install workspace dependencies (frozen lockfile)
         run: pnpm install --frozen-lockfile
 
-      # Fails on high or critical advisories in runtime dependencies; lower levels are reported.
-      - name: Audit production dependencies
-        run: pnpm audit:deps
+      # Build tools can execute in CI; include development dependencies in the gate.
+      - name: Audit all dependencies
+        run: pnpm audit --audit-level high
 
       - name: Build workspace packages & apps
         run: pnpm build
@@ -313,6 +333,7 @@ jobs:
   publish:
     name: Publish Multi-Arch Image to GHCR
     needs:
+      - codeql
       - quality
       - docker
       - proxy-contract

@@ -7,6 +7,19 @@ the version being released.
 
 ## [Unreleased]
 
+### Security
+
+- Add CodeQL analysis for JavaScript/TypeScript and GitHub Actions, with high/critical
+  findings blocking publication, and scheduled dependency inventory and auditing.
+- Audit development dependencies as well as runtime dependencies; update vulnerable
+  build/test tools and constrain concurrently's shell-quote dependency to a patched version.
+- Add a private vulnerability reporting policy and Dependabot Actions/Docker updates.
+
+### Maintenance
+
+- Add a manual CI check ablation experiment with seeded defects, per-command timings,
+  detection matrices and explicit limits on interpreting omitted-check savings.
+
 ## [1.0.0] - 2026-10-24
 
 ### Security

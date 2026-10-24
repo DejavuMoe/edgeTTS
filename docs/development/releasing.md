@@ -5,7 +5,7 @@ Container images are published to GHCR as `ghcr.io/dejavumoe/edgetts`. The [CI w
 ## Publication contract
 
 - Stable Git tags use `vX.Y.Z` with no leading zeros, prerelease suffixes or build metadata. The tagged commit must be reachable from `origin/master`; moved tags are rejected.
-- Publication follows the quality, Docker image and deterministic proxy jobs. Both `master` pushes and stable tag pushes can publish candidates; pull requests do not publish.
+- Publication follows the quality, both CodeQL languages, Docker image and deterministic proxy jobs. Both `master` pushes and stable tag pushes can publish candidates; pull requests do not publish.
 - Candidates use `sha-<full-git-sha>`; `master` also receives a development image tag. Verification covers `linux/amd64`, `linux/arm64` (under QEMU), runtime permissions, provenance and SBOM attestations.
 - Stable aliases are promoted from the verified OCI index digest without rebuilding. An existing version with another digest is rejected; an identical digest permits an idempotent rerun.
 - `latest` follows the highest successfully published stable SemVer. Older maintenance releases and reruns do not move it backward. Registry publication and GitHub release creation share a concurrency group with a queue of up to 100 pending jobs; canceled runs must be rerun.
@@ -32,11 +32,11 @@ git push origin vX.Y.Z
 
 The preflight script checks the version, repository state, tag availability, the package version and changelog section, and local validation. It does not create or push tags. On workstations with separate build runtimes, run the complete validation there and use `--skip-tests` for the Git preflight in the canonical checkout.
 
-After the image is published, a final release job creates the [GitHub release](https://github.com/DejavuMoe/edgeTTS/releases) from the version's changelog section, with upgrade steps, the verification facts and the immutable image references rendered by `scripts/release-notes.sh`. It is the only job with `contents: write`. While holding the publication concurrency group, it freshly queries stable Git tags and their published images. Only the highest published version becomes GitHub's latest; a delayed lower version still gets its own release. A rerun refreshes the existing release instead of failing.
+After the image is published, a final release job creates the [GitHub release](https://github.com/DejavuMoe/edgeTTS/releases) from the version's changelog section, with upgrade steps, the verification facts and the immutable image references rendered by `scripts/release-notes.sh`. It is the only job in the main CI with `contents: write`; the separate dependency inventory workflow also needs that permission for snapshot submission. While holding the publication concurrency group, it freshly queries stable Git tags and their published images. Only the highest published version becomes GitHub's latest; a delayed lower version still gets its own release. A rerun refreshes the existing release instead of failing.
 
 After publishing:
 
-1. Confirm all five CI jobs succeeded: quality, Docker image, proxy contract, publication and GitHub release.
+1. Confirm all required CI jobs succeeded: quality, CodeQL for JavaScript/TypeScript and Actions, Docker image, proxy contract, publication and GitHub release. Dependency Review runs only on pull requests.
 2. Verify `X.Y.Z` resolves to the candidate digest. Verify `latest` only advances when this is the highest published stable version.
 3. Review the generated release notes. To rebuild them by hand, pass the published values to the same script and set `LATEST_UPDATED` according to current ownership: `COMMIT_SHA=… RUN_URL=… INDEX_DIGEST=… AMD64_DIGEST=… ARM64_DIGEST=… LATEST_UPDATED=true ./scripts/release-notes.sh X.Y.Z`.
 
@@ -47,7 +47,7 @@ docker buildx imagetools inspect ghcr.io/dejavumoe/edgetts:latest
 
 ## Maintain dependencies
 
-CI runs `pnpm audit:deps` and fails on high or critical advisories in production dependencies. No external update service is configured, so review dependencies before releases:
+CI and daily auditing run `pnpm audit --audit-level high` and fail on high or critical advisories in runtime and development dependencies. `pnpm audit:deps` remains available for production-only checks. Dependabot proposes Actions and Docker updates; pnpm 12 dependencies still require manual updates. See [security CI](security-ci.md) for dependency graph coverage and CI ablation methodology. Review dependencies before releases:
 
 ```bash
 pnpm audit --prod          # all advisory levels for runtime dependencies
@@ -82,4 +82,8 @@ The health endpoint confirms the HTTP process only; verify an authenticated synt
 
 ## Repository protection
 
-Repository administrators can require review and the quality, Docker and proxy checks for `master`, block force pushes and deletion, and restrict release-tag creation to maintainers. Do not require the publication job as a pull-request check. Protect stable tags against updates and deletion. These settings are administrative controls, not changes performed by CI.
+Active repository rules protect `master` from force pushes and deletion and stable
+`v*.*.*` tags from updates and deletion. Administrators can additionally require
+pull-request review and the quality, CodeQL, dependency review, Docker and proxy
+checks for `master`. Do not require publication as a pull-request check. These
+settings are administrative controls, not changes performed by CI.
