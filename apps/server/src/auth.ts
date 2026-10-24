@@ -112,13 +112,15 @@ export function extractBearerToken(authHeader: string | undefined): string | nul
 export function createApiKeyVerifier(
   configuredKey: string,
 ): (candidate: string | undefined) => boolean {
-  const configuredHash = crypto.createHash("sha256").update(configuredKey).digest();
+  // Ephemeral comparison tags, not stored password hashes or reusable key fingerprints.
+  const comparisonKey = crypto.randomBytes(32);
+  const configuredHash = crypto.createHmac("sha256", comparisonKey).update(configuredKey).digest();
 
   return function verifyApiKey(candidate: string | undefined): boolean {
     if (!candidate) {
       return false;
     }
-    const candidateHash = crypto.createHash("sha256").update(candidate).digest();
+    const candidateHash = crypto.createHmac("sha256", comparisonKey).update(candidate).digest();
     return crypto.timingSafeEqual(configuredHash, candidateHash);
   };
 }
