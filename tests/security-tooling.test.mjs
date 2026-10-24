@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { readFileSync, readdirSync } from "node:fs";
+import { readFileSync, readdirSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { URL } from "node:url";
+import { spawnSync } from "node:child_process";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import process from "node:process";
 import { blockingFindings } from "../scripts/security/codeql-gate.mjs";
 import { manifestsFromPnpm } from "../scripts/security/dependency-snapshot.mjs";
 
@@ -59,6 +63,83 @@ test("CodeQL fails closed for incomplete, missing, or unrecognized results", () 
       sarif([{ id: "bad", properties: { "security-severity": "NaN" } }], [{ ruleId: "bad" }]),
     ),
   );
+});
+
+test("CodeQL resolves rules stored in query-pack SARIF extensions", () => {
+  const report = sarif([], [{ ruleId: "js/extension-rule" }]);
+  report.runs[0].tool.extensions = [
+    {
+      rules: [{ id: "js/extension-rule", properties: { "security-severity": "8.1" } }],
+    },
+  ];
+  assert.equal(blockingFindings(report).length, 1);
+});
+
+test("reviewed comparison-tag finding cannot suppress other locations or rules", () => {
+  const result = {
+    ruleId: "js/insufficient-password-hash",
+    locations: [
+      {
+        physicalLocation: {
+          artifactLocation: { uri: "apps/server/src/auth.ts" },
+          region: { startLine: 117 },
+        },
+      },
+    ],
+  };
+  const rule = { id: result.ruleId, properties: { "security-severity": "8.1" } };
+  assert.equal(blockingFindings(sarif([rule], [result])).length, 0);
+  result.locations[0].physicalLocation.region.startLine = 118;
+  assert.equal(blockingFindings(sarif([rule], [result])).length, 1);
+  result.locations[0].physicalLocation.region.startLine = 117;
+  result.locations[0].physicalLocation.artifactLocation.uri = "apps/server/src/other.ts";
+  assert.equal(blockingFindings(sarif([rule], [result])).length, 1);
+  assert.equal(blockingFindings(sarif([rule], [{ ruleId: rule.id }])).length, 1);
+});
+
+test("changing reviewed source invalidates the exception in the CLI gate", () => {
+  const scratch = mkdtempSync(path.join(tmpdir(), "edgetts-codeql-"));
+  try {
+    for (const file of [
+      "scripts/security/codeql-gate.mjs",
+      ".github/codeql-reviewed-findings.json",
+      "apps/server/src/auth.ts",
+    ]) {
+      const target = path.join(scratch, file);
+      mkdirSync(path.dirname(target), { recursive: true });
+      const source = readFileSync(new URL(`../${file}`, import.meta.url), "utf8");
+      writeFileSync(
+        target,
+        source + (file.endsWith("auth.ts") ? "\n// Changed after review\n" : ""),
+      );
+    }
+    const rule = {
+      id: "js/insufficient-password-hash",
+      properties: { "security-severity": "8.1" },
+    };
+    const result = {
+      ruleId: rule.id,
+      locations: [
+        {
+          physicalLocation: {
+            artifactLocation: { uri: "apps/server/src/auth.ts" },
+            region: { startLine: 117 },
+          },
+        },
+      ],
+    };
+    writeFileSync(path.join(scratch, "result.sarif"), JSON.stringify(sarif([rule], [result])));
+    const child = spawnSync(
+      process.execPath,
+      [path.join(scratch, "scripts/security/codeql-gate.mjs"), scratch],
+      { encoding: "utf8", timeout: 10_000 },
+    );
+    assert.ifError(child.error);
+    assert.equal(child.status, 1);
+    assert.match(child.stderr, /re-review required/);
+  } finally {
+    rmSync(scratch, { recursive: true, force: true });
+  }
 });
 
 test("pnpm snapshot preserves versions/scopes, aliases, workspaces and transitive packages", () => {
