@@ -25,6 +25,7 @@ jobs:
       - run: npm install --global pnpm@12.3.4
       - run: pnpm install --frozen-lockfile
       - run: pnpm experiment:ci
+      - run: pnpm experiment:ci --parallel
       - name: Publish experiment summary
         if: always()
         run: |
@@ -39,5 +40,152 @@ jobs:
             coverage/ci-ablation/report.md
             coverage/ci-ablation/runs.json
             coverage/ci-ablation/*.log
+            coverage/ci-ablation-parallel/report.md
+            coverage/ci-ablation-parallel/runs.json
+            coverage/ci-ablation-parallel/*.log
+          if-no-files-found: error
+          retention-days: 14
+
+  extended:
+    name: Extended ablation (${{ matrix.mode }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [codeql, dependencies, deployment]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24.21.0
+          package-manager-cache: false
+      - run: npm install --global pnpm@12.3.4
+      - run: pnpm install --frozen-lockfile
+      - id: codeql
+        if: matrix.mode == 'codeql'
+        uses: github/codeql-action/setup-codeql@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        with:
+          tools: https://github.com/github/codeql-action/releases/download/codeql-bundle-v2.27.3/codeql-bundle-linux64.tar.zst
+      - if: matrix.mode == 'deployment'
+        run: pnpm build && docker build --tag edgetts:ablation .
+      - name: Run controlled defects and clean controls
+        env:
+          EXPERIMENT: ${{ matrix.mode }}
+          CODEQL: ${{ steps.codeql.outputs.codeql-path }}
+          EDGETTS_TEST_IMAGE: edgetts:ablation
+        run: pnpm experiment:ci:extended "$EXPERIMENT"
+      # Intentionally vulnerable canaries are never uploaded to production code scanning.
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: ci-extended-${{ matrix.mode }}-${{ github.sha }}
+          path: |
+            coverage/ci-extended/${{ matrix.mode }}/*.json
+            coverage/ci-extended/${{ matrix.mode }}/*.log
+            coverage/ci-extended/${{ matrix.mode }}/*.sarif
+            coverage/ci-extended/${{ matrix.mode }}/*-lock.yaml
+          if-no-files-found: error
+          retention-days: 14
+
+  cache:
+    name: Isolated GHA cache trial ${{ matrix.trial }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      max-parallel: 1
+      matrix:
+        trial: [1, 2]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: mkdir -p coverage/ci-cache && date +%s%N > coverage/ci-cache/plain-start
+      - name: Current CI baseline (docker build, no remote cache)
+        run: docker build --tag edgetts:cache-plain .
+      - run: |
+          date +%s%N > coverage/ci-cache/plain-end
+          docker image inspect edgetts:cache-plain --format '{{.Id}}' > coverage/ci-cache/plain-id
+          docker run --rm -i --network none --cap-drop=ALL --security-opt=no-new-privileges \
+            --memory=256m --cpus=1 --pids-limit=64 edgetts:cache-plain bun run - < tests/docker-runtime.mjs
+      - run: date +%s%N > coverage/ci-cache/cold-start
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+        id: cold-builder
+        with:
+          name: ablation-cold-${{ github.run_id }}-${{ matrix.trial }}
+      - name: Cold build and cache export (unique scope, no cache import)
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          load: true
+          tags: edgetts:cache-cold
+          cache-to: type=gha,mode=max,scope=ablation-${{ github.run_id }}-${{ matrix.trial }}
+      - name: Check cold image
+        run: |
+          date +%s%N > coverage/ci-cache/cold-end
+          docker image inspect edgetts:cache-cold --format '{{.Id}}' > coverage/ci-cache/cold-id
+          docker run --rm -i --network none --cap-drop=ALL --security-opt=no-new-privileges \
+            --memory=256m --cpus=1 --pids-limit=64 edgetts:cache-cold bun run - < tests/docker-runtime.mjs
+      # A second builder cannot accidentally hit the first builder's local layer cache.
+      - run: date +%s%N > coverage/ci-cache/warm-start
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+        id: warm-builder
+        with:
+          name: ablation-warm-${{ github.run_id }}-${{ matrix.trial }}
+      - name: Warm build on a fresh builder (GHA cache only)
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          load: true
+          tags: edgetts:cache-warm
+          cache-from: type=gha,scope=ablation-${{ github.run_id }}-${{ matrix.trial }}
+      - name: Check warm image equivalence
+        run: |
+          date +%s%N > coverage/ci-cache/warm-end
+          docker image inspect edgetts:cache-warm --format '{{.Id}}' > coverage/ci-cache/warm-id
+          diff coverage/ci-cache/cold-id coverage/ci-cache/warm-id
+          docker run --rm -i --network none --cap-drop=ALL --security-opt=no-new-privileges \
+            --memory=256m --cpus=1 --pids-limit=64 edgetts:cache-warm bun run - < tests/docker-runtime.mjs
+          printf '\n<!-- ci-cache-canary -->\n' >> apps/web/index.html
+      - run: date +%s%N > coverage/ci-cache/changed-start
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+        with:
+          name: ablation-changed-${{ github.run_id }}-${{ matrix.trial }}
+      - name: Source change must invalidate cached output
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          load: true
+          tags: edgetts:cache-changed
+          cache-from: type=gha,scope=ablation-${{ github.run_id }}-${{ matrix.trial }}
+      - name: Verify rebuilt content and record timings
+        env:
+          TRIAL: ${{ matrix.trial }}
+        run: |
+          date +%s%N > coverage/ci-cache/changed-end
+          docker image inspect edgetts:cache-changed --format '{{.Id}}' > coverage/ci-cache/changed-id
+          docker run --rm --network none edgetts:cache-changed grep -q ci-cache-canary /app/web-dist/index.html
+          docker run --rm -i --network none --cap-drop=ALL --security-opt=no-new-privileges \
+            --memory=256m --cpus=1 --pids-limit=64 edgetts:cache-changed bun run - < tests/docker-runtime.mjs
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { readFileSync, writeFileSync } from 'node:fs';
+          const read = (name) => readFileSync(`coverage/ci-cache/${name}`, 'utf8').trim();
+          const results = ['plain', 'cold', 'warm', 'changed'].map((variant) => ({
+            variant,
+            seconds: Number(BigInt(read(`${variant}-end`)) - BigInt(read(`${variant}-start`))) / 1e9,
+            imageId: read(`${variant}-id`),
+          }));
+          assert.equal(results[1].imageId, results[2].imageId);
+          assert.notEqual(results[2].imageId, results[3].imageId);
+          writeFileSync('coverage/ci-cache/runs.json', JSON.stringify({ trial: process.env.TRIAL, sha: process.env.GITHUB_SHA, results }, null, 2));
+          NODE
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: ci-cache-${{ matrix.trial }}-${{ github.sha }}
+          path: coverage/ci-cache/
           if-no-files-found: error
           retention-days: 14
