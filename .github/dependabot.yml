@@ -1,0 +1,18 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+        update-types: [minor, patch]
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+# pnpm 12 is not yet in Dependabot's supported pnpm versions. The daily
+# dependency-security workflow submits the resolved graph and audits all scopes.
+# Enable npm version updates after native pnpm 12 lockfile support is verified.

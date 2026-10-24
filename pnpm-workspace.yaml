@@ -3,3 +3,6 @@ packages:
   - "packages/*"
 allowBuilds:
   esbuild: true
+overrides:
+  # concurrently 9 pins a vulnerable shell-quote; remove when its pin is fixed.
+  "concurrently@9.2.4>shell-quote": "1.12.0"
