@@ -1,5 +1,5 @@
 import type { Readable } from "node:stream";
-import { OUTPUT_FORMAT } from "msedge-tts";
+import type { EdgeOutputFormat } from "./client.js";
 import {
   createAbortError,
   isValidVoiceId,
@@ -17,21 +17,21 @@ import { toEdgeProsody } from "./prosody.js";
 import { escapeXmlText } from "./xml.js";
 
 interface FormatDetails {
-  readonly outputFormat: OUTPUT_FORMAT;
+  readonly outputFormat: EdgeOutputFormat;
   readonly contentType: "audio/mpeg" | "audio/webm";
 }
 
 const FORMAT_CONFIG: Record<TtsAudioFormat, FormatDetails> = {
   "mp3-48k": {
-    outputFormat: OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3,
+    outputFormat: "audio-24khz-48kbitrate-mono-mp3",
     contentType: "audio/mpeg",
   },
   "mp3-96k": {
-    outputFormat: OUTPUT_FORMAT.AUDIO_24KHZ_96KBITRATE_MONO_MP3,
+    outputFormat: "audio-24khz-96kbitrate-mono-mp3",
     contentType: "audio/mpeg",
   },
   "webm-opus": {
-    outputFormat: OUTPUT_FORMAT.WEBM_24KHZ_16BIT_MONO_OPUS,
+    outputFormat: "webm-24khz-16bit-mono-opus",
     contentType: "audio/webm",
   },
 };
@@ -255,12 +255,11 @@ export class EdgeTtsProvider implements TtsProvider {
   private async configure(
     client: EdgeClient,
     voice: string,
-    outputFormat: OUTPUT_FORMAT,
+    outputFormat: EdgeOutputFormat,
     signal: AbortSignal,
   ): Promise<void> {
     let setupAbandoned = false;
-    // Always pass options: msedge-tts throws on a repeated setMetadata call without them.
-    const setMetadataPromise = client.setMetadata(voice, outputFormat, {});
+    const setMetadataPromise = client.setMetadata(voice, outputFormat);
     void setMetadataPromise
       .then(
         () => {
@@ -402,9 +401,7 @@ class EdgeSynthesisSession implements SynthesisSession {
 
     this.inFlight = true;
     try {
-      // A no-op while connected. If the service closed the idle socket, reconnect here under
-      // the setup timeout: msedge-tts would otherwise reconnect inside toStream and leave a
-      // failed reconnect as an unhandled rejection.
+      // Reconnect an idle socket under the setup timeout before starting the next segment.
       await this.configure(signal);
       if (signal.aborted) {
         throw createAbortError(signal.reason);

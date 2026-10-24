@@ -9,7 +9,7 @@
 - `apps/server`: Fastify HTTP server and composition root.
 - `apps/web`: React + Vite frontend application.
 - `packages/tts-core`: Provider-neutral domain contracts and types.
-- `packages/edge-provider`: Microsoft Edge Read Aloud TTS provider adapter (`msedge-tts`).
+- `packages/edge-provider`: Microsoft Edge Read Aloud TTS provider with a native protocol client (`ws` transport).
 - `packages/tts-service`: Provider-independent application service (voice caching, concurrency limiter, synthesis orchestration).
 - `packages/shared`: Shared types and validation schemas.
 
@@ -36,12 +36,12 @@ HTTP Route (apps/server)
        ↓
 EdgeTtsProvider (packages/edge-provider)
        ↓
-   msedge-tts
+   NativeEdgeClient (HTTPS / ws)
 ```
 
 Strict boundaries:
 
-- **No provider leakage into HTTP**: HTTP routes must interact solely through `TtsService` ports. HTTP routes must never directly import `msedge-tts` or instantiate `EdgeTtsProvider`.
+- **No provider leakage into HTTP**: HTTP routes must interact solely through `TtsService` ports. HTTP routes must never directly import `ws` or instantiate `EdgeTtsProvider`.
 - **No infrastructure in domain**: `packages/tts-core` must remain strictly provider-neutral and domain-focused. It must never import OpenAI DTOs, HTTP constructs, Fastify types, or Microsoft-specific concerns.
 - **Provider-independent service**: `packages/tts-service` must depend only on `@edgetts/tts-core` interfaces, never on `@edgetts/edge-provider`. Concrete provider implementations are injected at the server composition root (`apps/server/src/composition.ts`).
 - **No provider-specific types in domain**: Upstream provider types must never leak across domain boundaries.

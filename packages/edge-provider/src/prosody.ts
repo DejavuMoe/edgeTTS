@@ -1,5 +1,10 @@
-import { ProsodyOptions } from "msedge-tts";
 import type { TtsProsody } from "@edgetts/tts-core";
+
+export interface EdgeProsody {
+  readonly rate: number;
+  readonly pitch: string;
+  readonly volume: number;
+}
 
 function formatPitch(semitones: number): string {
   if (Object.is(semitones, -0) || semitones === 0) {
@@ -12,7 +17,7 @@ function formatVolume(volume: number): number {
   return Math.round(volume * 1e6 * 100) / 1e6;
 }
 
-export function toEdgeProsody(prosody?: TtsProsody): ProsodyOptions {
+export function toEdgeProsody(prosody?: TtsProsody): EdgeProsody {
   const speed = prosody?.speed ?? 1.0;
   if (!Number.isFinite(speed) || speed < 0.5 || speed > 2.0) {
     throw new RangeError("speed must be between 0.5 and 2");
@@ -28,10 +33,5 @@ export function toEdgeProsody(prosody?: TtsProsody): ProsodyOptions {
     throw new RangeError("volume must be between 0 and 1");
   }
 
-  const edgeOptions = new ProsodyOptions();
-  edgeOptions.rate = speed;
-  edgeOptions.pitch = formatPitch(pitchSemitones);
-  edgeOptions.volume = formatVolume(volume);
-
-  return edgeOptions;
+  return { rate: speed, pitch: formatPitch(pitchSemitones), volume: formatVolume(volume) };
 }

@@ -130,8 +130,8 @@ flowchart TD
   HTTP --> Service[TtsService]
   Service --> Port["TtsProvider 领域契约"]
   Port --> Edge[EdgeTtsProvider]
-  Edge --> Library[msedge-tts]
-  Library --> Microsoft["Microsoft Edge 在线服务"]
+  Edge --> Protocol["NativeEdgeClient: HTTPS + WebSocket"]
+  Protocol --> Microsoft["Microsoft Edge 在线服务"]
   Shared["shared: Zod 请求与响应契约"] -.-> UI
   Shared -.-> HTTP
   Composition["server composition.ts 注入具体实现"] -.-> Service
