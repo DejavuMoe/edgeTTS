@@ -7,6 +7,8 @@ the version being released.
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-10-24
+
 ### Security
 
 - Upgrade runtime validation to patched Zod 4 and use its native OpenAPI converter, preserving
@@ -20,10 +22,16 @@ the version being released.
 - Restore Microsoft synthesis after the v1 handshake was rejected with HTTP 403 by generating
   Sec-MS-GEC v2 tokens with the matching version prefix. Cover captured tokens, frame parsing,
   connection lifecycle and voice catalog validation with offline regressions.
-
 - Use `master` as the primary branch for CI, release ancestry checks and local release preflight.
   Development images now follow `ghcr.io/dejavumoe/edgetts:master`; the former `:main` tag stops
   receiving updates. Existing stable release tags and images are unchanged.
+
+### Compatibility
+
+- Existing HTTP APIs, authentication, configuration, audio formats and text limits remain
+  compatible. No configuration migration is required for the native provider.
+- Validation logs use Zod 4 issue codes; invalid enum and literal values now share
+  `invalid_value`. Request values remain redacted, and public HTTP error codes are unchanged.
 
 ## [0.9.6] - 2026-10-11
 
@@ -275,7 +283,8 @@ the version being released.
 - First release: an OpenAI-compatible speech API, Edge voice discovery, prosody controls, the
   browser workbench and a container image.
 
-[Unreleased]: https://github.com/DejavuMoe/edgeTTS/compare/v0.9.6...HEAD
+[Unreleased]: https://github.com/DejavuMoe/edgeTTS/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/DejavuMoe/edgeTTS/compare/v0.9.6...v1.0.0
 [0.9.6]: https://github.com/DejavuMoe/edgeTTS/compare/v0.9.5...v0.9.6
 [0.9.5]: https://github.com/DejavuMoe/edgeTTS/compare/v0.9.4...v0.9.5
 [0.9.4]: https://github.com/DejavuMoe/edgeTTS/compare/v0.9.2...v0.9.4
