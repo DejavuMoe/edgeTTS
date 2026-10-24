@@ -11,7 +11,10 @@ export function blockingFindings(sarif) {
       "Incomplete analysis",
     );
     assert.ok(Array.isArray(run.results), "Missing SARIF results");
-    const rules = run.tool.driver.rules;
+    const rules = [
+      ...(run.tool.driver.rules ?? []),
+      ...(run.tool.extensions ?? []).flatMap((extension) => extension.rules ?? []),
+    ];
     return run.results.filter((result) => {
       const rule = rules.find((item) => item.id === result.ruleId);
       assert.ok(rule, `Unknown rule: ${result.ruleId}`);

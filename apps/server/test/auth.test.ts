@@ -265,6 +265,19 @@ describe("Constant-Time Verifier", () => {
     expect(verifier(VALID_TEST_KEY)).toBe(true);
   });
 
+  it("keeps independently created verifiers isolated across repeated requests", () => {
+    const otherKey = VALID_TEST_KEY + "-other";
+    const other = createApiKeyVerifier(otherKey);
+    const same = createApiKeyVerifier(VALID_TEST_KEY);
+    for (let i = 0; i < 3; i++) {
+      expect(verifier(VALID_TEST_KEY)).toBe(true);
+      expect(same(VALID_TEST_KEY)).toBe(true);
+      expect(other(otherKey)).toBe(true);
+      expect(verifier(otherKey)).toBe(false);
+      expect(other(VALID_TEST_KEY)).toBe(false);
+    }
+  });
+
   it("returns false for incorrect candidate of same length", () => {
     const wrong = VALID_TEST_KEY.slice(0, -1) + "x";
     expect(verifier(wrong)).toBe(false);

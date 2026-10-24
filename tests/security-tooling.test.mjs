@@ -61,6 +61,16 @@ test("CodeQL fails closed for incomplete, missing, or unrecognized results", () 
   );
 });
 
+test("CodeQL resolves rules stored in query-pack SARIF extensions", () => {
+  const report = sarif([], [{ ruleId: "js/extension-rule" }]);
+  report.runs[0].tool.extensions = [
+    {
+      rules: [{ id: "js/extension-rule", properties: { "security-severity": "8.1" } }],
+    },
+  ];
+  assert.equal(blockingFindings(report).length, 1);
+});
+
 test("pnpm snapshot preserves versions/scopes, aliases, workspaces and transitive packages", () => {
   const leaf = { from: "@scope/leaf", version: "2.0.0" };
   const manifests = manifestsFromPnpm(
