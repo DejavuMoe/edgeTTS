@@ -30,6 +30,11 @@ describe("OpenAPI document", () => {
     expect(native.properties?.["volume"]).toMatchObject({ minimum: 0, maximum: 1 });
     expect(native.properties?.["voice"]).toMatchObject({ maxLength: 128 });
     expect(openAi.properties?.["input"]).toMatchObject({ maxLength: 4096 });
+    expect(openAi.properties?.["response_format"]).toMatchObject({ type: "string", enum: ["mp3"] });
+    expect(native.properties?.["quality"]).toMatchObject({
+      type: "string",
+      enum: ["standard", "high"],
+    });
     expect(openAi.additionalProperties).toBe(false);
   });
 });

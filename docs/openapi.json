@@ -400,11 +400,11 @@
             "description": "Text to synthesize: at most 4,096 UTF-16 code units, not whitespace-only, and only characters allowed in XML."
           },
           "response_format": {
+            "description": "Only mp3 is supported.",
             "type": "string",
             "enum": [
               "mp3"
-            ],
-            "description": "Only mp3 is supported."
+            ]
           },
           "speed": {
             "type": "number",
@@ -435,12 +435,12 @@
             "description": "Edge voice ID, as listed by GET /api/voices."
           },
           "quality": {
+            "description": "standard: 48 kbps MP3 (default); high: 96 kbps MP3.",
             "type": "string",
             "enum": [
               "standard",
               "high"
-            ],
-            "description": "standard: 48 kbps MP3 (default); high: 96 kbps MP3."
+            ]
           },
           "speed": {
             "type": "number",
