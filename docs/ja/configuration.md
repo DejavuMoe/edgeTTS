@@ -51,6 +51,22 @@ Compose で設定する場合は、サービスの `environment` にこれらの
 | `EDGETTS_BIND_ADDRESS` | コンテナポートを転送するホスト側 IP | `127.0.0.1`  |
 | `EDGETTS_HOST_PORT`    | ホスト側で公開するポート番号        | `8080`       |
 
+## Microsoft へのアウトバウンドプロキシ
+
+音声一覧と合成接続は Node と公式 Bun イメージの両方で HTTP/HTTPS CONNECT プロキシに対応します。`HTTPS_PROXY`（優先）または `HTTP_PROXY`（フォールバック）に完全な `http://` / `https://` URL を設定します。空でない小文字の同名変数は大文字より優先されます。URL 内の資格情報で Basic プロキシ認証を利用でき、特殊文字はパーセントエンコードします。資格情報を含む URL をログやリポジトリに保存しないでください。TLS 証明書検証は有効のままです。
+
+`NO_PROXY`（または `no_proxy`）はカンマまたは空白区切りの完全一致ホスト名、IP、`.example.com` / `*.example.com` サフィックス、省略可能な `:port`、全ホストを除外する `*` に対応します。通常のドメインはそのホストのみ、サフィックスはサブドメインに一致します。IPv6 は角括弧で囲みます。CIDR、SOCKS、PAC、`ALL_PROXY` は未対応です。プロキシ障害時は直接接続へ切り替えません。URL は接続時に検証し、不正な設定は機密情報を含まないエラーでそのリクエストを失敗させます。環境変数の変更後は再起動してください。
+
+Compose ではサービスの `environment` に次を追加してコンテナを再作成します。`.env` への設定だけでは転送されません：
+
+```yaml
+- HTTPS_PROXY=${HTTPS_PROXY:-}
+- HTTP_PROXY=${HTTP_PROXY:-}
+- NO_PROXY=${NO_PROXY:-}
+```
+
+コンテナ内の `127.0.0.1` はコンテナ自身です。到達可能なプロキシホスト名を指定してください。Docker Desktop では通常 `host.docker.internal` でホストのプロキシに接続でき、Linux では明示的な接続設定が必要です。`TRUST_PROXY` は受信側のリバースプロキシヘッダー用で別の設定です。preload シムや `NODE_USE_ENV_PROXY` は不要です。
+
 ## 認証とセキュリティ仕様
 
 ### Bearer トークン仕様

@@ -51,6 +51,22 @@
 | `EDGETTS_BIND_ADDRESS` | 宿主机端口绑定的目标 IP 地址 | `127.0.0.1` |
 | `EDGETTS_HOST_PORT`    | 宿主机对外映射的端口号       | `8080`      |
 
+## 微软上游出站代理
+
+语音列表和合成连接在 Node 与官方 Bun 镜像中均支持 HTTP/HTTPS CONNECT 代理。将 `HTTPS_PROXY`（优先）或 `HTTP_PROXY`（回退）设置为完整的 `http://` 或 `https://` URL。非空的小写同名变量优先于大写变量。URL 中的凭据支持 Basic 代理认证；特殊字符需百分号编码，包含凭据的 URL 不应写入日志或版本库。TLS 证书验证保持开启。
+
+`NO_PROXY`（或 `no_proxy`）支持逗号或空格分隔的精确主机名、IP、`.example.com` / `*.example.com` 后缀，可选的 `:port`，以及绕过全部主机的 `*`。普通域名仅匹配自身，后缀匹配子域名，IPv6 使用方括号。不支持 CIDR、SOCKS、PAC 和 `ALL_PROXY`。代理失败不会静默改为直连。每次建立连接时校验代理 URL，非法配置使该请求失败，错误信息会隐藏敏感内容。修改环境变量后重启服务。
+
+Compose 需在服务的 `environment` 下添加以下内容并重建容器；仅在 `.env` 中赋值不会自动传入：
+
+```yaml
+- HTTPS_PROXY=${HTTPS_PROXY:-}
+- HTTP_PROXY=${HTTP_PROXY:-}
+- NO_PROXY=${NO_PROXY:-}
+```
+
+容器内的 `127.0.0.1` 指向容器自身。请使用可达的代理主机名；Docker Desktop 通常可用 `host.docker.internal` 访问宿主机代理，Linux 需显式配置宿主机可达方式。`TRUST_PROXY` 控制入站反向代理请求头，与此无关。不需要 preload 补丁或 `NODE_USE_ENV_PROXY`。
+
 ## 认证机制与安全架构
 
 ### Bearer Token 规范

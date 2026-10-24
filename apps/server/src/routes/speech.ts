@@ -157,9 +157,16 @@ function createSpeechHandler<Body>(ttsService: TtsServicePort, endpoint: SpeechE
         { maxSegmentCodePoints: SPEECH_SEGMENT_CODE_POINTS },
       );
 
-      const audioStream = Readable.from(result.audio, { signal: client.signal });
-      // Keep first-read failures inside the pre-stream HTTP error mapping.
+      const audioStream = Readable.from(result.audio, {
+        signal: client.signal,
+        objectMode: false,
+      });
+      // EOF also emits readable; only actual bytes may commit a successful response.
       await once(audioStream, "readable");
+      if (audioStream.readableLength === 0) {
+        audioStream.destroy();
+        throw new Error("Upstream ended without audio");
+      }
       audioStream.on("error", (err: unknown) => {
         request.log.error({ err, ...logContext }, endpoint.logMessages.streamError);
         client.dispose();

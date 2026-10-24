@@ -5,6 +5,8 @@ import { isValidVoiceId } from "@edgetts/tts-core";
 import { createSynthesisUrl, TRUSTED_CLIENT_TOKEN } from "./authentication.js";
 import { toEdgeProsody, type EdgeProsody } from "./prosody.js";
 import { escapeXmlText } from "./xml.js";
+import { createProxyAgent } from "./proxy.js";
+import { fetchVoiceCatalog } from "./voice-catalog.js";
 
 export type EdgeOutputFormat =
   | "audio-24khz-48kbitrate-mono-mp3"
@@ -44,21 +46,19 @@ export class NativeEdgeClient implements EdgeClient {
   private voice = "";
   private format: EdgeOutputFormat | undefined;
   private active: ActiveTurn | undefined;
+  private proxyAgent: ReturnType<typeof createProxyAgent>;
+  private connectionAbort: AbortController | undefined;
 
   static getSynthUrl(): Promise<string> {
     return Promise.resolve(createSynthesisUrl());
   }
 
+  static getVoicesUrl(): string {
+    return `https://speech.platform.bing.com/consumer/speech/synthesize/readaloud/voices/list?trustedclienttoken=${TRUSTED_CLIENT_TOKEN}`;
+  }
+
   async getVoices(signal: AbortSignal): Promise<readonly EdgeVoice[]> {
-    const response = await fetch(
-      `https://speech.platform.bing.com/consumer/speech/synthesize/readaloud/voices/list?trustedclienttoken=${TRUSTED_CLIENT_TOKEN}`,
-      { signal },
-    );
-    if (!response.ok) {
-      await response.body?.cancel();
-      throw new Error(`Edge voice discovery returned HTTP ${response.status}`);
-    }
-    const voices: unknown = await response.json();
+    const voices = await fetchVoiceCatalog(NativeEdgeClient.getVoicesUrl(), signal);
     if (!Array.isArray(voices) || !voices.every(isEdgeVoice)) {
       throw new Error("Edge voice discovery returned an invalid voice catalog");
     }
@@ -82,7 +82,11 @@ export class NativeEdgeClient implements EdgeClient {
     if (generation !== this.generation)
       throw new Error("Edge TTS connection initialization was closed");
 
+    this.connectionAbort = new AbortController();
+    const agent = createProxyAgent(url, this.connectionAbort.signal);
+    this.proxyAgent = agent;
     const socket = new WebSocket(url, {
+      agent: agent ?? false,
       headers: {
         "User-Agent":
           "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36 Edg/143.0.0.0",
@@ -125,7 +129,9 @@ export class NativeEdgeClient implements EdgeClient {
       });
       socket.on("error", (error) => {
         // ws includes the HTTP status in handshake errors; never include request payloads.
-        const failure = new Error(`Edge TTS WebSocket error: ${error.message}`, { cause: error });
+        const failure = agent
+          ? new Error("Edge TTS WebSocket proxy connection failed")
+          : new Error(`Edge TTS WebSocket error: ${error.message}`, { cause: error });
         reject(failure);
         this.failTurn(socket, failure);
         socket.terminate();
@@ -175,6 +181,9 @@ export class NativeEdgeClient implements EdgeClient {
 
   close(): void {
     this.generation++;
+    // A CONNECT socket is not owned by the agent until its handshake completes.
+    this.connectionAbort?.abort();
+    this.connectionAbort = undefined;
     if (this.socket) {
       this.failTurn(
         this.socket,
@@ -183,6 +192,8 @@ export class NativeEdgeClient implements EdgeClient {
       this.socket.terminate();
       this.socket = undefined;
     }
+    this.proxyAgent?.destroy();
+    this.proxyAgent = undefined;
   }
 
   private failTurn(socket: WebSocket, error: Error): void {

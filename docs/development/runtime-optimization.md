@@ -35,11 +35,22 @@ dependencies can ship. The final image contract runs on both amd64 and arm64 in 
 
 Published application layers use gzip level 9 and CI reuses BuildKit's GitHub Actions cache.
 Runtime size and compressed download size are different metrics. CI bounds the amd64 root
-filesystem at 105 MiB and continues to check the non-root UID, read-only deployment,
+filesystem at 128 MiB and continues to check the non-root UID, read-only deployment,
 healthcheck, provenance and SBOM.
 
 Bun occupies about 70 MiB. The image uses the official runtime binary without custom builds,
 executable packing or reduced locale support.
+
+### v1.0.1 proxy compatibility update
+
+The historical measurements above describe Bun 1.4.2. On 2026-10-25, the v1.0.1
+image with Bun 1.4.4 measured **124,252 KiB (121.34 MiB)** on linux/amd64; `/app`
+was 13,904 KiB and the Bun executable was 98,540 KiB. Removing symbol information
+saved only 72 KiB, so the image retains the official binary. The runtime update
+fixes proxy-agent and WebSocket shutdown behavior; the same deterministic proxy
+contract leaves open tunnels on 1.4.2 and passes on 1.4.4. The maintainer approved
+raising the root filesystem budget from 105 to **128 MiB** for this fix. All
+permission, TLS, functional and supply-chain checks remain required.
 
 ## Local CPU cost
 
