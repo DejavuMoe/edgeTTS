@@ -116,7 +116,8 @@ async function runSmoke(): Promise<void> {
   console.log("PASS");
 }
 
-runSmoke().catch((err: unknown) => {
-  console.error("Smoke test FAILED:", err);
+runSmoke().catch(() => {
+  // Upstream errors can contain credentials, synthesis text or log control characters.
+  console.error("Smoke test FAILED: upstream error details withheld.");
   process.exit(1);
 });

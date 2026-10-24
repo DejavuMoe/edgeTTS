@@ -1,0 +1,2550 @@
+{
+  "schemaVersion": 1,
+  "sourceCommit": "a322197f6b120f4a75ca839843110adbc91264b0",
+  "workflowRun": "https://github.com/DejavuMoe/edgeTTS/actions/runs/40118913308",
+  "method": "Real detector runs with expected-rule/message assertions and two clean controls. Leave-one-out removes verdicts from this purpose-built matrix; its duration is a sum of measured clean command costs, not a timed omitted workflow or full-repository CI latency. Node/Bun cases exercise the same proxy mutation on two runtimes. Medium CodeQL findings are reported but do not block under existing policy.",
+  "localProvenance": "Windows canonical source plus uncommitted candidate changes, executed through linux-task in the disposable Debian mirror. The sequential/parallel quality pair used the same earlier working-tree snapshot and unchanged quality command/fixture definitions; remote data is the authoritative commit-pinned comparison.",
+  "artifacts": [
+    {
+      "id": 12570572923,
+      "name": "ci-cache-2-a322197f6b120f4a75ca839843110adbc91264b0",
+      "digest": "sha256:c0811815d57b0385cb11618719e561182b51774f4b49dc30f2c5c62ae3925185",
+      "sizeBytes": 2199
+    },
+    {
+      "id": 12570268912,
+      "name": "ci-extended-dependencies-a322197f6b120f4a75ca839843110adbc91264b0",
+      "digest": "sha256:85cb19d9d03acb6a7fb6c2e1da2e2298836fc8d20ff25d297b80c4986fb40206",
+      "sizeBytes": 5359
+    },
+    {
+      "id": 12570123807,
+      "name": "ci-ablation-a322197f6b120f4a75ca839843110adbc91264b0",
+      "digest": "sha256:59b71016d705b7bc515a8252a2218428a79f55f95ac58742f1f400dfe29e9074",
+      "sizeBytes": 80966
+    },
+    {
+      "id": 12569914377,
+      "name": "ci-extended-codeql-a322197f6b120f4a75ca839843110adbc91264b0",
+      "digest": "sha256:86ac3cc811074abadece37aca34b1d7cf989b4eac8c818440d5b6f6061a3672f",
+      "sizeBytes": 162770
+    },
+    {
+      "id": 12569528155,
+      "name": "ci-cache-1-a322197f6b120f4a75ca839843110adbc91264b0",
+      "digest": "sha256:34e1558d1699a136a975ab244bd33124b5b2152d4eb76d7c30fcea3e5b1976ff",
+      "sizeBytes": 2198
+    },
+    {
+      "id": 12569284023,
+      "name": "ci-extended-deployment-a322197f6b120f4a75ca839843110adbc91264b0",
+      "digest": "sha256:18d4fb5e51c988ffaf6714256a06dc973c39ff29b94562928920c7012d6f7801",
+      "sizeBytes": 8444
+    },
+    {
+      "id": 12571775171,
+      "name": "ci-cache-2-708f881621ea23c563e1f92183a040dbc60b90d5",
+      "digest": "sha256:88286f8ee2f5091656e6be1aab8f0dfc1378966829e639ae90a7f83035902619",
+      "sizeBytes": 2193
+    },
+    {
+      "id": 12571680250,
+      "name": "ci-extended-codeql-708f881621ea23c563e1f92183a040dbc60b90d5",
+      "digest": "sha256:d363efce755f2d24676fd1f60e77197a29415ff3fa085cf3188c984a00485a87",
+      "sizeBytes": 162736
+    },
+    {
+      "id": 12571595195,
+      "name": "ci-cache-1-708f881621ea23c563e1f92183a040dbc60b90d5",
+      "digest": "sha256:147288552b80978e27618fbbb07a9f0dd7a46c59a2aaf9c785dd150cc23dd9f9",
+      "sizeBytes": 2195
+    },
+    {
+      "id": 12571131424,
+      "name": "ci-extended-deployment-708f881621ea23c563e1f92183a040dbc60b90d5",
+      "digest": "sha256:a622865ffebb600e87915897a281756dbd5ed8bf9946121e993e5446068d43e2",
+      "sizeBytes": 8451
+    },
+    {
+      "id": 12570896678,
+      "name": "ci-extended-dependencies-708f881621ea23c563e1f92183a040dbc60b90d5",
+      "digest": "sha256:3fe62e310f51db89c9e3935449226b1a82887b7a46ab6889bca2ada018588269",
+      "sizeBytes": 5368
+    },
+    {
+      "id": 12571178404,
+      "name": "ci-ablation-708f881621ea23c563e1f92183a040dbc60b90d5",
+      "digest": "sha256:d2000200c251746e1699e768d97ebdbfd2ca5c3dd8bb6a1b22e210452bc79990",
+      "sizeBytes": 117463
+    }
+  ],
+  "local": {
+    "codeql": {
+      "mode": "codeql",
+      "completed": true,
+      "timestamp": "2026-10-24T17:58:43.649Z",
+      "node": "v24.21.0",
+      "runs": [
+        {
+          "id": "version",
+          "status": 0,
+          "seconds": 0.440251665
+        },
+        {
+          "id": "javascript-clean-before-extract",
+          "status": 0,
+          "seconds": 3.7142611409999997
+        },
+        {
+          "id": "javascript-clean-before-analyze",
+          "status": 0,
+          "seconds": 15.464462699000002,
+          "findings": [],
+          "blocked": []
+        },
+        {
+          "id": "javascript-command-injection-extract",
+          "status": 0,
+          "seconds": 3.8866693350000023
+        },
+        {
+          "id": "javascript-command-injection-analyze",
+          "status": 0,
+          "seconds": 19.090752907,
+          "findings": ["js/command-line-injection"],
+          "blocked": ["js/command-line-injection"]
+        },
+        {
+          "id": "javascript-log-injection-extract",
+          "status": 0,
+          "seconds": 4.659513452
+        },
+        {
+          "id": "javascript-log-injection-analyze",
+          "status": 0,
+          "seconds": 15.652452726999996,
+          "findings": ["js/log-injection"],
+          "blocked": []
+        },
+        {
+          "id": "javascript-clean-after-extract",
+          "status": 0,
+          "seconds": 3.8436609099999988
+        },
+        {
+          "id": "javascript-clean-after-analyze",
+          "status": 0,
+          "seconds": 16.877542359,
+          "findings": [],
+          "blocked": []
+        },
+        {
+          "id": "actions-clean-before-extract",
+          "status": 0,
+          "seconds": 4.464985799000002
+        },
+        {
+          "id": "actions-clean-before-analyze",
+          "status": 0,
+          "seconds": 10.609982497999997,
+          "findings": [],
+          "blocked": []
+        },
+        {
+          "id": "actions-seeded-extract",
+          "status": 0,
+          "seconds": 4.225048939000001
+        },
+        {
+          "id": "actions-seeded-analyze",
+          "status": 0,
+          "seconds": 5.887674207000003,
+          "findings": ["actions/code-injection/critical"],
+          "blocked": ["actions/code-injection/critical"]
+        },
+        {
+          "id": "actions-restricted-token-extract",
+          "status": 0,
+          "seconds": 2.9728201030000054
+        },
+        {
+          "id": "actions-restricted-token-analyze",
+          "status": 0,
+          "seconds": 7.647211551000001,
+          "findings": ["actions/code-injection/medium"],
+          "blocked": []
+        },
+        {
+          "id": "actions-clean-after-extract",
+          "status": 0,
+          "seconds": 3.0588459230000007
+        },
+        {
+          "id": "actions-clean-after-analyze",
+          "status": 0,
+          "seconds": 5.665092243999999,
+          "findings": [],
+          "blocked": []
+        }
+      ]
+    },
+    "dependencies": {
+      "mode": "dependencies",
+      "completed": true,
+      "timestamp": "2026-10-24T17:58:51.601Z",
+      "node": "v24.21.0",
+      "runs": [
+        {
+          "id": "pnpm-version",
+          "status": 0,
+          "seconds": 0.009654812999999996
+        },
+        {
+          "id": "clean-before-lock",
+          "status": 0,
+          "seconds": 0.083093874
+        },
+        {
+          "id": "clean-before-audit",
+          "status": 0,
+          "seconds": 1.6019886220000001,
+          "advisories": []
+        },
+        {
+          "id": "runtime-vulnerable-lock",
+          "status": 0,
+          "seconds": 0.01940574300000003
+        },
+        {
+          "id": "runtime-vulnerable-audit",
+          "status": 1,
+          "seconds": 1.6898167810000002,
+          "advisories": [
+            {
+              "github_advisory_id": "GHSA-w7jw-789q-3m8p",
+              "severity": "critical",
+              "vulnerable_versions": ">=1.1.0 <=1.8.3"
+            },
+            {
+              "github_advisory_id": "GHSA-395f-4hp3-45gv",
+              "severity": "high",
+              "vulnerable_versions": "<=1.8.4"
+            }
+          ]
+        },
+        {
+          "id": "development-vulnerable-lock",
+          "status": 0,
+          "seconds": 0.021947815999999874
+        },
+        {
+          "id": "development-vulnerable-audit",
+          "status": 1,
+          "seconds": 1.6303727409999997,
+          "advisories": [
+            {
+              "github_advisory_id": "GHSA-w7jw-789q-3m8p",
+              "severity": "critical",
+              "vulnerable_versions": ">=1.1.0 <=1.8.3"
+            },
+            {
+              "github_advisory_id": "GHSA-395f-4hp3-45gv",
+              "severity": "high",
+              "vulnerable_versions": "<=1.8.4"
+            }
+          ]
+        },
+        {
+          "id": "development-vulnerable-prod-only",
+          "status": 0,
+          "seconds": 1.3550749379999998
+        },
+        {
+          "id": "clean-after-lock",
+          "status": 0,
+          "seconds": 0.023007548999999926
+        },
+        {
+          "id": "clean-after-audit",
+          "status": 0,
+          "seconds": 1.3423245079999997,
+          "advisories": []
+        }
+      ]
+    },
+    "deployment": {
+      "mode": "deployment",
+      "completed": true,
+      "timestamp": "2026-10-24T18:00:57.185Z",
+      "node": "v24.21.0",
+      "runs": [
+        {
+          "id": "docker-clean-before",
+          "status": 0,
+          "seconds": 0.735662047
+        },
+        {
+          "id": "docker-root-user",
+          "status": 1,
+          "seconds": 0.4250230620000001
+        },
+        {
+          "id": "writable-image-build",
+          "status": 0,
+          "seconds": 0.451487623
+        },
+        {
+          "id": "docker-writable-code",
+          "status": 1,
+          "seconds": 0.3959491379999999
+        },
+        {
+          "id": "docker-clean-after",
+          "status": 0,
+          "seconds": 0.5895854350000002
+        },
+        {
+          "id": "node-proxy-control",
+          "status": 0,
+          "seconds": 0.792169226
+        },
+        {
+          "id": "bun-proxy-control",
+          "status": 0,
+          "seconds": 0.8278089449999998
+        },
+        {
+          "id": "proxy-image-build",
+          "status": 0,
+          "seconds": 0.4158730770000002
+        },
+        {
+          "id": "node-proxy-no-bypass",
+          "status": 1,
+          "seconds": 0.24027644099999998
+        },
+        {
+          "id": "bun-proxy-no-bypass",
+          "status": 1,
+          "seconds": 0.4132174320000004
+        },
+        {
+          "id": "node-proxy-control-after",
+          "status": 0,
+          "seconds": 0.742346004
+        },
+        {
+          "id": "bun-proxy-control-after",
+          "status": 0,
+          "seconds": 0.8583574709999994
+        },
+        {
+          "id": "nginx-clean-before",
+          "status": 0,
+          "seconds": 3.4944388629999996
+        },
+        {
+          "id": "nginx-buffering-on",
+          "status": 1,
+          "seconds": 0.016269900999999663
+        },
+        {
+          "id": "nginx-wrong-upstream-uri",
+          "status": 1,
+          "seconds": 6.218428041999999
+        },
+        {
+          "id": "nginx-clean-after",
+          "status": 0,
+          "seconds": 3.4747823910000006
+        }
+      ]
+    }
+  },
+  "remote": {
+    "codeql": {
+      "mode": "codeql",
+      "completed": true,
+      "timestamp": "2026-10-24T18:07:26.811Z",
+      "node": "v24.21.0",
+      "runs": [
+        {
+          "id": "version",
+          "status": 0,
+          "seconds": 0.6847652550000001
+        },
+        {
+          "id": "javascript-clean-before-extract",
+          "status": 0,
+          "seconds": 7.1578034950000005
+        },
+        {
+          "id": "javascript-clean-before-analyze",
+          "status": 0,
+          "seconds": 26.246671224999996,
+          "findings": [],
+          "blocked": []
+        },
+        {
+          "id": "javascript-command-injection-extract",
+          "status": 0,
+          "seconds": 7.017752993000002
+        },
+        {
+          "id": "javascript-command-injection-analyze",
+          "status": 0,
+          "seconds": 26.897551805999996,
+          "findings": ["js/command-line-injection"],
+          "blocked": ["js/command-line-injection"]
+        },
+        {
+          "id": "javascript-log-injection-extract",
+          "status": 0,
+          "seconds": 7.183576755000002
+        },
+        {
+          "id": "javascript-log-injection-analyze",
+          "status": 0,
+          "seconds": 27.188348931999993,
+          "findings": ["js/log-injection"],
+          "blocked": []
+        },
+        {
+          "id": "javascript-clean-after-extract",
+          "status": 0,
+          "seconds": 7.1695156609999975
+        },
+        {
+          "id": "javascript-clean-after-analyze",
+          "status": 0,
+          "seconds": 26.105594332999985,
+          "findings": [],
+          "blocked": []
+        },
+        {
+          "id": "actions-clean-before-extract",
+          "status": 0,
+          "seconds": 3.9002190570000095
+        },
+        {
+          "id": "actions-clean-before-analyze",
+          "status": 0,
+          "seconds": 10.744820414999994,
+          "findings": [],
+          "blocked": []
+        },
+        {
+          "id": "actions-seeded-extract",
+          "status": 0,
+          "seconds": 3.919854717999988
+        },
+        {
+          "id": "actions-seeded-analyze",
+          "status": 0,
+          "seconds": 10.852274383999989,
+          "findings": ["actions/code-injection/critical"],
+          "blocked": ["actions/code-injection/critical"]
+        },
+        {
+          "id": "actions-restricted-token-extract",
+          "status": 0,
+          "seconds": 3.947368948999996
+        },
+        {
+          "id": "actions-restricted-token-analyze",
+          "status": 0,
+          "seconds": 10.546677123999979,
+          "findings": ["actions/code-injection/medium"],
+          "blocked": []
+        },
+        {
+          "id": "actions-clean-after-extract",
+          "status": 0,
+          "seconds": 3.9877856180000237
+        },
+        {
+          "id": "actions-clean-after-analyze",
+          "status": 0,
+          "seconds": 10.47010876599999,
+          "findings": [],
+          "blocked": []
+        }
+      ]
+    },
+    "dependencies": {
+      "mode": "dependencies",
+      "completed": true,
+      "timestamp": "2026-10-24T18:03:19.085Z",
+      "node": "v24.21.0",
+      "runs": [
+        {
+          "id": "pnpm-version",
+          "status": 0,
+          "seconds": 0.009612050000000004
+        },
+        {
+          "id": "clean-before-lock",
+          "status": 0,
+          "seconds": 0.09459801099999998
+        },
+        {
+          "id": "clean-before-audit",
+          "status": 0,
+          "seconds": 0.15938258800000002,
+          "advisories": []
+        },
+        {
+          "id": "runtime-vulnerable-lock",
+          "status": 0,
+          "seconds": 0.026514768000000005
+        },
+        {
+          "id": "runtime-vulnerable-audit",
+          "status": 1,
+          "seconds": 0.181777781,
+          "advisories": [
+            {
+              "github_advisory_id": "GHSA-w7jw-789q-3m8p",
+              "severity": "critical",
+              "vulnerable_versions": ">=1.1.0 <=1.8.3"
+            },
+            {
+              "github_advisory_id": "GHSA-395f-4hp3-45gv",
+              "severity": "high",
+              "vulnerable_versions": "<=1.8.4"
+            }
+          ]
+        },
+        {
+          "id": "development-vulnerable-lock",
+          "status": 0,
+          "seconds": 0.021245521000000052
+        },
+        {
+          "id": "development-vulnerable-audit",
+          "status": 1,
+          "seconds": 0.17434417199999996,
+          "advisories": [
+            {
+              "github_advisory_id": "GHSA-w7jw-789q-3m8p",
+              "severity": "critical",
+              "vulnerable_versions": ">=1.1.0 <=1.8.3"
+            },
+            {
+              "github_advisory_id": "GHSA-395f-4hp3-45gv",
+              "severity": "high",
+              "vulnerable_versions": "<=1.8.4"
+            }
+          ]
+        },
+        {
+          "id": "development-vulnerable-prod-only",
+          "status": 0,
+          "seconds": 0.148448082
+        },
+        {
+          "id": "clean-after-lock",
+          "status": 0,
+          "seconds": 0.021402612999999973
+        },
+        {
+          "id": "clean-after-audit",
+          "status": 0,
+          "seconds": 0.144361005,
+          "advisories": []
+        }
+      ]
+    },
+    "deployment": {
+      "mode": "deployment",
+      "completed": true,
+      "timestamp": "2026-10-24T18:04:07.189Z",
+      "node": "v24.21.0",
+      "runs": [
+        {
+          "id": "docker-clean-before",
+          "status": 0,
+          "seconds": 0.654086196
+        },
+        {
+          "id": "docker-root-user",
+          "status": 1,
+          "seconds": 0.3892347199999999
+        },
+        {
+          "id": "writable-image-build",
+          "status": 0,
+          "seconds": 0.871257993
+        },
+        {
+          "id": "docker-writable-code",
+          "status": 1,
+          "seconds": 0.3814225179999999
+        },
+        {
+          "id": "docker-clean-after",
+          "status": 0,
+          "seconds": 0.6064387510000001
+        },
+        {
+          "id": "node-proxy-control",
+          "status": 0,
+          "seconds": 1.241373344
+        },
+        {
+          "id": "bun-proxy-control",
+          "status": 0,
+          "seconds": 0.9970410259999999
+        },
+        {
+          "id": "proxy-image-build",
+          "status": 0,
+          "seconds": 0.7697437959999998
+        },
+        {
+          "id": "node-proxy-no-bypass",
+          "status": 1,
+          "seconds": 0.4038003250000002
+        },
+        {
+          "id": "bun-proxy-no-bypass",
+          "status": 1,
+          "seconds": 0.3251395359999997
+        },
+        {
+          "id": "node-proxy-control-after",
+          "status": 0,
+          "seconds": 0.7524316829999997
+        },
+        {
+          "id": "bun-proxy-control-after",
+          "status": 0,
+          "seconds": 0.9065537640000011
+        },
+        {
+          "id": "nginx-clean-before",
+          "status": 0,
+          "seconds": 3.3265532490000007
+        },
+        {
+          "id": "nginx-buffering-on",
+          "status": 1,
+          "seconds": 0.025513192000000344
+        },
+        {
+          "id": "nginx-wrong-upstream-uri",
+          "status": 1,
+          "seconds": 5.073730654000001
+        },
+        {
+          "id": "nginx-clean-after",
+          "status": 0,
+          "seconds": 2.329018025000001
+        }
+      ]
+    }
+  },
+  "derived": {
+    "local": {
+      "results": [
+        {
+          "check": "CodeQL JavaScript",
+          "id": "javascript-command-injection-analyze",
+          "detected": true,
+          "blocked": true,
+          "seconds": 19.090752907
+        },
+        {
+          "check": "CodeQL JavaScript",
+          "id": "javascript-log-injection-analyze",
+          "detected": true,
+          "blocked": false,
+          "seconds": 15.652452726999996
+        },
+        {
+          "check": "CodeQL Actions",
+          "id": "actions-seeded-analyze",
+          "detected": true,
+          "blocked": true,
+          "seconds": 5.887674207000003
+        },
+        {
+          "check": "CodeQL Actions",
+          "id": "actions-restricted-token-analyze",
+          "detected": true,
+          "blocked": false,
+          "seconds": 7.647211551000001
+        },
+        {
+          "check": "Dependency audit",
+          "id": "runtime-vulnerable-audit",
+          "detected": true,
+          "blocked": true,
+          "seconds": 1.6898167810000002
+        },
+        {
+          "check": "Dependency audit",
+          "id": "development-vulnerable-audit",
+          "detected": true,
+          "blocked": true,
+          "seconds": 1.6303727409999997
+        },
+        {
+          "check": "Docker runtime",
+          "id": "docker-root-user",
+          "detected": true,
+          "blocked": true,
+          "seconds": 0.4250230620000001
+        },
+        {
+          "check": "Docker runtime",
+          "id": "docker-writable-code",
+          "detected": true,
+          "blocked": true,
+          "seconds": 0.3959491379999999
+        },
+        {
+          "check": "Node proxy",
+          "id": "node-proxy-no-bypass",
+          "detected": true,
+          "blocked": true,
+          "seconds": 0.24027644099999998
+        },
+        {
+          "check": "Bun proxy",
+          "id": "bun-proxy-no-bypass",
+          "detected": true,
+          "blocked": true,
+          "seconds": 0.4132174320000004
+        },
+        {
+          "check": "Nginx contract",
+          "id": "nginx-buffering-on",
+          "detected": true,
+          "blocked": true,
+          "seconds": 0.016269900999999663
+        },
+        {
+          "check": "Nginx contract",
+          "id": "nginx-wrong-upstream-uri",
+          "detected": true,
+          "blocked": true,
+          "seconds": 6.218428041999999
+        }
+      ],
+      "cleanSeconds": {
+        "CodeQL JavaScript": 19.949963554500002,
+        "CodeQL Actions": 11.899453231999999,
+        "Dependency audit": 1.472156565,
+        "Docker runtime": 0.6626237410000001,
+        "Node proxy": 0.7672576149999999,
+        "Bun proxy": 0.8430832079999996,
+        "Nginx contract": 3.4846106270000003
+      },
+      "leaveOneOut": [
+        {
+          "removed": "none",
+          "detected": 12,
+          "blocked": 10,
+          "escaped": [],
+          "cleanSeconds": 39.0791485425
+        },
+        {
+          "removed": "CodeQL JavaScript",
+          "detected": 10,
+          "blocked": 9,
+          "escaped": ["javascript-command-injection-analyze", "javascript-log-injection-analyze"],
+          "cleanSeconds": 19.129184988
+        },
+        {
+          "removed": "CodeQL Actions",
+          "detected": 10,
+          "blocked": 9,
+          "escaped": ["actions-seeded-analyze", "actions-restricted-token-analyze"],
+          "cleanSeconds": 27.1796953105
+        },
+        {
+          "removed": "Dependency audit",
+          "detected": 10,
+          "blocked": 8,
+          "escaped": ["runtime-vulnerable-audit", "development-vulnerable-audit"],
+          "cleanSeconds": 37.6069919775
+        },
+        {
+          "removed": "Docker runtime",
+          "detected": 10,
+          "blocked": 8,
+          "escaped": ["docker-root-user", "docker-writable-code"],
+          "cleanSeconds": 38.4165248015
+        },
+        {
+          "removed": "Node proxy",
+          "detected": 11,
+          "blocked": 9,
+          "escaped": ["node-proxy-no-bypass"],
+          "cleanSeconds": 38.3118909275
+        },
+        {
+          "removed": "Bun proxy",
+          "detected": 11,
+          "blocked": 9,
+          "escaped": ["bun-proxy-no-bypass"],
+          "cleanSeconds": 38.2360653345
+        },
+        {
+          "removed": "Nginx contract",
+          "detected": 10,
+          "blocked": 8,
+          "escaped": ["nginx-buffering-on", "nginx-wrong-upstream-uri"],
+          "cleanSeconds": 35.5945379155
+        }
+      ]
+    },
+    "remote": {
+      "results": [
+        {
+          "check": "CodeQL JavaScript",
+          "id": "javascript-command-injection-analyze",
+          "detected": true,
+          "blocked": true,
+          "seconds": 26.897551805999996
+        },
+        {
+          "check": "CodeQL JavaScript",
+          "id": "javascript-log-injection-analyze",
+          "detected": true,
+          "blocked": false,
+          "seconds": 27.188348931999993
+        },
+        {
+          "check": "CodeQL Actions",
+          "id": "actions-seeded-analyze",
+          "detected": true,
+          "blocked": true,
+          "seconds": 10.852274383999989
+        },
+        {
+          "check": "CodeQL Actions",
+          "id": "actions-restricted-token-analyze",
+          "detected": true,
+          "blocked": false,
+          "seconds": 10.546677123999979
+        },
+        {
+          "check": "Dependency audit",
+          "id": "runtime-vulnerable-audit",
+          "detected": true,
+          "blocked": true,
+          "seconds": 0.181777781
+        },
+        {
+          "check": "Dependency audit",
+          "id": "development-vulnerable-audit",
+          "detected": true,
+          "blocked": true,
+          "seconds": 0.17434417199999996
+        },
+        {
+          "check": "Docker runtime",
+          "id": "docker-root-user",
+          "detected": true,
+          "blocked": true,
+          "seconds": 0.3892347199999999
+        },
+        {
+          "check": "Docker runtime",
+          "id": "docker-writable-code",
+          "detected": true,
+          "blocked": true,
+          "seconds": 0.3814225179999999
+        },
+        {
+          "check": "Node proxy",
+          "id": "node-proxy-no-bypass",
+          "detected": true,
+          "blocked": true,
+          "seconds": 0.4038003250000002
+        },
+        {
+          "check": "Bun proxy",
+          "id": "bun-proxy-no-bypass",
+          "detected": true,
+          "blocked": true,
+          "seconds": 0.3251395359999997
+        },
+        {
+          "check": "Nginx contract",
+          "id": "nginx-buffering-on",
+          "detected": true,
+          "blocked": true,
+          "seconds": 0.025513192000000344
+        },
+        {
+          "check": "Nginx contract",
+          "id": "nginx-wrong-upstream-uri",
+          "detected": true,
+          "blocked": true,
+          "seconds": 5.073730654000001
+        }
+      ],
+      "cleanSeconds": {
+        "CodeQL JavaScript": 33.33979235699999,
+        "CodeQL Actions": 14.55146692800001,
+        "Dependency audit": 0.1518717965,
+        "Docker runtime": 0.6302624735,
+        "Node proxy": 0.9969025134999999,
+        "Bun proxy": 0.9517973950000005,
+        "Nginx contract": 2.8277856370000007
+      },
+      "leaveOneOut": [
+        {
+          "removed": "none",
+          "detected": 12,
+          "blocked": 10,
+          "escaped": [],
+          "cleanSeconds": 53.44987910049999
+        },
+        {
+          "removed": "CodeQL JavaScript",
+          "detected": 10,
+          "blocked": 9,
+          "escaped": ["javascript-command-injection-analyze", "javascript-log-injection-analyze"],
+          "cleanSeconds": 20.110086743500013
+        },
+        {
+          "removed": "CodeQL Actions",
+          "detected": 10,
+          "blocked": 9,
+          "escaped": ["actions-seeded-analyze", "actions-restricted-token-analyze"],
+          "cleanSeconds": 38.89841217249998
+        },
+        {
+          "removed": "Dependency audit",
+          "detected": 10,
+          "blocked": 8,
+          "escaped": ["runtime-vulnerable-audit", "development-vulnerable-audit"],
+          "cleanSeconds": 53.298007303999995
+        },
+        {
+          "removed": "Docker runtime",
+          "detected": 10,
+          "blocked": 8,
+          "escaped": ["docker-root-user", "docker-writable-code"],
+          "cleanSeconds": 52.819616626999995
+        },
+        {
+          "removed": "Node proxy",
+          "detected": 11,
+          "blocked": 9,
+          "escaped": ["node-proxy-no-bypass"],
+          "cleanSeconds": 52.452976586999995
+        },
+        {
+          "removed": "Bun proxy",
+          "detected": 11,
+          "blocked": 9,
+          "escaped": ["bun-proxy-no-bypass"],
+          "cleanSeconds": 52.49808170549999
+        },
+        {
+          "removed": "Nginx contract",
+          "detected": 10,
+          "blocked": 8,
+          "escaped": ["nginx-buffering-on", "nginx-wrong-upstream-uri"],
+          "cleanSeconds": 50.62209346349999
+        }
+      ]
+    }
+  },
+  "cache": {
+    "trials": [
+      {
+        "trial": "1",
+        "sha": "a322197f6b120f4a75ca839843110adbc91264b0",
+        "results": [
+          {
+            "variant": "plain",
+            "seconds": 35.645985779,
+            "imageId": "sha256:8182e9c4648bc8d7f7d6ee36f8bf6fc7eb39cbf188f2720fa8f61f130a7927b8"
+          },
+          {
+            "variant": "cold",
+            "seconds": 63.25752007,
+            "imageId": "sha256:ed76c673a6ec869261209048341c8bc45edef50f3e79a5cfd0479bfab90dee62"
+          },
+          {
+            "variant": "warm",
+            "seconds": 7.16159669,
+            "imageId": "sha256:ed76c673a6ec869261209048341c8bc45edef50f3e79a5cfd0479bfab90dee62"
+          },
+          {
+            "variant": "changed",
+            "seconds": 28.853343852,
+            "imageId": "sha256:719b25664233b2734b397e67b5845aa5998bb3c9f0d7b01c902c890efc673b0a"
+          }
+        ]
+      },
+      {
+        "trial": "2",
+        "sha": "a322197f6b120f4a75ca839843110adbc91264b0",
+        "results": [
+          {
+            "variant": "plain",
+            "seconds": 25.840260886,
+            "imageId": "sha256:525132db02aac1d0f85799a124debfe70b596efdcd39b027b533e617a30ebfbe"
+          },
+          {
+            "variant": "cold",
+            "seconds": 95.869535698,
+            "imageId": "sha256:867cdc161e298ac87b427d654710a69d59cc277f135af7fd622b049c668917e0"
+          },
+          {
+            "variant": "warm",
+            "seconds": 10.071279457,
+            "imageId": "sha256:867cdc161e298ac87b427d654710a69d59cc277f135af7fd622b049c668917e0"
+          },
+          {
+            "variant": "changed",
+            "seconds": 42.563140735,
+            "imageId": "sha256:7ba4e7be768da3839c37f64b836dd7d4b5803fabf479ffd220c4e3fc3afffc42"
+          }
+        ]
+      },
+      {
+        "trial": "1",
+        "sha": "708f881621ea23c563e1f92183a040dbc60b90d5",
+        "results": [
+          {
+            "variant": "plain",
+            "seconds": 27.084767796,
+            "imageId": "sha256:e5a4e225db3f6216313f2a77f8bb30e3121d0a812fec0d9fd1637d0d5c9df3ac"
+          },
+          {
+            "variant": "cold",
+            "seconds": 55.809996148,
+            "imageId": "sha256:47a8f2cf9301d64adff635cf9b33972f2f335b1af26f3218a1baf6656a7193f6"
+          },
+          {
+            "variant": "warm",
+            "seconds": 6.963300702,
+            "imageId": "sha256:47a8f2cf9301d64adff635cf9b33972f2f335b1af26f3218a1baf6656a7193f6"
+          },
+          {
+            "variant": "changed",
+            "seconds": 25.718001072,
+            "imageId": "sha256:10e995e4013054cf028edacf5e3745f4ade89229bf8ebeb56a699e706fe82817"
+          }
+        ]
+      },
+      {
+        "trial": "2",
+        "sha": "708f881621ea23c563e1f92183a040dbc60b90d5",
+        "results": [
+          {
+            "variant": "plain",
+            "seconds": 30.710551848,
+            "imageId": "sha256:339f494ce0faec819fc61fbc30cffb9422cc28a57e07ec5a87cbb3b1aca50a70"
+          },
+          {
+            "variant": "cold",
+            "seconds": 58.09147851,
+            "imageId": "sha256:0dd45fd329d22e61634414fd6614b9b55a4649afb6a57ade5a3250edbd219734"
+          },
+          {
+            "variant": "warm",
+            "seconds": 7.522356602,
+            "imageId": "sha256:0dd45fd329d22e61634414fd6614b9b55a4649afb6a57ade5a3250edbd219734"
+          },
+          {
+            "variant": "changed",
+            "seconds": 26.370814164,
+            "imageId": "sha256:6801739937f17c00925df8161343f1443232a7801729c10ff531e0cf56254e2a"
+          }
+        ]
+      }
+    ],
+    "means": {
+      "plain": 29.82039157725,
+      "cold": 68.2571326065,
+      "warm": 7.92963336275,
+      "changed": 30.87632495575
+    },
+    "boundary": "Includes builder setup, cache export/import, image loading and inter-step overhead. Excludes post-build runtime acceptance. Each cold/warm/changed build uses a distinct builder; scopes are unique per trial. Cache hits confirmed in GitHub job logs."
+  },
+  "qualityLocal": {
+    "sequential": {
+      "schedule": "sequential",
+      "checks": ["build", "typecheck", "lint", "test", "format:check"],
+      "fixtures": [
+        {
+          "id": "missing-web-entry",
+          "file": "apps/web/index.html"
+        },
+        {
+          "id": "test-type-error",
+          "file": "apps/server/test/health.test.ts"
+        },
+        {
+          "id": "unused-variable",
+          "file": "apps/server/src/routes/health.ts"
+        },
+        {
+          "id": "wrong-http-status",
+          "file": "apps/server/src/routes/health.ts"
+        },
+        {
+          "id": "format-drift",
+          "file": "packages/tts-core/src/text.ts"
+        },
+        {
+          "id": "broken-doc-link",
+          "file": "README.md"
+        }
+      ],
+      "runs": [
+        {
+          "id": "baseline-before",
+          "results": [
+            {
+              "check": "build",
+              "passed": true,
+              "seconds": 3.58031779
+            },
+            {
+              "check": "typecheck",
+              "passed": true,
+              "seconds": 3.511542539
+            },
+            {
+              "check": "lint",
+              "passed": true,
+              "seconds": 9.13804298
+            },
+            {
+              "check": "test",
+              "passed": true,
+              "seconds": 12.885511732000003
+            },
+            {
+              "check": "format:check",
+              "passed": true,
+              "seconds": 2.645209874000004
+            }
+          ]
+        },
+        {
+          "id": "missing-web-entry",
+          "results": [
+            {
+              "check": "build",
+              "passed": false,
+              "seconds": 2.378602946999999
+            },
+            {
+              "check": "typecheck",
+              "passed": true,
+              "seconds": 3.5130580859999974
+            },
+            {
+              "check": "lint",
+              "passed": true,
+              "seconds": 8.945280638999996
+            },
+            {
+              "check": "test",
+              "passed": true,
+              "seconds": 12.894645724999995
+            },
+            {
+              "check": "format:check",
+              "passed": true,
+              "seconds": 2.6757017519999935
+            }
+          ]
+        },
+        {
+          "id": "test-type-error",
+          "results": [
+            {
+              "check": "build",
+              "passed": true,
+              "seconds": 3.4634593129999995
+            },
+            {
+              "check": "typecheck",
+              "passed": false,
+              "seconds": 3.5967897939999967
+            },
+            {
+              "check": "lint",
+              "passed": true,
+              "seconds": 8.557860815000007
+            },
+            {
+              "check": "test",
+              "passed": true,
+              "seconds": 12.860002504999997
+            },
+            {
+              "check": "format:check",
+              "passed": true,
+              "seconds": 2.6239620870000073
+            }
+          ]
+        },
+        {
+          "id": "unused-variable",
+          "results": [
+            {
+              "check": "build",
+              "passed": true,
+              "seconds": 3.4953139629999934
+            },
+            {
+              "check": "typecheck",
+              "passed": true,
+              "seconds": 3.6970782590000018
+            },
+            {
+              "check": "lint",
+              "passed": false,
+              "seconds": 8.692562980000002
+            },
+            {
+              "check": "test",
+              "passed": true,
+              "seconds": 12.734669213999995
+            },
+            {
+              "check": "format:check",
+              "passed": true,
+              "seconds": 2.743165937999991
+            }
+          ]
+        },
+        {
+          "id": "wrong-http-status",
+          "results": [
+            {
+              "check": "build",
+              "passed": true,
+              "seconds": 3.537311007000011
+            },
+            {
+              "check": "typecheck",
+              "passed": true,
+              "seconds": 3.588736670000013
+            },
+            {
+              "check": "lint",
+              "passed": true,
+              "seconds": 8.811615882999991
+            },
+            {
+              "check": "test",
+              "passed": false,
+              "seconds": 6.011855666999996
+            },
+            {
+              "check": "format:check",
+              "passed": true,
+              "seconds": 2.683118090000004
+            }
+          ]
+        },
+        {
+          "id": "format-drift",
+          "results": [
+            {
+              "check": "build",
+              "passed": true,
+              "seconds": 3.5401289530000066
+            },
+            {
+              "check": "typecheck",
+              "passed": true,
+              "seconds": 3.532426804000017
+            },
+            {
+              "check": "lint",
+              "passed": true,
+              "seconds": 8.405786790000013
+            },
+            {
+              "check": "test",
+              "passed": true,
+              "seconds": 13.002979911000002
+            },
+            {
+              "check": "format:check",
+              "passed": false,
+              "seconds": 2.725503009999986
+            }
+          ]
+        },
+        {
+          "id": "broken-doc-link",
+          "results": [
+            {
+              "check": "build",
+              "passed": true,
+              "seconds": 3.9588713260000223
+            },
+            {
+              "check": "typecheck",
+              "passed": true,
+              "seconds": 3.796239021000016
+            },
+            {
+              "check": "lint",
+              "passed": true,
+              "seconds": 8.13312134099999
+            },
+            {
+              "check": "test",
+              "passed": false,
+              "seconds": 11.74125435099998
+            },
+            {
+              "check": "format:check",
+              "passed": true,
+              "seconds": 2.80478968799999
+            }
+          ]
+        },
+        {
+          "id": "baseline-after",
+          "results": [
+            {
+              "check": "build",
+              "passed": true,
+              "seconds": 3.694146073000011
+            },
+            {
+              "check": "typecheck",
+              "passed": true,
+              "seconds": 3.7953131970000102
+            },
+            {
+              "check": "lint",
+              "passed": true,
+              "seconds": 9.07878359799998
+            },
+            {
+              "check": "test",
+              "passed": true,
+              "seconds": 13.14490821600001
+            },
+            {
+              "check": "format:check",
+              "passed": true,
+              "seconds": 2.8486298669999814
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "qualityRemoteSequential": {
+    "sourceCommit": "a322197f6b120f4a75ca839843110adbc91264b0",
+    "runs": {
+      "schedule": "sequential",
+      "checks": ["build", "typecheck", "lint", "test", "format:check"],
+      "fixtures": [
+        {
+          "id": "missing-web-entry",
+          "file": "apps/web/index.html"
+        },
+        {
+          "id": "test-type-error",
+          "file": "apps/server/test/health.test.ts"
+        },
+        {
+          "id": "unused-variable",
+          "file": "apps/server/src/routes/health.ts"
+        },
+        {
+          "id": "wrong-http-status",
+          "file": "apps/server/src/routes/health.ts"
+        },
+        {
+          "id": "format-drift",
+          "file": "packages/tts-core/src/text.ts"
+        },
+        {
+          "id": "broken-doc-link",
+          "file": "README.md"
+        }
+      ],
+      "runs": [
+        {
+          "id": "baseline-before",
+          "results": [
+            {
+              "check": "build",
+              "passed": true,
+              "seconds": 8.456966726000001
+            },
+            {
+              "check": "typecheck",
+              "passed": true,
+              "seconds": 8.290999215
+            },
+            {
+              "check": "lint",
+              "passed": true,
+              "seconds": 13.735727692000001
+            },
+            {
+              "check": "test",
+              "passed": true,
+              "seconds": 31.476488084999996
+            },
+            {
+              "check": "format:check",
+              "passed": true,
+              "seconds": 4.536076116999997
+            }
+          ]
+        },
+        {
+          "id": "missing-web-entry",
+          "results": [
+            {
+              "check": "build",
+              "passed": false,
+              "seconds": 5.427920293999996
+            },
+            {
+              "check": "typecheck",
+              "passed": true,
+              "seconds": 8.015033798999998
+            },
+            {
+              "check": "lint",
+              "passed": true,
+              "seconds": 13.2798885
+            },
+            {
+              "check": "test",
+              "passed": true,
+              "seconds": 29.947612913999997
+            },
+            {
+              "check": "format:check",
+              "passed": true,
+              "seconds": 4.42418432
+            }
+          ]
+        },
+        {
+          "id": "test-type-error",
+          "results": [
+            {
+              "check": "build",
+              "passed": true,
+              "seconds": 7.874605806000007
+            },
+            {
+              "check": "typecheck",
+              "passed": false,
+              "seconds": 8.356300064999989
+            },
+            {
+              "check": "lint",
+              "passed": true,
+              "seconds": 14.120955048999981
+            },
+            {
+              "check": "test",
+              "passed": true,
+              "seconds": 31.080710739
+            },
+            {
+              "check": "format:check",
+              "passed": true,
+              "seconds": 4.605119806999981
+            }
+          ]
+        },
+        {
+          "id": "unused-variable",
+          "results": [
+            {
+              "check": "build",
+              "passed": true,
+              "seconds": 7.8189832009999956
+            },
+            {
+              "check": "typecheck",
+              "passed": true,
+              "seconds": 8.24271188800002
+            },
+            {
+              "check": "lint",
+              "passed": false,
+              "seconds": 14.065085305999993
+            },
+            {
+              "check": "test",
+              "passed": true,
+              "seconds": 31.121550894999963
+            },
+            {
+              "check": "format:check",
+              "passed": true,
+              "seconds": 4.583364525000041
+            }
+          ]
+        },
+        {
+          "id": "wrong-http-status",
+          "results": [
+            {
+              "check": "build",
+              "passed": true,
+              "seconds": 8.01635978399997
+            },
+            {
+              "check": "typecheck",
+              "passed": true,
+              "seconds": 8.523792999999946
+            },
+            {
+              "check": "lint",
+              "passed": true,
+              "seconds": 14.166731509000005
+            },
+            {
+              "check": "test",
+              "passed": false,
+              "seconds": 18.436908654000028
+            },
+            {
+              "check": "format:check",
+              "passed": true,
+              "seconds": 4.5629100779999865
+            }
+          ]
+        },
+        {
+          "id": "format-drift",
+          "results": [
+            {
+              "check": "build",
+              "passed": true,
+              "seconds": 7.748161866999988
+            },
+            {
+              "check": "typecheck",
+              "passed": true,
+              "seconds": 8.27231182500004
+            },
+            {
+              "check": "lint",
+              "passed": true,
+              "seconds": 13.931153702999989
+            },
+            {
+              "check": "test",
+              "passed": true,
+              "seconds": 30.73077266700001
+            },
+            {
+              "check": "format:check",
+              "passed": false,
+              "seconds": 4.556789005000028
+            }
+          ]
+        },
+        {
+          "id": "broken-doc-link",
+          "results": [
+            {
+              "check": "build",
+              "passed": true,
+              "seconds": 7.873644872999983
+            },
+            {
+              "check": "typecheck",
+              "passed": true,
+              "seconds": 8.35381025899999
+            },
+            {
+              "check": "lint",
+              "passed": true,
+              "seconds": 13.871837622999971
+            },
+            {
+              "check": "test",
+              "passed": false,
+              "seconds": 29.496525464000005
+            },
+            {
+              "check": "format:check",
+              "passed": true,
+              "seconds": 4.603290908999974
+            }
+          ]
+        },
+        {
+          "id": "baseline-after",
+          "results": [
+            {
+              "check": "build",
+              "passed": true,
+              "seconds": 8.110371891000018
+            },
+            {
+              "check": "typecheck",
+              "passed": true,
+              "seconds": 8.41271657400002
+            },
+            {
+              "check": "lint",
+              "passed": true,
+              "seconds": 14.017047147999984
+            },
+            {
+              "check": "test",
+              "passed": true,
+              "seconds": 31.197085644999984
+            },
+            {
+              "check": "format:check",
+              "passed": true,
+              "seconds": 4.621114355000085
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "rejectedFourWay": {
+    "workflowRun": "https://github.com/DejavuMoe/edgeTTS/actions/runs/40118913308",
+    "jobId": 120945987922,
+    "artifactId": 12570123807,
+    "artifactSha256": "59b71016d705b7bc515a8252a2218428a79f55f95ac58742f1f400dfe29e9074",
+    "outcome": "First remote clean baseline failed: client-protocol.test.ts backpressure test exceeded its unchanged 5000 ms timeout. No valid remote speedup or full defect acceptance can be claimed for this candidate.",
+    "local": {
+      "schedule": "build-then-parallel",
+      "checks": ["ci:parallel"],
+      "fixtures": [
+        {
+          "id": "missing-web-entry",
+          "file": "apps/web/index.html"
+        },
+        {
+          "id": "test-type-error",
+          "file": "apps/server/test/health.test.ts"
+        },
+        {
+          "id": "unused-variable",
+          "file": "apps/server/src/routes/health.ts"
+        },
+        {
+          "id": "wrong-http-status",
+          "file": "apps/server/src/routes/health.ts"
+        },
+        {
+          "id": "format-drift",
+          "file": "packages/tts-core/src/text.ts"
+        },
+        {
+          "id": "broken-doc-link",
+          "file": "README.md"
+        }
+      ],
+      "runs": [
+        {
+          "id": "baseline-before",
+          "results": [
+            {
+              "check": "ci:parallel",
+              "passed": true,
+              "seconds": 21.271333353000003
+            }
+          ]
+        },
+        {
+          "id": "missing-web-entry",
+          "results": [
+            {
+              "check": "ci:parallel",
+              "passed": false,
+              "seconds": 2.562259306
+            }
+          ]
+        },
+        {
+          "id": "test-type-error",
+          "results": [
+            {
+              "check": "ci:parallel",
+              "passed": false,
+              "seconds": 21.472365926000002
+            }
+          ]
+        },
+        {
+          "id": "unused-variable",
+          "results": [
+            {
+              "check": "ci:parallel",
+              "passed": false,
+              "seconds": 22.634470776
+            }
+          ]
+        },
+        {
+          "id": "wrong-http-status",
+          "results": [
+            {
+              "check": "ci:parallel",
+              "passed": false,
+              "seconds": 19.522907286999995
+            }
+          ]
+        },
+        {
+          "id": "format-drift",
+          "results": [
+            {
+              "check": "ci:parallel",
+              "passed": false,
+              "seconds": 20.308337178000002
+            }
+          ]
+        },
+        {
+          "id": "broken-doc-link",
+          "results": [
+            {
+              "check": "ci:parallel",
+              "passed": false,
+              "seconds": 19.45170739400001
+            }
+          ]
+        },
+        {
+          "id": "baseline-after",
+          "results": [
+            {
+              "check": "ci:parallel",
+              "passed": true,
+              "seconds": 20.326387476000004
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "qualityBounded": {
+    "sourceCommit": "708f881621ea23c563e1f92183a040dbc60b90d5",
+    "workflowRun": "https://github.com/DejavuMoe/edgeTTS/actions/runs/40120458859",
+    "local": {
+      "schedule": "build-static-parallel-test",
+      "command": "pnpm build && concurrently --names typecheck,lint,format \"pnpm typecheck\" \"pnpm lint\" \"pnpm format:check\" && pnpm test",
+      "checks": ["ci:parallel"],
+      "fixtures": [
+        {
+          "id": "missing-web-entry",
+          "file": "apps/web/index.html"
+        },
+        {
+          "id": "test-type-error",
+          "file": "apps/server/test/health.test.ts"
+        },
+        {
+          "id": "unused-variable",
+          "file": "apps/server/src/routes/health.ts"
+        },
+        {
+          "id": "wrong-http-status",
+          "file": "apps/server/src/routes/health.ts"
+        },
+        {
+          "id": "format-drift",
+          "file": "packages/tts-core/src/text.ts"
+        },
+        {
+          "id": "broken-doc-link",
+          "file": "README.md"
+        }
+      ],
+      "runs": [
+        {
+          "id": "baseline-before",
+          "results": [
+            {
+              "check": "ci:parallel",
+              "passed": true,
+              "seconds": 25.50279972
+            }
+          ]
+        },
+        {
+          "id": "missing-web-entry",
+          "results": [
+            {
+              "check": "ci:parallel",
+              "passed": false,
+              "seconds": 2.590532101000001
+            }
+          ]
+        },
+        {
+          "id": "test-type-error",
+          "results": [
+            {
+              "check": "ci:parallel",
+              "passed": false,
+              "seconds": 13.158029374999998
+            }
+          ]
+        },
+        {
+          "id": "unused-variable",
+          "results": [
+            {
+              "check": "ci:parallel",
+              "passed": false,
+              "seconds": 12.891485562000002
+            }
+          ]
+        },
+        {
+          "id": "wrong-http-status",
+          "results": [
+            {
+              "check": "ci:parallel",
+              "passed": false,
+              "seconds": 18.840669265000002
+            }
+          ]
+        },
+        {
+          "id": "format-drift",
+          "results": [
+            {
+              "check": "ci:parallel",
+              "passed": false,
+              "seconds": 12.711832101000008
+            }
+          ]
+        },
+        {
+          "id": "broken-doc-link",
+          "results": [
+            {
+              "check": "ci:parallel",
+              "passed": false,
+              "seconds": 24.39615025600001
+            }
+          ]
+        },
+        {
+          "id": "baseline-after",
+          "results": [
+            {
+              "check": "ci:parallel",
+              "passed": true,
+              "seconds": 25.654509556999997
+            }
+          ]
+        }
+      ]
+    },
+    "remote": {
+      "sequential": {
+        "schedule": "sequential",
+        "command": null,
+        "checks": ["build", "typecheck", "lint", "test", "format:check"],
+        "fixtures": [
+          {
+            "id": "missing-web-entry",
+            "file": "apps/web/index.html"
+          },
+          {
+            "id": "test-type-error",
+            "file": "apps/server/test/health.test.ts"
+          },
+          {
+            "id": "unused-variable",
+            "file": "apps/server/src/routes/health.ts"
+          },
+          {
+            "id": "wrong-http-status",
+            "file": "apps/server/src/routes/health.ts"
+          },
+          {
+            "id": "format-drift",
+            "file": "packages/tts-core/src/text.ts"
+          },
+          {
+            "id": "broken-doc-link",
+            "file": "README.md"
+          }
+        ],
+        "runs": [
+          {
+            "id": "baseline-before",
+            "results": [
+              {
+                "check": "build",
+                "passed": true,
+                "seconds": 7.563559717
+              },
+              {
+                "check": "typecheck",
+                "passed": true,
+                "seconds": 7.928532775999998
+              },
+              {
+                "check": "lint",
+                "passed": true,
+                "seconds": 13.402912046
+              },
+              {
+                "check": "test",
+                "passed": true,
+                "seconds": 29.592099889
+              },
+              {
+                "check": "format:check",
+                "passed": true,
+                "seconds": 4.38143434
+              }
+            ]
+          },
+          {
+            "id": "missing-web-entry",
+            "results": [
+              {
+                "check": "build",
+                "passed": false,
+                "seconds": 5.349789468000003
+              },
+              {
+                "check": "typecheck",
+                "passed": true,
+                "seconds": 7.993340962999995
+              },
+              {
+                "check": "lint",
+                "passed": true,
+                "seconds": 13.317881817000002
+              },
+              {
+                "check": "test",
+                "passed": true,
+                "seconds": 29.729468685
+              },
+              {
+                "check": "format:check",
+                "passed": true,
+                "seconds": 4.307858523000003
+              }
+            ]
+          },
+          {
+            "id": "test-type-error",
+            "results": [
+              {
+                "check": "build",
+                "passed": true,
+                "seconds": 7.654600162999995
+              },
+              {
+                "check": "typecheck",
+                "passed": false,
+                "seconds": 7.97671680200001
+              },
+              {
+                "check": "lint",
+                "passed": true,
+                "seconds": 13.239780736999993
+              },
+              {
+                "check": "test",
+                "passed": true,
+                "seconds": 29.290545352999995
+              },
+              {
+                "check": "format:check",
+                "passed": true,
+                "seconds": 4.298455222999997
+              }
+            ]
+          },
+          {
+            "id": "unused-variable",
+            "results": [
+              {
+                "check": "build",
+                "passed": true,
+                "seconds": 7.596674827999989
+              },
+              {
+                "check": "typecheck",
+                "passed": true,
+                "seconds": 8.090639934000006
+              },
+              {
+                "check": "lint",
+                "passed": false,
+                "seconds": 13.320849004999996
+              },
+              {
+                "check": "test",
+                "passed": true,
+                "seconds": 29.280591010000002
+              },
+              {
+                "check": "format:check",
+                "passed": true,
+                "seconds": 4.371604822999973
+              }
+            ]
+          },
+          {
+            "id": "wrong-http-status",
+            "results": [
+              {
+                "check": "build",
+                "passed": true,
+                "seconds": 7.508738445999974
+              },
+              {
+                "check": "typecheck",
+                "passed": true,
+                "seconds": 8.051663217999973
+              },
+              {
+                "check": "lint",
+                "passed": true,
+                "seconds": 13.281524337999988
+              },
+              {
+                "check": "test",
+                "passed": false,
+                "seconds": 17.978005723000038
+              },
+              {
+                "check": "format:check",
+                "passed": true,
+                "seconds": 4.296569421000022
+              }
+            ]
+          },
+          {
+            "id": "format-drift",
+            "results": [
+              {
+                "check": "build",
+                "passed": true,
+                "seconds": 7.57488560899999
+              },
+              {
+                "check": "typecheck",
+                "passed": true,
+                "seconds": 8.004332629000011
+              },
+              {
+                "check": "lint",
+                "passed": true,
+                "seconds": 13.201279717999975
+              },
+              {
+                "check": "test",
+                "passed": true,
+                "seconds": 29.501771026999982
+              },
+              {
+                "check": "format:check",
+                "passed": false,
+                "seconds": 4.403587748999999
+              }
+            ]
+          },
+          {
+            "id": "broken-doc-link",
+            "results": [
+              {
+                "check": "build",
+                "passed": true,
+                "seconds": 7.6593771790000025
+              },
+              {
+                "check": "typecheck",
+                "passed": true,
+                "seconds": 7.933599166000029
+              },
+              {
+                "check": "lint",
+                "passed": true,
+                "seconds": 13.14811443299998
+              },
+              {
+                "check": "test",
+                "passed": false,
+                "seconds": 27.817499998999992
+              },
+              {
+                "check": "format:check",
+                "passed": true,
+                "seconds": 4.3243300380000145
+              }
+            ]
+          },
+          {
+            "id": "baseline-after",
+            "results": [
+              {
+                "check": "build",
+                "passed": true,
+                "seconds": 7.6475845399999525
+              },
+              {
+                "check": "typecheck",
+                "passed": true,
+                "seconds": 8.070423196999997
+              },
+              {
+                "check": "lint",
+                "passed": true,
+                "seconds": 13.356339686000021
+              },
+              {
+                "check": "test",
+                "passed": true,
+                "seconds": 29.579333424000012
+              },
+              {
+                "check": "format:check",
+                "passed": true,
+                "seconds": 4.335423597999965
+              }
+            ]
+          }
+        ]
+      },
+      "parallel": {
+        "schedule": "build-static-parallel-test",
+        "command": "pnpm build && concurrently --names typecheck,lint,format \"pnpm typecheck\" \"pnpm lint\" \"pnpm format:check\" && pnpm test",
+        "checks": ["ci:parallel"],
+        "fixtures": [
+          {
+            "id": "missing-web-entry",
+            "file": "apps/web/index.html"
+          },
+          {
+            "id": "test-type-error",
+            "file": "apps/server/test/health.test.ts"
+          },
+          {
+            "id": "unused-variable",
+            "file": "apps/server/src/routes/health.ts"
+          },
+          {
+            "id": "wrong-http-status",
+            "file": "apps/server/src/routes/health.ts"
+          },
+          {
+            "id": "format-drift",
+            "file": "packages/tts-core/src/text.ts"
+          },
+          {
+            "id": "broken-doc-link",
+            "file": "README.md"
+          }
+        ],
+        "runs": [
+          {
+            "id": "baseline-before",
+            "results": [
+              {
+                "check": "ci:parallel",
+                "passed": true,
+                "seconds": 58.457746596999996
+              }
+            ]
+          },
+          {
+            "id": "missing-web-entry",
+            "results": [
+              {
+                "check": "ci:parallel",
+                "passed": false,
+                "seconds": 5.422576760000004
+              }
+            ]
+          },
+          {
+            "id": "test-type-error",
+            "results": [
+              {
+                "check": "ci:parallel",
+                "passed": false,
+                "seconds": 28.81302609
+              }
+            ]
+          },
+          {
+            "id": "unused-variable",
+            "results": [
+              {
+                "check": "ci:parallel",
+                "passed": false,
+                "seconds": 28.575156573
+              }
+            ]
+          },
+          {
+            "id": "wrong-http-status",
+            "results": [
+              {
+                "check": "ci:parallel",
+                "passed": false,
+                "seconds": 46.66423819599999
+              }
+            ]
+          },
+          {
+            "id": "format-drift",
+            "results": [
+              {
+                "check": "ci:parallel",
+                "passed": false,
+                "seconds": 29.15876466300001
+              }
+            ]
+          },
+          {
+            "id": "broken-doc-link",
+            "results": [
+              {
+                "check": "ci:parallel",
+                "passed": false,
+                "seconds": 56.874711087999984
+              }
+            ]
+          },
+          {
+            "id": "baseline-after",
+            "results": [
+              {
+                "check": "ci:parallel",
+                "passed": true,
+                "seconds": 57.40753443900001
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "summary": {
+      "sequential": {
+        "cleanSeconds": [62.86853876799999, 62.989104444999946],
+        "meanSeconds": 62.928821606499966,
+        "caught": 6,
+        "total": 6
+      },
+      "parallel": {
+        "cleanSeconds": [58.457746596999996, 57.40753443900001],
+        "meanSeconds": 57.932640518,
+        "caught": 6,
+        "total": 6
+      },
+      "savedSeconds": 4.9961810884999664,
+      "savedPercent": 7.939416249904649
+    }
+  },
+  "replication": {
+    "sourceCommit": "708f881621ea23c563e1f92183a040dbc60b90d5",
+    "workflowRun": "https://github.com/DejavuMoe/edgeTTS/actions/runs/40120458859",
+    "modes": {
+      "codeql": {
+        "mode": "codeql",
+        "completed": true,
+        "timestamp": "2026-10-24T18:27:29.290Z",
+        "node": "v24.21.0",
+        "runs": [
+          {
+            "id": "version",
+            "status": 0,
+            "seconds": 0.632378515
+          },
+          {
+            "id": "javascript-clean-before-extract",
+            "status": 0,
+            "seconds": 6.866177769
+          },
+          {
+            "id": "javascript-clean-before-analyze",
+            "status": 0,
+            "seconds": 26.432152017999996,
+            "findings": [],
+            "blocked": []
+          },
+          {
+            "id": "javascript-command-injection-extract",
+            "status": 0,
+            "seconds": 6.848997385999995
+          },
+          {
+            "id": "javascript-command-injection-analyze",
+            "status": 0,
+            "seconds": 26.452387207,
+            "findings": ["js/command-line-injection"],
+            "blocked": ["js/command-line-injection"]
+          },
+          {
+            "id": "javascript-log-injection-extract",
+            "status": 0,
+            "seconds": 6.796588950999998
+          },
+          {
+            "id": "javascript-log-injection-analyze",
+            "status": 0,
+            "seconds": 26.630004971999995,
+            "findings": ["js/log-injection"],
+            "blocked": []
+          },
+          {
+            "id": "javascript-clean-after-extract",
+            "status": 0,
+            "seconds": 6.917352449999991
+          },
+          {
+            "id": "javascript-clean-after-analyze",
+            "status": 0,
+            "seconds": 25.535033855000002,
+            "findings": [],
+            "blocked": []
+          },
+          {
+            "id": "actions-clean-before-extract",
+            "status": 0,
+            "seconds": 3.761234433000005
+          },
+          {
+            "id": "actions-clean-before-analyze",
+            "status": 0,
+            "seconds": 10.241592119999986,
+            "findings": [],
+            "blocked": []
+          },
+          {
+            "id": "actions-seeded-extract",
+            "status": 0,
+            "seconds": 3.7399710649999904
+          },
+          {
+            "id": "actions-seeded-analyze",
+            "status": 0,
+            "seconds": 10.227506141999998,
+            "findings": ["actions/code-injection/critical"],
+            "blocked": ["actions/code-injection/critical"]
+          },
+          {
+            "id": "actions-restricted-token-extract",
+            "status": 0,
+            "seconds": 3.816408471999981
+          },
+          {
+            "id": "actions-restricted-token-analyze",
+            "status": 0,
+            "seconds": 10.495321220000012,
+            "findings": ["actions/code-injection/medium"],
+            "blocked": []
+          },
+          {
+            "id": "actions-clean-after-extract",
+            "status": 0,
+            "seconds": 3.7491417089999888
+          },
+          {
+            "id": "actions-clean-after-analyze",
+            "status": 0,
+            "seconds": 10.200330703999994,
+            "findings": [],
+            "blocked": []
+          }
+        ]
+      },
+      "dependencies": {
+        "mode": "dependencies",
+        "completed": true,
+        "timestamp": "2026-10-24T18:23:27.700Z",
+        "node": "v24.21.0",
+        "runs": [
+          {
+            "id": "pnpm-version",
+            "status": 0,
+            "seconds": 0.009164127000000001
+          },
+          {
+            "id": "clean-before-lock",
+            "status": 0,
+            "seconds": 0.112243396
+          },
+          {
+            "id": "clean-before-audit",
+            "status": 0,
+            "seconds": 0.15128994999999998,
+            "advisories": []
+          },
+          {
+            "id": "runtime-vulnerable-lock",
+            "status": 0,
+            "seconds": 0.022082861000000037
+          },
+          {
+            "id": "runtime-vulnerable-audit",
+            "status": 1,
+            "seconds": 0.17451491200000005,
+            "advisories": [
+              {
+                "github_advisory_id": "GHSA-w7jw-789q-3m8p",
+                "severity": "critical",
+                "vulnerable_versions": ">=1.1.0 <=1.8.3"
+              },
+              {
+                "github_advisory_id": "GHSA-395f-4hp3-45gv",
+                "severity": "high",
+                "vulnerable_versions": "<=1.8.4"
+              }
+            ]
+          },
+          {
+            "id": "development-vulnerable-lock",
+            "status": 0,
+            "seconds": 0.021737418000000047
+          },
+          {
+            "id": "development-vulnerable-audit",
+            "status": 1,
+            "seconds": 0.16447211000000003,
+            "advisories": [
+              {
+                "github_advisory_id": "GHSA-w7jw-789q-3m8p",
+                "severity": "critical",
+                "vulnerable_versions": ">=1.1.0 <=1.8.3"
+              },
+              {
+                "github_advisory_id": "GHSA-395f-4hp3-45gv",
+                "severity": "high",
+                "vulnerable_versions": "<=1.8.4"
+              }
+            ]
+          },
+          {
+            "id": "development-vulnerable-prod-only",
+            "status": 0,
+            "seconds": 0.15323705199999996
+          },
+          {
+            "id": "clean-after-lock",
+            "status": 0,
+            "seconds": 0.08767561599999998
+          },
+          {
+            "id": "clean-after-audit",
+            "status": 0,
+            "seconds": 0.14080306899999995,
+            "advisories": []
+          }
+        ]
+      },
+      "deployment": {
+        "mode": "deployment",
+        "completed": true,
+        "timestamp": "2026-10-24T18:24:11.342Z",
+        "node": "v24.21.0",
+        "runs": [
+          {
+            "id": "docker-clean-before",
+            "status": 0,
+            "seconds": 0.47891680400000003
+          },
+          {
+            "id": "docker-root-user",
+            "status": 1,
+            "seconds": 0.252948501
+          },
+          {
+            "id": "writable-image-build",
+            "status": 0,
+            "seconds": 1.0748916830000002
+          },
+          {
+            "id": "docker-writable-code",
+            "status": 1,
+            "seconds": 0.22786379199999987
+          },
+          {
+            "id": "docker-clean-after",
+            "status": 0,
+            "seconds": 0.5322115859999998
+          },
+          {
+            "id": "node-proxy-control",
+            "status": 0,
+            "seconds": 0.7402572000000001
+          },
+          {
+            "id": "bun-proxy-control",
+            "status": 0,
+            "seconds": 0.763935735
+          },
+          {
+            "id": "proxy-image-build",
+            "status": 0,
+            "seconds": 0.7298814749999992
+          },
+          {
+            "id": "node-proxy-no-bypass",
+            "status": 1,
+            "seconds": 0.23108026400000017
+          },
+          {
+            "id": "bun-proxy-no-bypass",
+            "status": 1,
+            "seconds": 0.41473960799999987
+          },
+          {
+            "id": "node-proxy-control-after",
+            "status": 0,
+            "seconds": 0.7428698260000001
+          },
+          {
+            "id": "bun-proxy-control-after",
+            "status": 0,
+            "seconds": 0.7011477049999995
+          },
+          {
+            "id": "nginx-clean-before",
+            "status": 0,
+            "seconds": 4.092081612
+          },
+          {
+            "id": "nginx-buffering-on",
+            "status": 1,
+            "seconds": 0.020604056000000127
+          },
+          {
+            "id": "nginx-wrong-upstream-uri",
+            "status": 1,
+            "seconds": 4.889428830999999
+          },
+          {
+            "id": "nginx-clean-after",
+            "status": 0,
+            "seconds": 2.2092792039999987
+          }
+        ]
+      }
+    }
+  }
+}

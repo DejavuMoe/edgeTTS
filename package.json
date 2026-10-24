@@ -16,6 +16,8 @@
     "test": "pnpm -r test && pnpm test:architecture && pnpm test:docs && pnpm test:deployment && pnpm test:release && pnpm test:security",
     "test:security": "node --test tests/security-tooling.test.mjs",
     "experiment:ci": "node scripts/ci-ablation.mjs",
+    "experiment:ci:extended": "node scripts/ci-ablation-extended.mjs",
+    "ci:parallel": "pnpm build && concurrently --names typecheck,lint,format \"pnpm typecheck\" \"pnpm lint\" \"pnpm format:check\" && pnpm test",
     "test:architecture": "node --test tests/architecture-boundaries.test.mjs",
     "test:docs": "node --test tests/docs-consistency.test.mjs",
     "test:deployment": "node --test tests/deployment-contract.test.mjs",

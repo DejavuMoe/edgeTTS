@@ -139,7 +139,7 @@ async function runSmoke(): Promise<void> {
   console.log("PASS");
 }
 
-runSmoke().catch((err: unknown) => {
-  console.error("TTS Service smoke test FAILED:", err);
+runSmoke().catch(() => {
+  console.error("TTS Service smoke test FAILED: upstream error details withheld.");
   process.exit(1);
 });
