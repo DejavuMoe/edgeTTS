@@ -220,7 +220,7 @@ async function runSmoke(): Promise<void> {
   }
 }
 
-runSmoke().catch((err: unknown) => {
-  console.error("Server HTTP smoke test FAILED:", err);
+runSmoke().catch(() => {
+  console.error("Server HTTP smoke test FAILED: upstream error details withheld.");
   process.exit(1);
 });

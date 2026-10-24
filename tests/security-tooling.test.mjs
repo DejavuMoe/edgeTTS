@@ -6,8 +6,38 @@ import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import process from "node:process";
+import { runInNewContext } from "node:vm";
 import { blockingFindings } from "../scripts/security/codeql-gate.mjs";
 import { manifestsFromPnpm } from "../scripts/security/dependency-snapshot.mjs";
+
+for (const file of [
+  "packages/edge-provider/scripts/smoke.ts",
+  "packages/tts-service/scripts/smoke.ts",
+  "apps/server/scripts/smoke.ts",
+  "packages/tts-service/scripts/bench.ts",
+]) {
+  test(`${file}: upstream failure stays nonzero without leaking the rejection`, async () => {
+    const source = readFileSync(new URL(`../${file}`, import.meta.url), "utf8");
+    const start = source.search(/(?:runSmoke|main)\(\)\.catch\(/u);
+    assert.ok(start > 0, "exercise the actual terminal failure handler");
+    for (const rejection of [new Error("secret-token\r\nFORGED SUCCESS"), "private speech text"]) {
+      const messages = [];
+      const exits = [];
+      const processStub = { exit: (status) => exits.push(status) };
+      await runInNewContext(source.slice(start), {
+        runSmoke: () => Promise.reject(rejection),
+        main: () => Promise.reject(rejection),
+        console: { error: (...args) => messages.push(args) },
+        process: processStub,
+      });
+      assert.deepEqual(exits.length ? exits : [processStub.exitCode], [1]);
+      assert.equal(messages.length, 1);
+      assert.equal(messages[0].length, 1);
+      assert.match(messages[0][0], /FAILED/);
+      assert.doesNotMatch(messages[0][0], /secret-token|FORGED|private speech|[\r\n]/);
+    }
+  });
+}
 
 test("workflows pin external actions and keep publication behind CodeQL", () => {
   const directory = new URL("../.github/workflows/", import.meta.url);

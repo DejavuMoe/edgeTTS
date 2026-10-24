@@ -89,3 +89,34 @@ real-world security coverage, and overlapping detections do not justify deleting
 a check. Build outputs are prerequisites for later checks: omitting the build
 verdict does not permit deleting all build execution, so reported omitted-command
 time is only an upper bound on potential savings.
+
+The extended manual workflow also runs real CodeQL 2.27.3 scans, isolated pnpm
+audits and deployment canaries. Reproduce them with
+`pnpm experiment:ci:extended codeql|dependencies|deployment` (choose one mode).
+CodeQL needs an absolute `CODEQL` executable path; deployment needs a freshly
+built `EDGETTS_TEST_IMAGE` and `pnpm build`. Results, scanner SARIF and logs are
+saved under `coverage/ci-extended/`. Canary source is generated in disposable
+directories, never executed, never published as an image and never uploaded to
+the repository's code-scanning baseline. Clean controls bracket the defects;
+timeouts, infrastructure failures and unexpected findings fail the experiment.
+
+JavaScript command/log injection and Actions expression injection distinguish
+scanner detection from the existing high/critical blocking policy. Runtime and
+development dependency canaries use a known vulnerable `shell-quote` release,
+with a patched control; narrowing the audit to production must miss the seeded
+development dependency. Docker canaries exercise root execution and writable
+application code. Nginx canaries exercise buffering and incorrect upstream URI
+routing, including a real HTTPS streaming assertion. These are representative
+checks, not an exhaustive vulnerability corpus or proof of native pnpm 12
+Dependency Review coverage. A disabled `NO_PROXY` bypass is checked separately
+on Node and the production Bun runtime, with clean controls on both.
+
+`pnpm experiment:ci --parallel` repeats the six quality fixtures using the actual
+`ci:parallel` command: build first, then typecheck, lint, tests and formatting
+together. `concurrently` waits for every process and returns failure if any fails.
+The manual workflow compares this with sequential execution on the same runner.
+Two independent GHA cache trials compare fresh builds, cold cache export, warm
+cache import into a different builder, and source-change invalidation. All images
+run the existing isolated runtime contract; unchanged cold/warm image IDs must
+match and the changed source must appear in the rebuilt image. No experiment
+removes a production check or automatically enables an optimization.
