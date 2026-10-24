@@ -66,23 +66,12 @@ jobs:
       - name: Audit all dependencies
         run: pnpm audit --audit-level high
 
-      - name: Build workspace packages & apps
-        run: pnpm build
-
-      - name: TypeScript typecheck
-        run: pnpm typecheck
-
-      - name: ESLint check
-        run: pnpm lint
-
-      - name: Run unit & integration test suites
-        run: pnpm test
+      # Build artifacts first; tests keep the runner after the static checks finish.
+      - name: Build, parallel static checks, then unit and integration tests
+        run: pnpm ci:parallel
 
       - name: Test upstream proxy routing and cancellation on Node
         run: timeout 45s bash tests/provider-proxy.sh
-
-      - name: Prettier formatting check
-        run: pnpm format:check
 
       - name: Git diff & tree cleanliness check
         run: |
