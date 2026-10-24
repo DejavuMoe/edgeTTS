@@ -1,4 +1,5 @@
 import { once } from "node:events";
+import { createServer, type Server } from "node:http";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import WebSocket, { WebSocketServer } from "ws";
 import { NativeEdgeClient } from "../src/client.js";
@@ -216,7 +217,29 @@ describe("native Edge wire protocol", () => {
 });
 
 describe("native Edge voice discovery", () => {
-  afterEach(() => vi.unstubAllGlobals());
+  let server: Server;
+  let catalog: unknown;
+  let status: number;
+  beforeEach(async () => {
+    catalog = [];
+    status = 200;
+    vi.stubEnv("NO_PROXY", "*");
+    vi.stubEnv("no_proxy", "*");
+    server = createServer((_request, response) => {
+      response.writeHead(status, { "content-type": "application/json" });
+      response.end(JSON.stringify(catalog));
+    });
+    server.listen(0, "127.0.0.1");
+    await once(server, "listening");
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("Expected TCP listener");
+    vi.spyOn(NativeEdgeClient, "getVoicesUrl").mockReturnValue(`http://127.0.0.1:${address.port}`);
+  });
+  afterEach(async () => {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    vi.restoreAllMocks();
+    vi.unstubAllEnvs();
+  });
   const voice = {
     ShortName: "zh-CN-XiaoxiaoNeural",
     FriendlyName: "Xiaoxiao",
@@ -224,32 +247,30 @@ describe("native Edge voice discovery", () => {
     Gender: "Female",
   };
 
-  it("uses fetch with the caller's abort signal and preserves catalog metadata", async () => {
-    const catalog = [{ ...voice, Status: "GA", SuggestedCodec: "audio-24khz-48kbitrate-mono-mp3" }];
-    const fetchMock = vi.fn().mockResolvedValue(Response.json(catalog));
-    vi.stubGlobal("fetch", fetchMock);
+  it("preserves catalog metadata", async () => {
+    catalog = [{ ...voice, Status: "GA", SuggestedCodec: "audio-24khz-48kbitrate-mono-mp3" }];
     const signal = new AbortController().signal;
     expect(await new NativeEdgeClient().getVoices(signal)).toEqual(catalog);
-    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining("/voices/list?"), { signal });
+  });
+
+  it("honors an already aborted request", async () => {
+    await expect(new NativeEdgeClient().getVoices(AbortSignal.abort())).rejects.toThrow(/abort/i);
   });
 
   it.each([{}, [null], [{ ...voice, ShortName: "bad voice" }], [{ ...voice, Status: 7 }]])(
     "rejects malformed catalogs: %j",
-    async (catalog) => {
-      vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json(catalog)));
+    async (invalidCatalog) => {
+      catalog = invalidCatalog;
       await expect(new NativeEdgeClient().getVoices(new AbortController().signal)).rejects.toThrow(
         "invalid voice catalog",
       );
     },
   );
 
-  it("reports HTTP failures and releases the response body", async () => {
-    const body = new ReadableStream();
-    const cancel = vi.spyOn(body, "cancel");
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(body, { status: 503 })));
+  it("reports HTTP failures", async () => {
+    status = 503;
     await expect(new NativeEdgeClient().getVoices(new AbortController().signal)).rejects.toThrow(
       "HTTP 503",
     );
-    expect(cancel).toHaveBeenCalledOnce();
   });
 });

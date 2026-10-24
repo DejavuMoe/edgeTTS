@@ -30,7 +30,7 @@ Internet (Clients / Browsers / API Consumers)
 - **Bare-Metal Deployment**: Node.js 24 LTS and pnpm 12.3.4.
 - **Network Egress**: Outbound HTTPS (TCP port 443) connectivity to Microsoft Edge TTS upstream endpoints.
 
-The container runs on Bun 1.4.2. Node.js and pnpm are used for source builds and bare-metal
+The container runs on Bun 1.4.4. Node.js and pnpm are used for source builds and bare-metal
 deployments; no host JavaScript runtime is needed for Docker. API routes, environment variables
 and the container's UID/GID 1000 remain the same.
 
@@ -41,7 +41,7 @@ Runs the published multi-architecture image without cloning or building the sour
 ```yaml
 services:
   edgetts:
-    image: ghcr.io/dejavumoe/edgetts:1.0.0
+    image: ghcr.io/dejavumoe/edgetts:1.0.1
     container_name: edgetts
     restart: unless-stopped
     init: true
@@ -107,7 +107,7 @@ docker run -d \
   -p 127.0.0.1:8080:8080 \
   -e API_KEY="$API_KEY" \
   -e REQUIRE_API_KEY=true \
-  ghcr.io/dejavumoe/edgetts:1.0.0
+  ghcr.io/dejavumoe/edgetts:1.0.1
 ```
 
 ### Security Flags Explained
@@ -128,7 +128,7 @@ Official multi-architecture images support `linux/amd64` and `linux/arm64`.
 
 | Image Tag                                   | Description                                 | Use Case                                  |
 | :------------------------------------------ | :------------------------------------------ | :---------------------------------------- |
-| `ghcr.io/dejavumoe/edgetts:1.0.0`           | Exact stable SemVer release                 | Production standard                       |
+| `ghcr.io/dejavumoe/edgetts:1.0.1`           | Exact stable SemVer release                 | Production standard                       |
 | `ghcr.io/dejavumoe/edgetts:latest`          | Tracks the highest published stable release | Automatic update environments             |
 | `ghcr.io/dejavumoe/edgetts:master`          | Continuous snapshot built from `master`     | Testing latest fixes                      |
 | `ghcr.io/dejavumoe/edgetts@sha256:<digest>` | Content-addressed immutable image           | Mission-critical reproducible deployments |
@@ -252,7 +252,7 @@ sudo systemctl status edgetts
 
 ## Upgrades and Maintenance
 
-First change `image:` in `compose.yaml` to the desired published version or digest. `docker compose pull` only pulls the configured reference; it does not advance a pinned `1.0.0` to another version. Keep `.env` and the previous image reference.
+First change `image:` in `compose.yaml` to the desired published version or digest. `docker compose pull` only pulls the configured reference; it does not advance a pinned `1.0.1` to another version. Keep `.env` and the previous image reference.
 
 ```bash
 cd ~/edgetts

@@ -85,24 +85,30 @@ describe("speech route domain error mapping", () => {
     });
   });
 
-  it.each(REQUESTS)("finishes an empty audio stream on $url", async (request) => {
-    app = createApp({
-      ttsService: {
-        ...failingService(new Error("unexpected setup failure")),
-        synthesizeSegmented: async () => ({
-          format: "mp3-48k",
-          contentType: "audio/mpeg",
-          segmentCount: 1,
-          audio: (async function* () {
-            yield* [];
-          })(),
-        }),
-      },
-    });
+  it.each(REQUESTS)(
+    "rejects an empty audio stream on $url before success headers",
+    async (request) => {
+      app = createApp({
+        ttsService: {
+          ...failingService(new Error("unexpected setup failure")),
+          synthesizeSegmented: async () => ({
+            format: "mp3-48k",
+            contentType: "audio/mpeg",
+            segmentCount: 1,
+            audio: (async function* () {
+              yield* [];
+            })(),
+          }),
+        },
+      });
 
-    const response = await app.inject({ method: "POST", ...request });
+      const response = await app.inject({ method: "POST", ...request });
 
-    expect(response.statusCode).toBe(200);
-    expect(response.payload).toBe("");
-  });
+      expect(response.statusCode).toBe(502);
+      expect(response.headers["content-type"]).toContain("application/json");
+      expect(response.json()).toEqual({
+        error: { code: "UPSTREAM_ERROR", message: "Unable to synthesize speech" },
+      });
+    },
+  );
 });

@@ -51,6 +51,22 @@ These variables configure host-side container port binding in `compose.yaml`:
 | `EDGETTS_BIND_ADDRESS` | Host IP address for container port forwarding | `127.0.0.1` |
 | `EDGETTS_HOST_PORT`    | Host port mapped to container port 8080       | `8080`      |
 
+## Outbound Microsoft Proxy
+
+Voice discovery and synthesis both support HTTP/HTTPS CONNECT proxies on Node and in the official Bun image. Set `HTTPS_PROXY` (preferred) or `HTTP_PROXY` (fallback) to a full `http://` or `https://` URL. Non-empty lowercase equivalents take precedence over their uppercase counterpart. URL credentials support Basic proxy authentication; percent-encode special characters and keep credential-bearing URLs out of logs and version control. TLS certificate verification remains enabled.
+
+`NO_PROXY` (or `no_proxy`) accepts comma/space-separated exact hosts or IP addresses, `.example.com` / `*.example.com` suffixes, optional `:port`, or `*` for all hosts. Plain domains match only themselves; suffixes match subdomains. IPv6 entries use brackets. CIDR, SOCKS, PAC and `ALL_PROXY` are not supported. Proxy failure never silently falls back to direct. Proxy URLs are validated when opening each connection; invalid URLs fail the request with a redacted error. Restart after environment changes.
+
+For Compose, add the following under the service's `environment` section and recreate the container. Values in `.env` alone are not forwarded:
+
+```yaml
+- HTTPS_PROXY=${HTTPS_PROXY:-}
+- HTTP_PROXY=${HTTP_PROXY:-}
+- NO_PROXY=${NO_PROXY:-}
+```
+
+Inside a container, `127.0.0.1` addresses that container. Use a reachable proxy hostname; Docker Desktop commonly provides `host.docker.internal` for a host proxy. Linux needs explicit host reachability configuration. `TRUST_PROXY` controls inbound reverse-proxy headers and is unrelated. No preload shim or `NODE_USE_ENV_PROXY` is required.
+
 ## Authentication & Security
 
 ### Bearer Token Specification

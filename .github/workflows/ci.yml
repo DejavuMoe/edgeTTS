@@ -78,6 +78,9 @@ jobs:
       - name: Run unit & integration test suites
         run: pnpm test
 
+      - name: Test upstream proxy routing and cancellation on Node
+        run: timeout 45s bash tests/provider-proxy.sh
+
       - name: Prettier formatting check
         run: pnpm format:check
 
@@ -142,8 +145,8 @@ jobs:
         run: |
           set -euo pipefail
           # Measured inside the container, so the figure does not depend on the image store.
-          # Bun plus pruned JS dependencies must stay below 105 MiB.
-          MAX_ROOTFS_KIB=107520
+          # Bun 1.4.4 fixes proxy lifecycle behavior; measured rootfs is 121.34 MiB.
+          MAX_ROOTFS_KIB=131072
           ROOTFS_KIB=$(docker run --rm --user 0 edgetts:ci sh -c "du -sxk / 2>/dev/null | cut -f1")
           echo "Unpacked root filesystem: $ROOTFS_KIB KiB (budget $MAX_ROOTFS_KIB KiB)"
           if [ "$ROOTFS_KIB" -gt "$MAX_ROOTFS_KIB" ]; then
@@ -172,6 +175,9 @@ jobs:
           docker run --rm -i --network none --cap-drop=ALL \
             --security-opt=no-new-privileges --memory=256m --cpus=1 --pids-limit=64 \
             edgetts:ci bun run - < tests/docker-runtime.mjs
+
+      - name: Test upstream proxy routing on the production Bun runtime
+        run: timeout 60s bash tests/provider-proxy.sh edgetts:ci
 
       - name: Test fail-closed container startup without API key
         run: |
@@ -622,6 +628,7 @@ jobs:
             docker run --rm -i --platform "$PLATFORM" --network none --cap-drop=ALL \
               --security-opt=no-new-privileges --memory=256m --cpus=1 --pids-limit=64 \
               "$IMAGE_TAG" bun run - < tests/docker-runtime.mjs
+            DOCKER_DEFAULT_PLATFORM="$PLATFORM" timeout 60s bash tests/provider-proxy.sh "$IMAGE_TAG"
           done
 
           # 3. Audit image layer history for credential material

@@ -30,7 +30,7 @@
 - **ソースビルド / ベアメタル**: Node.js 24 LTS および pnpm 12.3.4。
 - **アウトバウンド通信**: Microsoft Edge TTS アップストリームノードへの HTTPS（TCP 443 ポート）外向き接続が必要です。
 
-コンテナは Bun 1.4.2 で実行します。ソースビルドとベアメタルデプロイには引き続き Node.js と pnpm を使用します。Docker デプロイではホストへの JavaScript ランタイムのインストールは不要です。API パス、環境変数、コンテナの UID/GID 1000 は変わりません。
+コンテナは Bun 1.4.4 で実行します。ソースビルドとベアメタルデプロイには引き続き Node.js と pnpm を使用します。Docker デプロイではホストへの JavaScript ランタイムのインストールは不要です。API パス、環境変数、コンテナの UID/GID 1000 は変わりません。
 
 ## 方法 1: Docker Compose ビルド済みイメージデプロイ（推奨）
 
@@ -39,7 +39,7 @@
 ```yaml
 services:
   edgetts:
-    image: ghcr.io/dejavumoe/edgetts:1.0.0
+    image: ghcr.io/dejavumoe/edgetts:1.0.1
     container_name: edgetts
     restart: unless-stopped
     init: true
@@ -105,7 +105,7 @@ docker run -d \
   -p 127.0.0.1:8080:8080 \
   -e API_KEY="$API_KEY" \
   -e REQUIRE_API_KEY=true \
-  ghcr.io/dejavumoe/edgetts:1.0.0
+  ghcr.io/dejavumoe/edgetts:1.0.1
 ```
 
 ### セキュリティパラメータの説明
@@ -126,7 +126,7 @@ docker run -d \
 
 | タグ                                        | 説明                                          | 推奨用途                     |
 | :------------------------------------------ | :-------------------------------------------- | :--------------------------- |
-| `ghcr.io/dejavumoe/edgetts:1.0.0`           | 厳格な SemVer リリースタグ                    | 本番環境の通常デプロイ       |
+| `ghcr.io/dejavumoe/edgetts:1.0.1`           | 厳格な SemVer リリースタグ                    | 本番環境の通常デプロイ       |
 | `ghcr.io/dejavumoe/edgetts:latest`          | 公開された最新の安定リリース                  | 自動更新環境                 |
 | `ghcr.io/dejavumoe/edgetts:master`          | `master` ブランチの最新ビルドスナップショット | 最新機能のテスト             |
 | `ghcr.io/dejavumoe/edgetts@sha256:<digest>` | コンテンツアドレス指定による不変ダイジェスト  | 厳格な再現性を求める本番環境 |
@@ -250,7 +250,7 @@ sudo systemctl status edgetts
 
 ## アップグレードと保守
 
-最初に `compose.yaml` の `image:` を目的の公開バージョンまたはダイジェストへ変更します。`docker compose pull` は設定された参照だけを取得し、固定された `1.0.0` を別バージョンへ自動更新しません。`.env` と以前のイメージ参照を保持してください。
+最初に `compose.yaml` の `image:` を目的の公開バージョンまたはダイジェストへ変更します。`docker compose pull` は設定された参照だけを取得し、固定された `1.0.1` を別バージョンへ自動更新しません。`.env` と以前のイメージ参照を保持してください。
 
 ```bash
 cd ~/edgetts

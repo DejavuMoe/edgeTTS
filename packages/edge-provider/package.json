@@ -1,6 +1,6 @@
 {
   "name": "@edgetts/edge-provider",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "type": "module",
   "main": "./dist/index.js",
@@ -22,6 +22,7 @@
   },
   "dependencies": {
     "@edgetts/tts-core": "workspace:*",
+    "https-proxy-agent": "9.1.0",
     "ws": "8.21.3"
   },
   "devDependencies": {

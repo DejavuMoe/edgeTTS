@@ -55,7 +55,7 @@ pnpm outdated -r           # available updates across the workspace
 pnpm update -r <package>   # update within declared ranges, then run the full validation suite
 ```
 
-Major upgrades, the pinned Node.js and pnpm versions (`package.json`, `Dockerfile`, CI) and the pinned GitHub Actions commit SHAs are updated by hand in a dedicated commit. The Edge protocol client lives in `packages/edge-provider`; it uses `ws` for transport and native `fetch` for voice discovery. When changing authentication or transport, run its offline token, framing and lifecycle regressions plus all three live smoke scripts (provider, service and server). Verify the final Bun container as well as the Node.js development runtime.
+Major upgrades, the pinned Node.js and pnpm versions (`package.json`, `Dockerfile`, CI) and the pinned GitHub Actions commit SHAs are updated by hand in a dedicated commit. The Edge protocol client lives in `packages/edge-provider`; it uses `ws` for transport and Node-compatible HTTP requests for voice discovery, sharing the same CONNECT proxy selection. When changing authentication or transport, run its offline token, framing and lifecycle regressions plus all three live smoke scripts (provider, service and server). Run `bash tests/provider-proxy.sh` for Node and `bash tests/provider-proxy.sh <image>` for the final Bun image; these contracts use an ephemeral local CA and no Microsoft traffic.
 
 The container runtime uses a separately pinned Bun image. When upgrading it, update the
 `BUN_IMAGE` version and multi-architecture digest, the Bun license URL/checksum in `Dockerfile`,

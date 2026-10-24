@@ -7,6 +7,28 @@ the version being released.
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-10-25
+
+### Fixed
+
+- Reject an upstream stream that ends without audio with `502 UPSTREAM_ERROR` before
+  sending success headers on both speech endpoints. Skip zero-length chunks without
+  dropping the first audio bytes (#2).
+- Support HTTP/HTTPS CONNECT proxies consistently for voice discovery and synthesis,
+  with `HTTPS_PROXY` / `HTTP_PROXY`, lowercase equivalents, Basic authentication and
+  `NO_PROXY` bypass. Keep TLS verification enabled, redact proxy credentials, and
+  cancel pending CONNECT handshakes without silently falling back to direct (#3).
+- Retain and revalidate the native Sec-MS-GEC v2 handshake fix shipped in v1.0.0 (#1).
+  The old `msedge-tts` overlay and preload proxy shim are no longer needed.
+- Pin the production runtime to Bun 1.4.4 for corrected `ws` proxy-agent and connection
+  shutdown behavior. The proxy contract also requires all test connections to close.
+
+### Verification
+
+- Add empty-stream HTTP regressions and deterministic TLS proxy contracts for Node
+  and the production Bun image, covering routing, authentication, bypass, proxy
+  failures and cancellation. Run these contracts in CI before image publication.
+
 ### Security
 
 - Add CodeQL analysis for JavaScript/TypeScript and GitHub Actions, with high/critical

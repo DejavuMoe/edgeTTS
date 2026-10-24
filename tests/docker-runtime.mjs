@@ -28,7 +28,7 @@ assert.deepEqual(Intl.DateTimeFormat.supportedLocalesOf(["en", "zh-CN", "ja"]), 
   "zh-CN",
   "ja",
 ]);
-assert.equal(process.versions.bun, "1.4.2");
+assert.equal(process.versions.bun, "1.4.4");
 assert.ok(
   readFileSync("/usr/local/share/licenses/bun/LICENSE.md", "utf8").includes("MIT-licensed"),
 );
@@ -41,6 +41,7 @@ const voice = {
   gender: "Female",
 };
 const synthesized = [];
+let emptyAudio = false;
 const service = new TtsService({
   listVoices: async () => [voice],
   synthesize: async (request) => {
@@ -49,7 +50,7 @@ const service = new TtsService({
       format: request.format,
       contentType: "audio/mpeg",
       audio: (async function* () {
-        yield Buffer.from(request.text);
+        yield emptyAudio ? Buffer.alloc(0) : Buffer.from(request.text);
       })(),
     };
   },
@@ -117,6 +118,24 @@ try {
   assert.equal(metrics.statusCode, 200);
   assert.ok(metrics.body.includes("edgetts_synthesis_active 0"));
   assert.equal((await app.inject("/api/missing")).statusCode, 404);
+  emptyAudio = true;
+  for (const url of ["/api/speech", "/v1/audio/speech"]) {
+    const response = await app.inject({
+      method: "POST",
+      url,
+      headers,
+      payload: {
+        input: "test",
+        voice: voice.id,
+        ...(url.startsWith("/v1") ? { model: "tts-1" } : {}),
+      },
+    });
+    assert.equal(response.statusCode, 502);
+    assert.deepEqual(response.json(), {
+      error: { code: "UPSTREAM_ERROR", message: "Unable to synthesize speech" },
+    });
+    log(`PASS: ${process.arch} ${url} empty audio returns 502 JSON`);
+  }
   log(
     `PASS: ${process.arch} image permissions, ICU/TLS, WebUI, voices, both speech APIs and metrics`,
   );

@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 ARG NODE_IMAGE=node:24.21.0-alpine3.24
-ARG BUN_IMAGE=oven/bun:1.4.2-alpine@sha256:d888c0ae6c86d7866ff10c5aafdd9077b36aee6455b33dd270fb93c0dd5cef6f
+ARG BUN_IMAGE=oven/bun:1.4.4-alpine@sha256:4cf82f5686b196504fe119db3fcd9185b191f82ece82c40680e597228ec6070a
 ARG ALPINE_IMAGE=alpine:3.24
 
 FROM ${BUN_IMAGE} AS bun
@@ -69,8 +69,8 @@ RUN apk add --no-cache libstdc++ \
 
 COPY --from=bun /usr/local/bin/bun /usr/local/bin/bun
 # Preserve Bun's license and third-party notices; update the checksum with BUN_IMAGE.
-ADD --checksum=sha256:b9caf52728691b4057e371232c221a132883198be2f3d2ddf92c90404c984b1a --chmod=444 \
-  https://raw.githubusercontent.com/oven-sh/bun/bun-v1.4.2/LICENSE.md \
+ADD --checksum=sha256:362fe32c954ec829240bd7429c53d705eef08c6bfa45ffc2d02005f857cba4dd --chmod=444 \
+  https://raw.githubusercontent.com/oven-sh/bun/bun-v1.4.4/LICENSE.md \
   /usr/local/share/licenses/bun/LICENSE.md
 
 WORKDIR /app
