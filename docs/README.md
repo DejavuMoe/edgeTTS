@@ -18,6 +18,7 @@ validation schemas with `pnpm --filter @edgetts/server openapi`; `pnpm test` fai
 
 - [Architecture and design decisions](development/architecture.md)
 - [Releases, rollback and dependency maintenance](development/releasing.md)
+- [CI check ablation results and decisions (Chinese)](development/research/ci-ablation.zh-CN.md)
 - Research records (Chinese): [ablation experiments](development/research/ablation.zh-CN.md) and
   [long-text performance](development/research/performance.zh-CN.md)
 

@@ -1,0 +1,1017 @@
+{
+  "schemaVersion": 1,
+  "recordedDate": "2026-10-25",
+  "timezone": "Asia/Taipei",
+  "scope": "Five quality commands, six purposively selected defects, two clean baselines per experiment.",
+  "method": "Discard one observed check verdict; remaining time sums clean command means. Not a physically removed workflow or end-to-end latency. Build prerequisites remain necessary.",
+  "excluded": [
+    "installation",
+    "runner queue",
+    "dependency audit",
+    "CodeQL",
+    "Docker",
+    "proxy contracts",
+    "publication"
+  ],
+  "experiments": [
+    {
+      "id": "previous-github",
+      "sourceSha": "6e33d16cab531512a78c9a54403016d5e63b589a",
+      "environment": "GitHub ubuntu-24.04",
+      "node": "24.21.0",
+      "pnpm": "12.3.4",
+      "workflowRun": 40105912112,
+      "artifactId": 12565071253,
+      "artifactZipSha256": "c33414540ebe9a22e8b60ede9778f31c72b86e332797c7f55b94ca36a5031cef",
+      "originalRunsJsonSha256": "796cade3d35e3d17cfd9e53918e82ee223fb8e8176690cdd1413bdf29c6f671c",
+      "meanCleanSecondsByCheck": {
+        "build": 7.551781256000011,
+        "typecheck": 8.035637375000004,
+        "lint": 13.272803495000023,
+        "test": 29.0957184715,
+        "format:check": 4.217105337499993
+      },
+      "leaveOneOut": [
+        {
+          "removed": "none",
+          "caught": 6,
+          "total": 6,
+          "escaped": [],
+          "remainingSeconds": 62.17304593500003
+        },
+        {
+          "removed": "build",
+          "caught": 5,
+          "total": 6,
+          "escaped": ["missing-web-entry"],
+          "remainingSeconds": 54.62126467900002
+        },
+        {
+          "removed": "typecheck",
+          "caught": 5,
+          "total": 6,
+          "escaped": ["test-type-error"],
+          "remainingSeconds": 54.137408560000026
+        },
+        {
+          "removed": "lint",
+          "caught": 5,
+          "total": 6,
+          "escaped": ["unused-variable"],
+          "remainingSeconds": 48.90024244000001
+        },
+        {
+          "removed": "test",
+          "caught": 4,
+          "total": 6,
+          "escaped": ["wrong-http-status", "broken-doc-link"],
+          "remainingSeconds": 33.07732746350003
+        },
+        {
+          "removed": "format:check",
+          "caught": 5,
+          "total": 6,
+          "escaped": ["format-drift"],
+          "remainingSeconds": 57.95594059750004
+        }
+      ],
+      "raw": {
+        "checks": ["build", "typecheck", "lint", "test", "format:check"],
+        "fixtures": [
+          {
+            "id": "missing-web-entry",
+            "file": "apps/web/index.html"
+          },
+          {
+            "id": "test-type-error",
+            "file": "apps/server/test/health.test.ts"
+          },
+          {
+            "id": "unused-variable",
+            "file": "apps/server/src/routes/health.ts"
+          },
+          {
+            "id": "wrong-http-status",
+            "file": "apps/server/src/routes/health.ts"
+          },
+          {
+            "id": "format-drift",
+            "file": "packages/tts-core/src/text.ts"
+          },
+          {
+            "id": "broken-doc-link",
+            "file": "README.md"
+          }
+        ],
+        "runs": [
+          {
+            "id": "baseline-before",
+            "results": [
+              {
+                "check": "build",
+                "passed": true,
+                "seconds": 7.482737029
+              },
+              {
+                "check": "typecheck",
+                "passed": true,
+                "seconds": 8.013875165
+              },
+              {
+                "check": "lint",
+                "passed": true,
+                "seconds": 13.309634206000002
+              },
+              {
+                "check": "test",
+                "passed": true,
+                "seconds": 29.522650052000003
+              },
+              {
+                "check": "format:check",
+                "passed": true,
+                "seconds": 4.191320379999997
+              }
+            ]
+          },
+          {
+            "id": "missing-web-entry",
+            "results": [
+              {
+                "check": "build",
+                "passed": false,
+                "seconds": 5.360370733000003
+              },
+              {
+                "check": "typecheck",
+                "passed": true,
+                "seconds": 7.86410786399999
+              },
+              {
+                "check": "lint",
+                "passed": true,
+                "seconds": 13.065520411000005
+              },
+              {
+                "check": "test",
+                "passed": true,
+                "seconds": 28.765286930000002
+              },
+              {
+                "check": "format:check",
+                "passed": true,
+                "seconds": 4.121601967999988
+              }
+            ]
+          },
+          {
+            "id": "test-type-error",
+            "results": [
+              {
+                "check": "build",
+                "passed": true,
+                "seconds": 7.564657349000016
+              },
+              {
+                "check": "typecheck",
+                "passed": false,
+                "seconds": 7.912395268999972
+              },
+              {
+                "check": "lint",
+                "passed": true,
+                "seconds": 13.300373319999984
+              },
+              {
+                "check": "test",
+                "passed": true,
+                "seconds": 28.636826833
+              },
+              {
+                "check": "format:check",
+                "passed": true,
+                "seconds": 4.193651699999988
+              }
+            ]
+          },
+          {
+            "id": "unused-variable",
+            "results": [
+              {
+                "check": "build",
+                "passed": true,
+                "seconds": 7.630992121999996
+              },
+              {
+                "check": "typecheck",
+                "passed": true,
+                "seconds": 8.039082500999998
+              },
+              {
+                "check": "lint",
+                "passed": false,
+                "seconds": 13.452295880999998
+              },
+              {
+                "check": "test",
+                "passed": true,
+                "seconds": 28.748166731000005
+              },
+              {
+                "check": "format:check",
+                "passed": true,
+                "seconds": 4.191653871000017
+              }
+            ]
+          },
+          {
+            "id": "wrong-http-status",
+            "results": [
+              {
+                "check": "build",
+                "passed": true,
+                "seconds": 7.555640990999993
+              },
+              {
+                "check": "typecheck",
+                "passed": true,
+                "seconds": 7.818961424999987
+              },
+              {
+                "check": "lint",
+                "passed": true,
+                "seconds": 13.137471086999984
+              },
+              {
+                "check": "test",
+                "passed": false,
+                "seconds": 16.47473592800001
+              },
+              {
+                "check": "format:check",
+                "passed": true,
+                "seconds": 4.194907113999943
+              }
+            ]
+          },
+          {
+            "id": "format-drift",
+            "results": [
+              {
+                "check": "build",
+                "passed": true,
+                "seconds": 7.526871637000004
+              },
+              {
+                "check": "typecheck",
+                "passed": true,
+                "seconds": 8.109040206000035
+              },
+              {
+                "check": "lint",
+                "passed": true,
+                "seconds": 13.25089214099996
+              },
+              {
+                "check": "test",
+                "passed": true,
+                "seconds": 29.10732123099995
+              },
+              {
+                "check": "format:check",
+                "passed": false,
+                "seconds": 4.203349840999988
+              }
+            ]
+          },
+          {
+            "id": "broken-doc-link",
+            "results": [
+              {
+                "check": "build",
+                "passed": true,
+                "seconds": 7.5533070450000235
+              },
+              {
+                "check": "typecheck",
+                "passed": true,
+                "seconds": 7.989816402999975
+              },
+              {
+                "check": "lint",
+                "passed": true,
+                "seconds": 13.20750234300003
+              },
+              {
+                "check": "test",
+                "passed": false,
+                "seconds": 27.58703555500001
+              },
+              {
+                "check": "format:check",
+                "passed": true,
+                "seconds": 4.133338323000004
+              }
+            ]
+          },
+          {
+            "id": "baseline-after",
+            "results": [
+              {
+                "check": "build",
+                "passed": true,
+                "seconds": 7.620825483000022
+              },
+              {
+                "check": "typecheck",
+                "passed": true,
+                "seconds": 8.057399585000006
+              },
+              {
+                "check": "lint",
+                "passed": true,
+                "seconds": 13.235972784000042
+              },
+              {
+                "check": "test",
+                "passed": true,
+                "seconds": 28.668786890999996
+              },
+              {
+                "check": "format:check",
+                "passed": true,
+                "seconds": 4.24289029499999
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "current-local",
+      "sourceSha": "c5a6f8b24a14239d6a547abffbd05c0adfc95944",
+      "environment": "Debian WSL2, Linux 6.18.33.2-microsoft-standard-WSL2, ext4 build mirror",
+      "node": "24.21.0",
+      "pnpm": "12.3.4",
+      "workflowRun": null,
+      "artifactId": null,
+      "artifactZipSha256": null,
+      "originalRunsJsonSha256": "daf49573294bd98086682e81996cb9a94f6fdaeb498b19d223ddbc42dbb920b3",
+      "meanCleanSecondsByCheck": {
+        "build": 3.5040580219999984,
+        "typecheck": 3.5098225005000057,
+        "lint": 8.776723077999995,
+        "test": 12.713558011500002,
+        "format:check": 2.6311801074999988
+      },
+      "leaveOneOut": [
+        {
+          "removed": "none",
+          "caught": 6,
+          "total": 6,
+          "escaped": [],
+          "remainingSeconds": 31.135341719499998
+        },
+        {
+          "removed": "build",
+          "caught": 5,
+          "total": 6,
+          "escaped": ["missing-web-entry"],
+          "remainingSeconds": 27.631283697500002
+        },
+        {
+          "removed": "typecheck",
+          "caught": 5,
+          "total": 6,
+          "escaped": ["test-type-error"],
+          "remainingSeconds": 27.625519218999997
+        },
+        {
+          "removed": "lint",
+          "caught": 5,
+          "total": 6,
+          "escaped": ["unused-variable"],
+          "remainingSeconds": 22.35861864150001
+        },
+        {
+          "removed": "test",
+          "caught": 4,
+          "total": 6,
+          "escaped": ["wrong-http-status", "broken-doc-link"],
+          "remainingSeconds": 18.421783708
+        },
+        {
+          "removed": "format:check",
+          "caught": 5,
+          "total": 6,
+          "escaped": ["format-drift"],
+          "remainingSeconds": 28.504161612
+        }
+      ],
+      "raw": {
+        "checks": ["build", "typecheck", "lint", "test", "format:check"],
+        "fixtures": [
+          {
+            "id": "missing-web-entry",
+            "file": "apps/web/index.html"
+          },
+          {
+            "id": "test-type-error",
+            "file": "apps/server/test/health.test.ts"
+          },
+          {
+            "id": "unused-variable",
+            "file": "apps/server/src/routes/health.ts"
+          },
+          {
+            "id": "wrong-http-status",
+            "file": "apps/server/src/routes/health.ts"
+          },
+          {
+            "id": "format-drift",
+            "file": "packages/tts-core/src/text.ts"
+          },
+          {
+            "id": "broken-doc-link",
+            "file": "README.md"
+          }
+        ],
+        "runs": [
+          {
+            "id": "baseline-before",
+            "results": [
+              {
+                "check": "build",
+                "passed": true,
+                "seconds": 3.507935409
+              },
+              {
+                "check": "typecheck",
+                "passed": true,
+                "seconds": 3.4346173499999995
+              },
+              {
+                "check": "lint",
+                "passed": true,
+                "seconds": 9.011552704
+              },
+              {
+                "check": "test",
+                "passed": true,
+                "seconds": 12.891206424
+              },
+              {
+                "check": "format:check",
+                "passed": true,
+                "seconds": 2.6218880669999964
+              }
+            ]
+          },
+          {
+            "id": "missing-web-entry",
+            "results": [
+              {
+                "check": "build",
+                "passed": false,
+                "seconds": 2.3304430009999995
+              },
+              {
+                "check": "typecheck",
+                "passed": true,
+                "seconds": 3.525369583
+              },
+              {
+                "check": "lint",
+                "passed": true,
+                "seconds": 8.703839001999993
+              },
+              {
+                "check": "test",
+                "passed": true,
+                "seconds": 12.431675014
+              },
+              {
+                "check": "format:check",
+                "passed": true,
+                "seconds": 2.6182774659999994
+              }
+            ]
+          },
+          {
+            "id": "test-type-error",
+            "results": [
+              {
+                "check": "build",
+                "passed": true,
+                "seconds": 3.5211025280000032
+              },
+              {
+                "check": "typecheck",
+                "passed": false,
+                "seconds": 3.6103868680000013
+              },
+              {
+                "check": "lint",
+                "passed": true,
+                "seconds": 8.881763686000006
+              },
+              {
+                "check": "test",
+                "passed": true,
+                "seconds": 12.60969720400001
+              },
+              {
+                "check": "format:check",
+                "passed": true,
+                "seconds": 2.636331780000008
+              }
+            ]
+          },
+          {
+            "id": "unused-variable",
+            "results": [
+              {
+                "check": "build",
+                "passed": true,
+                "seconds": 3.5042203010000086
+              },
+              {
+                "check": "typecheck",
+                "passed": true,
+                "seconds": 3.5908091529999946
+              },
+              {
+                "check": "lint",
+                "passed": false,
+                "seconds": 8.643579204999988
+              },
+              {
+                "check": "test",
+                "passed": true,
+                "seconds": 12.907968673999989
+              },
+              {
+                "check": "format:check",
+                "passed": true,
+                "seconds": 2.6871457879999943
+              }
+            ]
+          },
+          {
+            "id": "wrong-http-status",
+            "results": [
+              {
+                "check": "build",
+                "passed": true,
+                "seconds": 3.490976014999993
+              },
+              {
+                "check": "typecheck",
+                "passed": true,
+                "seconds": 3.5582183320000187
+              },
+              {
+                "check": "lint",
+                "passed": true,
+                "seconds": 8.492954383000004
+              },
+              {
+                "check": "test",
+                "passed": false,
+                "seconds": 5.9208598169999895
+              },
+              {
+                "check": "format:check",
+                "passed": true,
+                "seconds": 2.716193231000012
+              }
+            ]
+          },
+          {
+            "id": "format-drift",
+            "results": [
+              {
+                "check": "build",
+                "passed": true,
+                "seconds": 3.560502699999983
+              },
+              {
+                "check": "typecheck",
+                "passed": true,
+                "seconds": 3.5334649349999965
+              },
+              {
+                "check": "lint",
+                "passed": true,
+                "seconds": 8.424909031000018
+              },
+              {
+                "check": "test",
+                "passed": true,
+                "seconds": 12.67231010100001
+              },
+              {
+                "check": "format:check",
+                "passed": false,
+                "seconds": 2.6356104739999866
+              }
+            ]
+          },
+          {
+            "id": "broken-doc-link",
+            "results": [
+              {
+                "check": "build",
+                "passed": true,
+                "seconds": 3.469005040000018
+              },
+              {
+                "check": "typecheck",
+                "passed": true,
+                "seconds": 3.5535941140000067
+              },
+              {
+                "check": "lint",
+                "passed": true,
+                "seconds": 8.572207047000003
+              },
+              {
+                "check": "test",
+                "passed": false,
+                "seconds": 11.225043565999979
+              },
+              {
+                "check": "format:check",
+                "passed": true,
+                "seconds": 2.69282328099999
+              }
+            ]
+          },
+          {
+            "id": "baseline-after",
+            "results": [
+              {
+                "check": "build",
+                "passed": true,
+                "seconds": 3.500180634999997
+              },
+              {
+                "check": "typecheck",
+                "passed": true,
+                "seconds": 3.5850276510000114
+              },
+              {
+                "check": "lint",
+                "passed": true,
+                "seconds": 8.54189345199999
+              },
+              {
+                "check": "test",
+                "passed": true,
+                "seconds": 12.535909599000005
+              },
+              {
+                "check": "format:check",
+                "passed": true,
+                "seconds": 2.6404721480000006
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "current-github",
+      "sourceSha": "c5a6f8b24a14239d6a547abffbd05c0adfc95944",
+      "environment": "GitHub ubuntu-24.04",
+      "node": "24.21.0",
+      "pnpm": "12.3.4",
+      "workflowRun": 40114896918,
+      "artifactId": "12568610826",
+      "artifactZipSha256": "347dab6f7185b9d1865e0aa6e52ca4b232d35d263b77ed668e7a52dc32e5cd78",
+      "originalRunsJsonSha256": "2ef70c131d10d5399a4a145ddea48859a37d4463a865bba57892f01aaf35d7e4",
+      "meanCleanSecondsByCheck": {
+        "build": 8.224779852999998,
+        "typecheck": 7.974175753000006,
+        "lint": 13.222365989999997,
+        "test": 29.331865567499996,
+        "format:check": 4.311638810499993
+      },
+      "leaveOneOut": [
+        {
+          "removed": "none",
+          "caught": 6,
+          "total": 6,
+          "escaped": [],
+          "remainingSeconds": 63.064825973999994
+        },
+        {
+          "removed": "build",
+          "caught": 5,
+          "total": 6,
+          "escaped": ["missing-web-entry"],
+          "remainingSeconds": 54.84004612099999
+        },
+        {
+          "removed": "typecheck",
+          "caught": 5,
+          "total": 6,
+          "escaped": ["test-type-error"],
+          "remainingSeconds": 55.09065022099998
+        },
+        {
+          "removed": "lint",
+          "caught": 5,
+          "total": 6,
+          "escaped": ["unused-variable"],
+          "remainingSeconds": 49.842459983999994
+        },
+        {
+          "removed": "test",
+          "caught": 4,
+          "total": 6,
+          "escaped": ["wrong-http-status", "broken-doc-link"],
+          "remainingSeconds": 33.7329604065
+        },
+        {
+          "removed": "format:check",
+          "caught": 5,
+          "total": 6,
+          "escaped": ["format-drift"],
+          "remainingSeconds": 58.7531871635
+        }
+      ],
+      "raw": {
+        "checks": ["build", "typecheck", "lint", "test", "format:check"],
+        "fixtures": [
+          {
+            "id": "missing-web-entry",
+            "file": "apps/web/index.html"
+          },
+          {
+            "id": "test-type-error",
+            "file": "apps/server/test/health.test.ts"
+          },
+          {
+            "id": "unused-variable",
+            "file": "apps/server/src/routes/health.ts"
+          },
+          {
+            "id": "wrong-http-status",
+            "file": "apps/server/src/routes/health.ts"
+          },
+          {
+            "id": "format-drift",
+            "file": "packages/tts-core/src/text.ts"
+          },
+          {
+            "id": "broken-doc-link",
+            "file": "README.md"
+          }
+        ],
+        "runs": [
+          {
+            "id": "baseline-before",
+            "results": [
+              {
+                "check": "build",
+                "passed": true,
+                "seconds": 8.732149581000002
+              },
+              {
+                "check": "typecheck",
+                "passed": true,
+                "seconds": 8.023657614000001
+              },
+              {
+                "check": "lint",
+                "passed": true,
+                "seconds": 13.191002451999998
+              },
+              {
+                "check": "test",
+                "passed": true,
+                "seconds": 29.460164217
+              },
+              {
+                "check": "format:check",
+                "passed": true,
+                "seconds": 4.289494552999996
+              }
+            ]
+          },
+          {
+            "id": "missing-web-entry",
+            "results": [
+              {
+                "check": "build",
+                "passed": false,
+                "seconds": 5.436657642999998
+              },
+              {
+                "check": "typecheck",
+                "passed": true,
+                "seconds": 8.039515810000012
+              },
+              {
+                "check": "lint",
+                "passed": true,
+                "seconds": 13.323111877000002
+              },
+              {
+                "check": "test",
+                "passed": true,
+                "seconds": 29.468989325999996
+              },
+              {
+                "check": "format:check",
+                "passed": true,
+                "seconds": 4.228210236999992
+              }
+            ]
+          },
+          {
+            "id": "test-type-error",
+            "results": [
+              {
+                "check": "build",
+                "passed": true,
+                "seconds": 7.6593211449999945
+              },
+              {
+                "check": "typecheck",
+                "passed": false,
+                "seconds": 7.970460361000005
+              },
+              {
+                "check": "lint",
+                "passed": true,
+                "seconds": 13.139341753000014
+              },
+              {
+                "check": "test",
+                "passed": true,
+                "seconds": 29.591980890999984
+              },
+              {
+                "check": "format:check",
+                "passed": true,
+                "seconds": 4.2416215120000125
+              }
+            ]
+          },
+          {
+            "id": "unused-variable",
+            "results": [
+              {
+                "check": "build",
+                "passed": true,
+                "seconds": 7.722073657000001
+              },
+              {
+                "check": "typecheck",
+                "passed": true,
+                "seconds": 8.016160923999996
+              },
+              {
+                "check": "lint",
+                "passed": false,
+                "seconds": 13.405300851000007
+              },
+              {
+                "check": "test",
+                "passed": true,
+                "seconds": 29.76790379500002
+              },
+              {
+                "check": "format:check",
+                "passed": true,
+                "seconds": 4.327727872999967
+              }
+            ]
+          },
+          {
+            "id": "wrong-http-status",
+            "results": [
+              {
+                "check": "build",
+                "passed": true,
+                "seconds": 7.625180043999979
+              },
+              {
+                "check": "typecheck",
+                "passed": true,
+                "seconds": 8.072275669000053
+              },
+              {
+                "check": "lint",
+                "passed": true,
+                "seconds": 13.818583190000034
+              },
+              {
+                "check": "test",
+                "passed": false,
+                "seconds": 17.68214174600004
+              },
+              {
+                "check": "format:check",
+                "passed": true,
+                "seconds": 4.256942690999946
+              }
+            ]
+          },
+          {
+            "id": "format-drift",
+            "results": [
+              {
+                "check": "build",
+                "passed": true,
+                "seconds": 7.563630879999954
+              },
+              {
+                "check": "typecheck",
+                "passed": true,
+                "seconds": 8.068926439000002
+              },
+              {
+                "check": "lint",
+                "passed": true,
+                "seconds": 13.267467943000025
+              },
+              {
+                "check": "test",
+                "passed": true,
+                "seconds": 29.623751951999964
+              },
+              {
+                "check": "format:check",
+                "passed": false,
+                "seconds": 4.2838107290000185
+              }
+            ]
+          },
+          {
+            "id": "broken-doc-link",
+            "results": [
+              {
+                "check": "build",
+                "passed": true,
+                "seconds": 7.562212370000023
+              },
+              {
+                "check": "typecheck",
+                "passed": true,
+                "seconds": 7.8993157159999825
+              },
+              {
+                "check": "lint",
+                "passed": true,
+                "seconds": 13.451450466999958
+              },
+              {
+                "check": "test",
+                "passed": false,
+                "seconds": 27.919164779999992
+              },
+              {
+                "check": "format:check",
+                "passed": true,
+                "seconds": 4.279358994999959
+              }
+            ]
+          },
+          {
+            "id": "baseline-after",
+            "results": [
+              {
+                "check": "build",
+                "passed": true,
+                "seconds": 7.7174101249999945
+              },
+              {
+                "check": "typecheck",
+                "passed": true,
+                "seconds": 7.92469389200001
+              },
+              {
+                "check": "lint",
+                "passed": true,
+                "seconds": 13.253729527999996
+              },
+              {
+                "check": "test",
+                "passed": true,
+                "seconds": 29.203566917999996
+              },
+              {
+                "check": "format:check",
+                "passed": true,
+                "seconds": 4.33378306799999
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

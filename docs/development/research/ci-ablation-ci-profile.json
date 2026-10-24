@@ -1,0 +1,563 @@
+{
+  "recordedDate": "2026-10-25",
+  "timezone": "Asia/Taipei",
+  "method": "GitHub completed job and step timestamps; one-second resolution, null means unavailable. Jobs run concurrently, so durations must not be summed as workflow latency.",
+  "runs": [
+    {
+      "runId": 40113513477,
+      "headSha": "dc520f7480f923b05af2da5c32fd6849936e49de",
+      "workflowUrl": "https://github.com/DejavuMoe/edgeTTS/actions/runs/40113513477",
+      "jobs": [
+        {
+          "id": 120929948965,
+          "name": "Code Quality & Tests",
+          "conclusion": "success",
+          "startedAt": "2026-10-24T16:51:58Z",
+          "completedAt": "2026-10-24T16:53:17Z",
+          "seconds": 79,
+          "steps": [
+            {
+              "name": "Set up job",
+              "conclusion": "success",
+              "seconds": 1
+            },
+            {
+              "name": "Checkout repository",
+              "conclusion": "success",
+              "seconds": 1
+            },
+            {
+              "name": "Setup Node.js 24.21.0",
+              "conclusion": "success",
+              "seconds": 1
+            },
+            {
+              "name": "Install exact pnpm 12.3.4",
+              "conclusion": "success",
+              "seconds": 2
+            },
+            {
+              "name": "Install workspace dependencies (frozen lockfile)",
+              "conclusion": "success",
+              "seconds": 2
+            },
+            {
+              "name": "Audit all dependencies",
+              "conclusion": "success",
+              "seconds": 1
+            },
+            {
+              "name": "Build workspace packages & apps",
+              "conclusion": "success",
+              "seconds": 8
+            },
+            {
+              "name": "TypeScript typecheck",
+              "conclusion": "success",
+              "seconds": 9
+            },
+            {
+              "name": "ESLint check",
+              "conclusion": "success",
+              "seconds": 14
+            },
+            {
+              "name": "Run unit & integration test suites",
+              "conclusion": "success",
+              "seconds": 30
+            },
+            {
+              "name": "Test upstream proxy routing and cancellation on Node",
+              "conclusion": "success",
+              "seconds": 1
+            },
+            {
+              "name": "Prettier formatting check",
+              "conclusion": "success",
+              "seconds": 4
+            },
+            {
+              "name": "Git diff & tree cleanliness check",
+              "conclusion": "success",
+              "seconds": 0
+            },
+            {
+              "name": "Post Setup Node.js 24.21.0",
+              "conclusion": "success",
+              "seconds": 0
+            },
+            {
+              "name": "Post Checkout repository",
+              "conclusion": "success",
+              "seconds": 1
+            },
+            {
+              "name": "Complete job",
+              "conclusion": "success",
+              "seconds": 0
+            }
+          ]
+        },
+        {
+          "id": 120929949222,
+          "name": "codeql / CodeQL (javascript-typescript)",
+          "conclusion": "success",
+          "startedAt": "2026-10-24T16:51:58Z",
+          "completedAt": "2026-10-24T16:52:47Z",
+          "seconds": 49,
+          "steps": [
+            {
+              "name": "Set up job",
+              "conclusion": "success",
+              "seconds": 1
+            },
+            {
+              "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "conclusion": "success",
+              "seconds": 1
+            },
+            {
+              "name": "Run actions/setup-node@820762786026740c76f36085b0efc47a31fe5020",
+              "conclusion": "success",
+              "seconds": 1
+            },
+            {
+              "name": "Run github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370",
+              "conclusion": "success",
+              "seconds": 8
+            },
+            {
+              "name": "Run github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370",
+              "conclusion": "success",
+              "seconds": 34
+            },
+            {
+              "name": "Block high/critical vulnerabilities and correctness errors",
+              "conclusion": "success",
+              "seconds": 0
+            },
+            {
+              "name": "Post Run github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370",
+              "conclusion": "success",
+              "seconds": 0
+            },
+            {
+              "name": "Post Run github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370",
+              "conclusion": "success",
+              "seconds": 1
+            },
+            {
+              "name": "Post Run actions/setup-node@820762786026740c76f36085b0efc47a31fe5020",
+              "conclusion": "success",
+              "seconds": 0
+            },
+            {
+              "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "conclusion": "success",
+              "seconds": 0
+            },
+            {
+              "name": "Complete job",
+              "conclusion": "success",
+              "seconds": 0
+            }
+          ]
+        },
+        {
+          "id": 120929949229,
+          "name": "codeql / CodeQL (actions)",
+          "conclusion": "success",
+          "startedAt": "2026-10-24T16:51:58Z",
+          "completedAt": "2026-10-24T16:52:38Z",
+          "seconds": 40,
+          "steps": [
+            {
+              "name": "Set up job",
+              "conclusion": "success",
+              "seconds": 1
+            },
+            {
+              "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "conclusion": "success",
+              "seconds": 1
+            },
+            {
+              "name": "Run actions/setup-node@820762786026740c76f36085b0efc47a31fe5020",
+              "conclusion": "success",
+              "seconds": 0
+            },
+            {
+              "name": "Run github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370",
+              "conclusion": "success",
+              "seconds": 11
+            },
+            {
+              "name": "Run github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370",
+              "conclusion": "success",
+              "seconds": 24
+            },
+            {
+              "name": "Block high/critical vulnerabilities and correctness errors",
+              "conclusion": "success",
+              "seconds": 0
+            },
+            {
+              "name": "Post Run github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370",
+              "conclusion": "success",
+              "seconds": 0
+            },
+            {
+              "name": "Post Run github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370",
+              "conclusion": "success",
+              "seconds": 1
+            },
+            {
+              "name": "Post Run actions/setup-node@820762786026740c76f36085b0efc47a31fe5020",
+              "conclusion": "success",
+              "seconds": 0
+            },
+            {
+              "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "conclusion": "success",
+              "seconds": 0
+            },
+            {
+              "name": "Complete job",
+              "conclusion": "success",
+              "seconds": 0
+            }
+          ]
+        },
+        {
+          "id": 120929949996,
+          "name": "Dependency Review",
+          "conclusion": "skipped",
+          "startedAt": "2026-10-24T16:51:56Z",
+          "completedAt": "2026-10-24T16:51:56Z",
+          "seconds": 0,
+          "steps": []
+        },
+        {
+          "id": 120930244556,
+          "name": "Docker Production Image Contract",
+          "conclusion": "success",
+          "startedAt": "2026-10-24T16:53:18Z",
+          "completedAt": "2026-10-24T16:53:55Z",
+          "seconds": 37,
+          "steps": [
+            {
+              "name": "Set up job",
+              "conclusion": "success",
+              "seconds": 1
+            },
+            {
+              "name": "Checkout repository",
+              "conclusion": null,
+              "seconds": null
+            },
+            {
+              "name": "Verify Docker daemon availability",
+              "conclusion": null,
+              "seconds": null
+            },
+            {
+              "name": "Build production Docker image",
+              "conclusion": "success",
+              "seconds": 24
+            },
+            {
+              "name": "Audit Docker image metadata",
+              "conclusion": "success",
+              "seconds": 0
+            },
+            {
+              "name": "Audit Alpine runtime footprint",
+              "conclusion": "success",
+              "seconds": 0
+            },
+            {
+              "name": "Test final image contracts without upstream network",
+              "conclusion": "success",
+              "seconds": 1
+            },
+            {
+              "name": "Test upstream proxy routing on the production Bun runtime",
+              "conclusion": "success",
+              "seconds": 1
+            },
+            {
+              "name": "Test fail-closed container startup without API key",
+              "conclusion": "success",
+              "seconds": 0
+            },
+            {
+              "name": "Test protected container runtime security and health",
+              "conclusion": "success",
+              "seconds": 6
+            },
+            {
+              "name": "Post Checkout repository",
+              "conclusion": "success",
+              "seconds": 0
+            },
+            {
+              "name": "Complete job",
+              "conclusion": "success",
+              "seconds": 0
+            }
+          ]
+        },
+        {
+          "id": 120930244614,
+          "name": "Deterministic Nginx Reverse Proxy Contract",
+          "conclusion": "success",
+          "startedAt": "2026-10-24T16:53:18Z",
+          "completedAt": "2026-10-24T16:53:36Z",
+          "seconds": 18,
+          "steps": [
+            {
+              "name": "Set up job",
+              "conclusion": "success",
+              "seconds": 1
+            },
+            {
+              "name": "Checkout repository",
+              "conclusion": "success",
+              "seconds": 1
+            },
+            {
+              "name": "Verify Docker daemon availability",
+              "conclusion": "success",
+              "seconds": 0
+            },
+            {
+              "name": "Run deterministic Nginx proxy test suite",
+              "conclusion": "success",
+              "seconds": 13
+            },
+            {
+              "name": "Post Checkout repository",
+              "conclusion": "success",
+              "seconds": 0
+            },
+            {
+              "name": "Complete job",
+              "conclusion": "success",
+              "seconds": 0
+            }
+          ]
+        },
+        {
+          "id": 120930378500,
+          "name": "Publish Multi-Arch Image to GHCR",
+          "conclusion": "success",
+          "startedAt": "2026-10-24T16:53:57Z",
+          "completedAt": "2026-10-24T16:54:58Z",
+          "seconds": 61,
+          "steps": [
+            {
+              "name": "Set up job",
+              "conclusion": "success",
+              "seconds": 2
+            },
+            {
+              "name": "Checkout repository",
+              "conclusion": "success",
+              "seconds": 1
+            },
+            {
+              "name": "Validate release tag governance",
+              "conclusion": "success",
+              "seconds": 0
+            },
+            {
+              "name": "Set up QEMU",
+              "conclusion": "success",
+              "seconds": 7
+            },
+            {
+              "name": "Set up Docker Buildx",
+              "conclusion": "success",
+              "seconds": 3
+            },
+            {
+              "name": "Extract Docker metadata",
+              "conclusion": "success",
+              "seconds": 1
+            },
+            {
+              "name": "Log in to GitHub Container Registry",
+              "conclusion": "success",
+              "seconds": 0
+            },
+            {
+              "name": "Build and push multi-arch Docker image",
+              "conclusion": "success",
+              "seconds": 13
+            },
+            {
+              "name": "Verify registry manifest and digest resolution",
+              "conclusion": "success",
+              "seconds": 1
+            },
+            {
+              "name": "Verify multi-arch runtime execution and security posture",
+              "conclusion": "success",
+              "seconds": 24
+            },
+            {
+              "name": "Promote verified release candidate to stable SemVer and latest aliases",
+              "conclusion": "success",
+              "seconds": 3
+            },
+            {
+              "name": "Generate release publication summary",
+              "conclusion": "success",
+              "seconds": 0
+            },
+            {
+              "name": "Post Build and push multi-arch Docker image",
+              "conclusion": "success",
+              "seconds": 2
+            },
+            {
+              "name": "Post Log in to GitHub Container Registry",
+              "conclusion": "success",
+              "seconds": 0
+            },
+            {
+              "name": "Post Set up Docker Buildx",
+              "conclusion": "success",
+              "seconds": 1
+            },
+            {
+              "name": "Post Set up QEMU",
+              "conclusion": "success",
+              "seconds": 1
+            },
+            {
+              "name": "Post Checkout repository",
+              "conclusion": "success",
+              "seconds": 1
+            },
+            {
+              "name": "Complete job",
+              "conclusion": "success",
+              "seconds": 0
+            }
+          ]
+        },
+        {
+          "id": 120930605917,
+          "name": "Create GitHub Release",
+          "conclusion": "success",
+          "startedAt": "2026-10-24T16:55:00Z",
+          "completedAt": "2026-10-24T16:55:14Z",
+          "seconds": 14,
+          "steps": [
+            {
+              "name": "Set up job",
+              "conclusion": "success",
+              "seconds": 1
+            },
+            {
+              "name": "Checkout repository",
+              "conclusion": null,
+              "seconds": null
+            },
+            {
+              "name": "Set up Docker Buildx",
+              "conclusion": "success",
+              "seconds": 6
+            },
+            {
+              "name": "Log in to GHCR for published version inspection",
+              "conclusion": "success",
+              "seconds": 1
+            },
+            {
+              "name": "Create or update GitHub release from the changelog",
+              "conclusion": null,
+              "seconds": null
+            },
+            {
+              "name": "Post Log in to GHCR for published version inspection",
+              "conclusion": null,
+              "seconds": null
+            },
+            {
+              "name": "Post Set up Docker Buildx",
+              "conclusion": "success",
+              "seconds": 0
+            },
+            {
+              "name": "Post Checkout repository",
+              "conclusion": "success",
+              "seconds": 0
+            },
+            {
+              "name": "Complete job",
+              "conclusion": null,
+              "seconds": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "runId": 40114834209,
+      "headSha": "c5a6f8b24a14239d6a547abffbd05c0adfc95944",
+      "workflowUrl": "https://github.com/DejavuMoe/edgeTTS/actions/runs/40114834209",
+      "jobs": [
+        {
+          "id": 120933865990,
+          "name": "Code Quality & Tests",
+          "conclusion": "success",
+          "startedAt": "2026-10-24T17:09:32Z",
+          "completedAt": "2026-10-24T17:10:24Z",
+          "seconds": 52
+        },
+        {
+          "id": 120933866161,
+          "name": "codeql / CodeQL (actions)",
+          "conclusion": "success",
+          "startedAt": "2026-10-24T17:09:32Z",
+          "completedAt": "2026-10-24T17:10:18Z",
+          "seconds": 46
+        },
+        {
+          "id": 120933866162,
+          "name": "codeql / CodeQL (javascript-typescript)",
+          "conclusion": "success",
+          "startedAt": "2026-10-24T17:09:32Z",
+          "completedAt": "2026-10-24T17:10:58Z",
+          "seconds": 86
+        },
+        {
+          "id": 120934072217,
+          "name": "Deterministic Nginx Reverse Proxy Contract",
+          "conclusion": "success",
+          "startedAt": "2026-10-24T17:10:26Z",
+          "completedAt": "2026-10-24T17:10:39Z",
+          "seconds": 13
+        },
+        {
+          "id": 120934072265,
+          "name": "Docker Production Image Contract",
+          "conclusion": "success",
+          "startedAt": "2026-10-24T17:10:26Z",
+          "completedAt": "2026-10-24T17:11:05Z",
+          "seconds": 39
+        },
+        {
+          "id": 120934224936,
+          "name": "Publish Multi-Arch Image to GHCR",
+          "conclusion": "success",
+          "startedAt": "2026-10-24T17:11:07Z",
+          "completedAt": "2026-10-24T17:12:03Z",
+          "seconds": 56
+        }
+      ]
+    }
+  ]
+}
