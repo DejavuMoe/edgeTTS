@@ -16,12 +16,13 @@ import { performance } from "node:perf_hooks";
 
 // Deliberately separate from scripts/ablation: this experiment removes CI checks.
 const root = path.resolve(import.meta.dirname, "..");
-const output = path.join(root, "coverage/ci-ablation");
+const parallel = process.argv.includes("--parallel");
+const output = path.join(root, parallel ? "coverage/ci-ablation-parallel" : "coverage/ci-ablation");
 const pnpm = process.env.npm_execpath;
 assert.ok(pnpm && path.isAbsolute(pnpm), "Run with pnpm experiment:ci");
 mkdirSync(output, { recursive: true });
 rmSync(path.join(output, "report.md"), { force: true });
-const checks = ["build", "typecheck", "lint", "test", "format:check"];
+const checks = parallel ? ["ci:parallel"] : ["build", "typecheck", "lint", "test", "format:check"];
 const fixtures = [
   ["missing-web-entry", "apps/web/index.html", "/src/main.tsx", "/src/missing.tsx"],
   [
@@ -132,7 +133,12 @@ try {
   writeFileSync(
     path.join(output, "runs.json"),
     JSON.stringify(
-      { checks, fixtures: fixtures.map(([id, file]) => ({ id, file })), runs },
+      {
+        schedule: parallel ? "build-then-parallel" : "sequential",
+        checks,
+        fixtures: fixtures.map(([id, file]) => ({ id, file })),
+        runs,
+      },
       null,
       2,
     ) + "\n",
