@@ -56,6 +56,9 @@ it consumes AI credits; existing Copilot Autofix suggestions do not auto-merge c
 
 ## CI check ablation
 
+The [2026-10-25 results and decisions](research/ci-ablation.zh-CN.md) preserve
+the detection matrix, timing comparisons, workflow profiles and evidence links.
+
 Run `pnpm experiment:ci` on Linux after installing the frozen dependencies, or
 dispatch [CI Ablation](../../.github/workflows/ci-ablation.yml). This is separate
 from the existing application-mechanism experiment in `scripts/ablation/`.
