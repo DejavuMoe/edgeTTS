@@ -24,7 +24,7 @@ export function manifestsFromPnpm(projects, root) {
           );
           const packageName = dependency.from ?? alias;
           assert.match(packageName, /^(?:@[\w.-]+\/)?[\w.-]+$/, "Invalid npm package name");
-          const purl = `pkg:npm/${packageName.replace("@", "%40")}@${dependency.version}`;
+          const purl = `pkg:npm/${packageName.replaceAll("@", "%40")}@${dependency.version}`;
           const previous = resolved[purl];
           resolved[purl] = {
             package_url: purl,

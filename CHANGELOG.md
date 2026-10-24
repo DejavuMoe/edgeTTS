@@ -14,6 +14,8 @@ the version being released.
 - Audit development dependencies as well as runtime dependencies; update vulnerable
   build/test tools and constrain concurrently's shell-quote dependency to a patched version.
 - Add a private vulnerability reporting policy and Dependabot Actions/Docker updates.
+- Use per-verifier random HMAC keys for constant-time API key comparison without
+  retaining reusable unkeyed fingerprints. Existing API keys remain compatible.
 
 ### Maintenance
 
