@@ -13,6 +13,16 @@ to GitHub code scanning. A local SARIF gate also blocks publication for security
 scores of 7 or higher and non-security errors; an upload succeeding alone is not
 a passing security gate. Scheduled weekly scans detect newly added queries.
 
+Reviewed false positives are recorded in
+[codeql-reviewed-findings.json](../../.github/codeql-reviewed-findings.json).
+An exception must match the rule, primary file and line, and the SHA-256 of the
+entire source file (normalized to LF). Source changes fail closed and require
+another review; other locations using the same rule still block publication.
+The sole initial exception is API-key comparison in `auth.ts`: its random-key
+HMAC tags are used only for `timingSafeEqual`, never persisted, logged or returned.
+The password-storage query's offline hash-database threat model does not apply.
+This exception does not permit storing user passwords with HMAC or a fast hash.
+
 Actions are pinned by full commit SHA, checkouts do not persist credentials, and
 permissions are scoped to individual jobs. Pull requests cannot publish images
 or submit dependency snapshots. No `pull_request_target` execution is used.

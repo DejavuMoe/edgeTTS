@@ -1,0 +1,9 @@
+[
+  {
+    "ruleId": "js/insufficient-password-hash",
+    "path": "apps/server/src/auth.ts",
+    "line": 117,
+    "sourceSha256": "c3fc632f4a789df1d619f41b20a80ba9a73c3201c992906298a9c44e6f502a67",
+    "reason": "This is an ephemeral API-key comparison tag, not password storage. A random 32-byte per-verifier HMAC key produces fixed-size buffers for timingSafeEqual. Neither tag is persisted, logged, or returned. The configured credential is already held in the process environment; an offline password-hash database attack is not this trust boundary. Re-review on any source change."
+  }
+]
