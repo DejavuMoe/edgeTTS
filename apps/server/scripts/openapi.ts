@@ -5,7 +5,7 @@
 // `pnpm test` fails when docs/openapi.json is stale.
 import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { zodToJsonSchema } from "zod-to-json-schema";
+import { z } from "zod";
 import {
   ApiErrorSchema,
   HealthResponseSchema,
@@ -18,9 +18,9 @@ import { SPEECH_SEGMENT_CODE_POINTS } from "../src/routes/speech.js";
 
 export const OPENAPI_PATH = fileURLToPath(new URL("../../../docs/openapi.json", import.meta.url));
 
-function schema(zodSchema: Parameters<typeof zodToJsonSchema>[0]): object {
+function schema(zodSchema: z.ZodType): object {
   const jsonSchema: Record<string, unknown> = {
-    ...zodToJsonSchema(zodSchema, { target: "openApi3", $refStrategy: "none" }),
+    ...z.toJSONSchema(zodSchema, { target: "openapi-3.0" }),
   };
   // Component schemas are embedded in the document, so they carry no dialect of their own.
   delete jsonSchema["$schema"];

@@ -43,8 +43,8 @@ describe("summarizeValidationIssues", () => {
     expect(JSON.stringify(summary)).not.toContain(SENTINEL);
     expect(summary).toEqual(
       expect.arrayContaining([
-        { code: "invalid_enum_value", path: "model" },
-        { code: "invalid_literal", path: "response_format" },
+        { code: "invalid_value", path: "model" },
+        { code: "invalid_value", path: "response_format" },
         { code: "unrecognized_keys", path: "" },
       ]),
     );

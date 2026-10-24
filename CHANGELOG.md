@@ -7,6 +7,12 @@ the version being released.
 
 ## [Unreleased]
 
+### Security
+
+- Upgrade runtime validation to patched Zod 4 and use its native OpenAPI converter, preserving
+  request constraints and redacted validation logs. Refresh Fastify, fast-uri and ip-address
+  to compatible patched versions; production dependency auditing reports no known advisories.
+
 ### Changed
 
 - Replace `msedge-tts` and its lifecycle patch with a native Edge protocol client using
