@@ -1,8 +1,8 @@
 # syntax=docker/dockerfile:1
 
 ARG NODE_IMAGE=node:24.21.0-alpine3.24
-ARG BUN_IMAGE=oven/bun:1.4.4-alpine@sha256:4cf82f5686b196504fe119db3fcd9185b191f82ece82c40680e597228ec6070a
-ARG ALPINE_IMAGE=alpine:3.24
+ARG BUN_IMAGE=oven/bun:1.4.4-debian@sha256:93d5032fe06d163427822dc1598f420363759bb18155c9cc90eb1be05a64a19e
+ARG RUNTIME_IMAGE=gcr.io/distroless/cc-debian13:nonroot@sha256:cb87acc574abe719b6e5c547384defa2f7b1f24af9605d3f618cf852495d8be2
 
 FROM ${BUN_IMAGE} AS bun
 
@@ -55,23 +55,23 @@ RUN find /prod/server -type f \
        echo 'Native production dependencies require a target-platform deploy stage' >&2; exit 1; \
      fi
 
-# ==============================================================================
-# Production Runtime Stage
-# ==============================================================================
-# Plain Alpine plus the musl Bun binary; Node and its package tools stay in the builder.
-FROM ${ALPINE_IMAGE} AS runtime
-
-# Keep the existing UID/GID and account name for deployment compatibility.
-RUN apk add --no-cache libstdc++ \
-  && addgroup -g 1000 node \
-  && adduser -u 1000 -G node -s /bin/sh -D node \
-  && mkdir -p /usr/local/share/licenses/bun
-
-COPY --from=bun /usr/local/bin/bun /usr/local/bin/bun
+RUN mkdir -p /usr/local/share/licenses/bun
 # Preserve Bun's license and third-party notices; update the checksum with BUN_IMAGE.
 ADD --checksum=sha256:362fe32c954ec829240bd7429c53d705eef08c6bfa45ffc2d02005f857cba4dd --chmod=444 \
   https://raw.githubusercontent.com/oven-sh/bun/bun-v1.4.4/LICENSE.md \
   /usr/local/share/licenses/bun/LICENSE.md
+
+# ==============================================================================
+# Production Runtime Stage
+# ==============================================================================
+# Bun requires glibc and libstdc++; the runtime contains no shell or OS package manager.
+FROM ${RUNTIME_IMAGE} AS runtime
+
+COPY --from=builder /etc/passwd /etc/passwd
+COPY --from=builder /etc/group /etc/group
+
+COPY --from=bun /usr/local/bin/bun /usr/local/bin/bun
+COPY --from=builder /usr/local/share/licenses/bun /usr/local/share/licenses/bun
 
 WORKDIR /app
 

@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { Buffer } from "node:buffer";
 import { log } from "node:console";
-import { accessSync, constants, readFileSync } from "node:fs";
+import { accessSync, constants, existsSync, readFileSync } from "node:fs";
 import process from "node:process";
 import { clearTimeout, setTimeout } from "node:timers";
 import { setTimeout as delay } from "node:timers/promises";
@@ -13,6 +13,24 @@ import { createApp } from "./dist/app.js";
 import { createProductionDependencies } from "./dist/composition.js";
 
 assert.equal(process.getuid(), 1000);
+assert.equal(process.getgid(), 1000);
+assert.match(readFileSync("/etc/os-release", "utf8"), /Debian/);
+for (const binary of [
+  "sh",
+  "bash",
+  "apk",
+  "apt",
+  "apt-get",
+  "node",
+  "npm",
+  "npx",
+  "yarn",
+  "corepack",
+]) {
+  for (const directory of ["/bin", "/usr/bin", "/usr/local/bin", "/sbin", "/usr/sbin"]) {
+    assert.equal(existsSync(directory + "/" + binary), false, binary + " must stay out of runtime");
+  }
+}
 for (const path of [
   "/app",
   "/app/dist",

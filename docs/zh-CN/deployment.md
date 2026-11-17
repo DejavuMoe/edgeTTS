@@ -1,5 +1,7 @@
 # 自托管部署指南
 
+生产镜像使用 Distroless Debian 13，不包含 Shell 或系统包管理器。请通过日志、Bun 命令或独立调试容器排障，docker exec sh 不再可用。
+
 本文档介绍 `edgeTTS` 的多种自托管部署方案，包括使用 GHCR 预构建镜像的独立 Docker Compose 部署、Docker 单容器运行、源码编译部署以及 Linux systemd 原生服务运行。
 
 `/health` 只检查 HTTP 进程，不访问微软，也不证明合成可用。部署在远程服务器时，通过反向代理的 HTTPS 地址打开工作台，并输入同一个密钥。Compose 的 `.env` 不会自动导入当前 shell；执行 API 示例前，对本地生成的文件运行 `set -a; . ./.env; set +a`。重启或升级时不要重新生成 `.env`。

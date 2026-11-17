@@ -1,5 +1,7 @@
 # Deployment Guide
 
+The production image uses Distroless Debian 13 and has no shell or OS package manager. Use logs, Bun commands or a separate debugging container instead of docker exec sh.
+
 This guide covers self-hosted deployment options for `edgeTTS`, from standalone Docker Compose setups using pre-built images to bare-metal systemd services.
 
 `/health` checks the HTTP process only; it does not contact Microsoft or prove synthesis works. For a remote server, use its HTTPS reverse-proxy URL to open the workbench and enter the same key. The Compose `.env` file is not automatically exported to your shell: before the API examples, run `set -a; . ./.env; set +a` for this locally generated file. Do not regenerate `.env` when restarting or upgrading.
