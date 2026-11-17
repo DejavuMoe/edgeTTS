@@ -1,3 +1,5 @@
+import { countCodePoints } from "@edgetts/tts-core";
+
 export interface TextSegmentationOptions {
   readonly maxCodePoints: number;
 }
@@ -31,16 +33,19 @@ export function segmentText(text: string, options: TextSegmentationOptions): rea
 
   // UTF-16 length is an upper bound on code points; short text needs no offset tables.
   if (text.length <= options.maxCodePoints) return [text];
+  if (text.length <= options.maxCodePoints * 2 && countCodePoints(text) <= options.maxCodePoints) {
+    return [text];
+  }
 
   // Phase A: Build code-point to UTF-16 offset index mapping in a single O(N) pass.
   // cpToUtf16Offset[i] is the UTF-16 offset of code point i.
   // utf16ToCp[j] is the code point index corresponding to UTF-16 offset j.
-  const cpToUtf16Offset: number[] = [];
+  const cpToUtf16Offset = new Uint32Array(text.length + 1);
   const utf16ToCp = new Int32Array(text.length + 1);
 
   let cpCount = 0;
   for (let i = 0; i < text.length;) {
-    cpToUtf16Offset.push(i);
+    cpToUtf16Offset[cpCount] = i;
     const cp = text.codePointAt(i)!;
     const cpLen = cp > 0xffff ? 2 : 1;
     for (let k = 0; k < cpLen; k++) {
@@ -49,13 +54,8 @@ export function segmentText(text: string, options: TextSegmentationOptions): rea
     i += cpLen;
     cpCount++;
   }
-  cpToUtf16Offset.push(text.length);
+  cpToUtf16Offset[cpCount] = text.length;
   utf16ToCp[text.length] = cpCount;
-
-  // Fast path: if the entire text fits within maxCodePoints, return it as a single chunk.
-  if (cpCount <= options.maxCodePoints) {
-    return [text];
-  }
 
   // Phase B: Precompute all natural boundary split positions in O(N) linear scans.
   // Each array contains strictly increasing code-point positions where a split can occur.

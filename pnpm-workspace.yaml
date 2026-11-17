@@ -6,3 +6,5 @@ allowBuilds:
 overrides:
   # concurrently 9 pins a vulnerable shell-quote; remove when its pin is fixed.
   "concurrently@9.2.4>shell-quote": "1.12.0"
+  # Remove when the TypeScript ESLint dependency range includes the patched major.
+  "minimatch@>=7 <11.0.1": "11.0.1"

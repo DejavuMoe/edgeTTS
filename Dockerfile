@@ -1,10 +1,7 @@
 # syntax=docker/dockerfile:1
 
 ARG NODE_IMAGE=node:24.21.0-alpine3.24
-ARG BUN_IMAGE=oven/bun:1.4.4-debian@sha256:93d5032fe06d163427822dc1598f420363759bb18155c9cc90eb1be05a64a19e
-ARG RUNTIME_IMAGE=gcr.io/distroless/cc-debian13:nonroot@sha256:cb87acc574abe719b6e5c547384defa2f7b1f24af9605d3f618cf852495d8be2
-
-FROM ${BUN_IMAGE} AS bun
+ARG BUN_IMAGE=oven/bun:1.4.4-distroless@sha256:153a951ae40106e125898103e6e990ee0f38e6aee7f561029e26cf9fbed23470
 
 # ==============================================================================
 # Builder Stage
@@ -65,12 +62,11 @@ ADD --checksum=sha256:362fe32c954ec829240bd7429c53d705eef08c6bfa45ffc2d02005f857
 # Production Runtime Stage
 # ==============================================================================
 # Bun requires glibc and libstdc++; the runtime contains no shell or OS package manager.
-FROM ${RUNTIME_IMAGE} AS runtime
+FROM ${BUN_IMAGE} AS runtime
 
 COPY --from=builder /etc/passwd /etc/passwd
 COPY --from=builder /etc/group /etc/group
 
-COPY --from=bun /usr/local/bin/bun /usr/local/bin/bun
 COPY --from=builder /usr/local/share/licenses/bun /usr/local/share/licenses/bun
 
 WORKDIR /app
@@ -95,4 +91,5 @@ STOPSIGNAL SIGTERM
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD ["bun", "-e", "fetch('http://127.0.0.1:' + (process.env.PORT || '8080') + '/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
 
+ENTRYPOINT []
 CMD ["bun", "dist/server.js"]

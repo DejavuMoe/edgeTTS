@@ -49,3 +49,34 @@ ARM64 runtime validation remains for a compatible runner. Signature verification
 
 Official image scope and shell limitations:
 https://github.com/GoogleContainerTools/distroless
+
+## Official Bun distroless follow-up
+
+The runtime now uses `oven/bun:1.4.4-distroless`, pinned to its multi-architecture
+index digest in `Dockerfile`. This removes the separate Bun extraction stage and
+Google runtime pin. The inherited entrypoint is cleared to preserve existing
+command overrides. UID/GID 1000, root-owned application files and Bun notices remain.
+
+On linux/amd64 the final filesystem measured 138,768,384 allocated bytes using
+`tests/runtime-footprint.mjs` with `--user 0`, as in CI (the official image's
+`/root` directory is inaccessible to the service user). The unchanged 160 MiB
+budget passes. The offline image and HTTP/HTTPS proxy contracts pass. ARM64 has
+not been executed locally; its manifest is present in the pinned index.
+
+Dependabot's five open alerts represented two advisories:
+GHSA-3g3m-2fjr-6pw4 (glob cancellation) and GHSA-g3hv-75wg-m249 (minimatch
+pattern amplification). Updating @fastify/static resolves glob to 14.0.6 and
+minimatch to 11.0.8. A scoped override supplies minimatch 11.0.1 to the existing
+TypeScript ESLint dependency; remove it when that dependency accepts the fixed
+major. Full pnpm audit reports zero known vulnerabilities. The application uses
+fixed static roots with wildcard serving; no attacker-controlled glob pattern
+was established in this review.
+
+Text segmentation now preallocates a Uint32Array for UTF-16 offsets and counts
+potentially fitting astral text before allocating lookup tables. Existing
+lossless Unicode, boundary and large-input regressions pass. On Node 24.22.3,
+the existing local benchmark measured long-text P50 batch means of 273.816 us
+before and 138.393 us after; 300-emoji input measured 2.116 us and 0.672 us.
+These single-run microbenchmarks are directional evidence, not HTTP throughput,
+RSS measurements or Microsoft synthesis latency guarantees. Short input keeps
+its existing allocation-free fast path.
