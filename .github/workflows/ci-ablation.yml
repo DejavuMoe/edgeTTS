@@ -166,7 +166,7 @@ jobs:
         run: |
           date +%s%N > coverage/ci-cache/changed-end
           docker image inspect edgetts:cache-changed --format '{{.Id}}' > coverage/ci-cache/changed-id
-          docker run --rm --network none edgetts:cache-changed grep -q ci-cache-canary /app/web-dist/index.html
+          docker run --rm --network none edgetts:cache-changed bun -e 'if (!require("node:fs").readFileSync("/app/web-dist/index.html", "utf8").includes("ci-cache-canary")) process.exit(1)'
           docker run --rm -i --network none --cap-drop=ALL --security-opt=no-new-privileges \
             --memory=256m --cpus=1 --pids-limit=64 edgetts:cache-changed bun run - < tests/docker-runtime.mjs
           node --input-type=module <<'NODE'

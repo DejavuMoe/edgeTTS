@@ -637,11 +637,8 @@ jobs:
 
           # 5. Audit runtime container environment for secrets
           for PLATFORM in linux/amd64 linux/arm64; do
-            IMAGE_ENV=$(docker run --rm --platform "$PLATFORM" "$IMAGE_TAG" env)
-            if echo "$IMAGE_ENV" | grep -Eqi 'API_KEY|GHCR|TOKEN'; then
-              echo "::error::Secret found in $PLATFORM image environment"
-              exit 1
-            fi
+            docker run --rm -i --platform "$PLATFORM" --network none \
+              "$IMAGE_TAG" bun run - < tests/runtime-environment.mjs
             echo "PASS: $PLATFORM runtime environment clean."
           done
           echo "PASS: All published image security and supply-chain audits succeeded."

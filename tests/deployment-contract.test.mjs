@@ -13,6 +13,25 @@ const execute = promisify(execFile);
 const dockerfile = readFileSync(new URL("../Dockerfile", import.meta.url), "utf8");
 const healthcheck = JSON.parse(dockerfile.match(/HEALTHCHECK[^\n]*\n\s*CMD (\[[^\n]+\])/u)[1]);
 
+it("runtime environment audit rejects credential names and values without disclosing them", async () => {
+  const script = fileURLToPath(new URL("./runtime-environment.mjs", import.meta.url));
+  await execute(process.execPath, [script], { env: { NODE_ENV: "production" } });
+  for (const env of [
+    { API_KEY: "private-example" },
+    { ghcr_password: "private-example" },
+    { TOKEN: "private-example" },
+    { CUSTOM: "private-example-token-value" },
+  ]) {
+    await assert.rejects(execute(process.execPath, [script], { env }), (error) => {
+      assert.equal(error.code, 1);
+      assert.match(error.stderr, /Unexpected credential material/u);
+      assert.ok(!error.stderr.includes("private-example"));
+      assert.equal(error.stdout, "");
+      return true;
+    });
+  }
+});
+
 for (const status of [200, 503]) {
   it(`Docker healthcheck uses the configured PORT and respects HTTP ${status}`, async () => {
     const requests = [];

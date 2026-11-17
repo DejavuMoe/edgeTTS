@@ -7,6 +7,37 @@ the version being released.
 
 ## [Unreleased]
 
+## [1.0.2] - 2026-11-17
+
+### Changed
+
+- Move production containers to digest-pinned Distroless Debian 13 with glibc Bun
+  1.4.4. Preserve UID/GID 1000, API contracts, healthchecks and read-only deployments.
+  The container no longer includes a shell or an OS package manager; use logs, Bun
+  commands or a separate debugging container instead of `docker exec sh`.
+- Index cached voice IDs once per successful refresh and reuse the index across
+  both synthesis paths. Preserve case-insensitive matching, expiration, empty
+  catalogs, refresh failures and isolation of caller-owned results.
+- Remove unused TypeScript sources and dependency CI metadata from runtime images,
+  preserving JavaScript, package metadata, licenses, certificates and ICU. The
+  Distroless runtime budget is 160 MiB; the measured amd64 filesystem is about
+  144.07 MiB. This migration prioritizes a shell-free environment over Alpine size.
+
+### Fixed
+
+- Run published-image environment audits and build-cache canary checks through Bun
+  so multi-architecture verification works without `env` or `grep` in the container.
+  Credential checks retain name/value coverage without printing environment values.
+- Prevent upstream errors from injecting log lines into smoke and benchmark output.
+- Build before static analysis and run integration tests after concurrent static
+  checks, preserving test isolation and the complete validation gate.
+
+### Maintenance
+
+- Update pinned GitHub Actions and the transitive glob dependency.
+- Record reproducible runtime and CI experiments, their raw results and measurement
+  limits. Local service microbenchmarks do not represent upstream TTS latency.
+
 ## [1.0.1] - 2026-10-25
 
 ### Fixed
@@ -320,7 +351,9 @@ the version being released.
 - First release: an OpenAI-compatible speech API, Edge voice discovery, prosody controls, the
   browser workbench and a container image.
 
-[Unreleased]: https://github.com/DejavuMoe/edgeTTS/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/DejavuMoe/edgeTTS/compare/v1.0.2...HEAD
+[1.0.2]: https://github.com/DejavuMoe/edgeTTS/compare/v1.0.1...v1.0.2
+[1.0.1]: https://github.com/DejavuMoe/edgeTTS/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/DejavuMoe/edgeTTS/compare/v0.9.6...v1.0.0
 [0.9.6]: https://github.com/DejavuMoe/edgeTTS/compare/v0.9.5...v0.9.6
 [0.9.5]: https://github.com/DejavuMoe/edgeTTS/compare/v0.9.4...v0.9.5
