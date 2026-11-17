@@ -7,6 +7,25 @@ the version being released.
 
 ## [Unreleased]
 
+## [1.0.3] - 2026-11-17
+
+### Security
+
+- Upgrade static hosting dependencies to patched glob and minimatch versions,
+  addressing GHSA-3g3m-2fjr-6pw4 and GHSA-g3hv-75wg-m249. Apply a scoped
+  minimatch override for the existing TypeScript ESLint dependency without
+  relaxing package release-age checks.
+
+### Changed
+
+- Use the digest-pinned official Bun 1.4.4 distroless image, simplifying runtime
+  maintenance while preserving non-root execution, healthchecks, command overrides
+  and license notices. Existing configuration and HTTP contracts remain compatible.
+- Preallocate text-segmentation offsets and avoid lookup tables for astral text
+  that fits in one segment. Preserve Unicode, CRLF and natural-boundary behavior.
+  Local microbenchmarks show lower segmentation cost; they do not establish an
+  improvement in upstream synthesis latency or end-to-end HTTP throughput.
+
 ## [1.0.2] - 2026-11-17
 
 ### Changed
@@ -351,7 +370,8 @@ the version being released.
 - First release: an OpenAI-compatible speech API, Edge voice discovery, prosody controls, the
   browser workbench and a container image.
 
-[Unreleased]: https://github.com/DejavuMoe/edgeTTS/compare/v1.0.2...HEAD
+[Unreleased]: https://github.com/DejavuMoe/edgeTTS/compare/v1.0.3...HEAD
+[1.0.3]: https://github.com/DejavuMoe/edgeTTS/compare/v1.0.2...v1.0.3
 [1.0.2]: https://github.com/DejavuMoe/edgeTTS/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/DejavuMoe/edgeTTS/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/DejavuMoe/edgeTTS/compare/v0.9.6...v1.0.0
