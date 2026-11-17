@@ -43,13 +43,13 @@ RUN pnpm build
 # Prune and deploy production server dependencies
 RUN pnpm --filter @edgetts/server --prod deploy /prod/server
 
-# Drop source maps, type declarations and Markdown docs from the deployed JavaScript.
+# Deployed entrypoints are JavaScript; drop TypeScript sources and development metadata.
 # License files stay, whatever their extension.
 RUN find /prod/server -type f \
-      \( -name '*.map' -o -name '*.d.ts' -o -name '*.d.mts' -o -name '*.d.cts' -o -iname '*.md' \) \
+      \( -name '*.map' -o -name '*.ts' -o -name '*.mts' -o -name '*.cts' -o -iname '*.md' \) \
       ! -iname 'licen[cs]e*' -delete \
   && find /prod/server/node_modules -type d \
-      \( -name test -o -name tests -o -name __tests__ -o -name docs -o -name examples -o -name benchmarks \) \
+      \( -name test -o -name tests -o -name __tests__ -o -name docs -o -name examples -o -name benchmarks -o -name .github \) \
       -prune -exec rm -rf '{}' + \
   && if find /prod/server -type f \( -name '*.node' -o -name '*.so' \) | grep -q .; then \
        echo 'Native production dependencies require a target-platform deploy stage' >&2; exit 1; \

@@ -1,5 +1,9 @@
 # Runtime and image optimization
 
+This page records historical measurements. The current runtime is Distroless with
+a 160 MiB budget; see [the migration evaluation](distroless-evaluation.md) and
+[the subsequent runtime tuning](runtime-tuning.md) for current decisions and results.
+
 Measured on Debian WSL2 with Node 24.21.0 and Bun 1.4.2 on 2026-10-05. The baseline is the published
 `v0.9.4` image and source at `44c34bf72fde770e44f3d49ed2451b0db78260f9`.
 

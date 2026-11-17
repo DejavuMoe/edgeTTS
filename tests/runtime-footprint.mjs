@@ -7,6 +7,10 @@ function rootfsBytes(directory) {
   for (const name of readdirSync(directory || "/")) {
     const entry = directory + "/" + name;
     if (["/proc", "/sys", "/dev"].includes(entry)) continue;
+    if (entry.startsWith("/app/")) {
+      assert.ok(!/\.(?:ts|mts|cts)$/u.test(name), "TypeScript source shipped: " + entry);
+      assert.notEqual(name, ".github", "development metadata shipped: " + entry);
+    }
     const stat = lstatSync(entry);
     bytes += stat.blocks * 512;
     if (stat.isDirectory()) bytes += rootfsBytes(entry);

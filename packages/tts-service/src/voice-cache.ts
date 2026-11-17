@@ -20,6 +20,7 @@ export class VoiceCache {
   private readonly now: () => number;
 
   private cachedVoices: readonly TtsVoice[] | null = null;
+  private cachedVoiceIds = new Set<string>();
   private cachedAt: number | null = null;
   private inFlight: Promise<readonly TtsVoice[]> | null = null;
   private lastErrorAt: number | null = null;
@@ -50,12 +51,14 @@ export class VoiceCache {
     return { voices: this.cachedVoices.length, ageMs: this.now() - this.cachedAt };
   }
 
-  /** The cached catalog while it is within its TTL. Never triggers an upstream fetch. */
-  peekFresh(): readonly TtsVoice[] | null {
-    if (this.cachedVoices === null || this.cachedAt === null) {
+  /** Null means the catalog cannot validate a voice. Never triggers an upstream fetch. */
+  hasFreshVoice(voice: string): boolean | null {
+    if (this.cachedVoiceIds.size === 0 || this.cachedAt === null) {
       return null;
     }
-    return this.now() - this.cachedAt < this.ttlMs ? this.cachedVoices : null;
+    return this.now() - this.cachedAt < this.ttlMs
+      ? this.cachedVoiceIds.has(voice.toLowerCase())
+      : null;
   }
 
   async getVoices(forceRefresh = false): Promise<readonly TtsVoice[]> {
@@ -74,8 +77,10 @@ export class VoiceCache {
         try {
           const voices = await this.provider.listVoices();
           const snapshot = cloneVoices(voices);
+          const voiceIds = new Set(snapshot.map((voice) => voice.id.toLowerCase()));
           this.cachedAt = this.now();
           this.cachedVoices = snapshot;
+          this.cachedVoiceIds = voiceIds;
           this.lastErrorAt = null;
           return snapshot;
         } catch (err) {

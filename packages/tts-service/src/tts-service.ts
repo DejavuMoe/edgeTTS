@@ -477,12 +477,7 @@ export class TtsService {
    * Matching ignores case so nothing the provider might accept is rejected here.
    */
   private assertKnownVoice(voice: string): void {
-    const catalog = this.voiceCache.peekFresh();
-    if (catalog === null || catalog.length === 0) {
-      return;
-    }
-    const wanted = voice.toLowerCase();
-    if (!catalog.some((candidate) => candidate.id.toLowerCase() === wanted)) {
+    if (this.voiceCache.hasFreshVoice(voice) === false) {
       this.unknownVoiceRejections++;
       throw new TtsError("unknown_voice", "Requested voice is not in the voice catalog");
     }

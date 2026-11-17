@@ -36,6 +36,32 @@ class MockProvider implements TtsProvider {
 }
 
 describe("VoiceCache", () => {
+  it("replaces the voice index only on successful refresh and respects TTL and empty catalogs", async () => {
+    let now = 0;
+    const provider = new MockProvider();
+    const cache = new VoiceCache(provider, { ttlMs: 100, now: () => now });
+    expect(cache.hasFreshVoice("missing")).toBeNull();
+    const result = await cache.getVoices();
+    expect(cache.hasFreshVoice("ZH-cn-XIAOXIAOneural")).toBe(true);
+    expect(cache.hasFreshVoice("missing")).toBe(false);
+    (result[0] as { id: string }).id = "mutated";
+    provider.voicesToReturn = [{ ...provider.voicesToReturn[0]!, id: "new" }];
+    provider.listVoicesError = new Error("refresh failed");
+    await expect(cache.getVoices(true)).rejects.toThrow("refresh failed");
+    expect(cache.hasFreshVoice("zh-CN-XiaoxiaoNeural")).toBe(true);
+    expect(cache.hasFreshVoice("new")).toBe(false);
+    now = 100;
+    expect(cache.hasFreshVoice("missing")).toBeNull();
+    provider.listVoicesError = null;
+    await cache.getVoices(true);
+    expect(cache.hasFreshVoice("new")).toBe(true);
+    expect(cache.hasFreshVoice("zh-CN-XiaoxiaoNeural")).toBe(false);
+    provider.voicesToReturn = [];
+    await cache.getVoices(true);
+    expect(cache.hasFreshVoice("new")).toBeNull();
+    expect(provider.listVoicesCallCount).toBe(4);
+  });
+
   it("validates constructor options and exports defaults", () => {
     expect(DEFAULT_VOICE_CACHE_TTL_MS).toBe(6 * 60 * 60 * 1000);
     expect(DEFAULT_VOICE_CACHE_ERROR_BACKOFF_MS).toBe(5000);
