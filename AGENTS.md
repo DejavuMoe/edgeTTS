@@ -111,6 +111,11 @@ Every commit must include:
    - Important resource lifecycle, concurrency, or safety semantics.
    - Newly added verification and test coverage.
    - Compatibility impact on existing contracts.
+3. **Co-Author Trailer**: Every commit must end with exactly this trailer line:
+
+   ```text
+   Co-Authored-By: DeepSeek v4.1 Flash Codex (1M context) <noreply@openai.com>
+   ```
 
 _Note: Do not bloat commit messages with full execution logs, generated file lists, token metrics, or conversational reasoning._
 
