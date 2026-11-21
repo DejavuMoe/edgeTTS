@@ -114,7 +114,7 @@ Every commit must include:
 3. **Co-Author Trailer**: Every commit must end with exactly this trailer line:
 
    ```text
-   Co-Authored-By: DeepSeek v4.1 Flash Codex (1M context) <noreply@openai.com>
+   Co-Authored-By: Codex with DeepSeek v4.1 Flash (1M context) <noreply@openai.com>
    ```
 
 _Note: Do not bloat commit messages with full execution logs, generated file lists, token metrics, or conversational reasoning._
