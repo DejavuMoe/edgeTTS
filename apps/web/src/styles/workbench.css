@@ -64,6 +64,7 @@
   gap: 6px;
   color: var(--ink-2);
   font-size: 12px;
+  white-space: nowrap;
 }
 
 .status-label {
@@ -105,6 +106,23 @@
 
 .language-control .ui-select-trigger-label {
   overflow: visible;
+}
+
+/* The repository link: an icon as quiet as the language control beside it. */
+.header-link {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-s);
+  color: var(--ink-2);
+}
+
+.header-link:hover {
+  background: var(--hover);
+  color: var(--ink);
 }
 
 /* Main grid ------------------------------------------------------------ */
@@ -859,7 +877,12 @@
   }
 
   .app-header {
+    gap: 8px;
     padding: 0 16px;
+  }
+
+  .header-tools {
+    gap: 8px;
   }
 
   .status-label {
@@ -938,5 +961,12 @@
 
   .btn-download {
     flex: 1;
+  }
+}
+
+/* At 320px the English header needs every pixel to keep status, language and link on one row. */
+@media (max-width: 359px) {
+  .header-tools {
+    gap: 4px;
   }
 }

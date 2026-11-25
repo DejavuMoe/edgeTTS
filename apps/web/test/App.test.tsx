@@ -2982,9 +2982,13 @@ describe("EdgeTTS Web Workbench", () => {
       // Enter text so clear and generate buttons become enabled
       fireEvent.change(textarea, { target: { value: "可访问性导航测试" } });
 
-      // Language switch is the first control in the page header.
+      // Language switch is the first control in the page header, the repository link the last.
       await user.tab();
       expect(document.activeElement).toBe(screen.getByRole("combobox", { name: "界面语言" }));
+      await user.tab();
+      expect(document.activeElement).toBe(
+        screen.getByRole("link", { name: "在 GitHub 查看源代码" }),
+      );
       await user.tab();
       expect(document.activeElement).toBe(screen.getByRole("button", { name: /导入 TXT 文件/i }));
 
@@ -3042,9 +3046,13 @@ describe("EdgeTTS Web Workbench", () => {
 
       const textarea = screen.getByLabelText(/文本内容/i);
 
-      // Header language switch precedes the editor controls.
+      // Header language switch and repository link precede the editor controls.
       await user.tab();
       expect(document.activeElement).toBe(screen.getByRole("combobox", { name: "界面语言" }));
+      await user.tab();
+      expect(document.activeElement).toBe(
+        screen.getByRole("link", { name: "在 GitHub 查看源代码" }),
+      );
       await user.tab();
       expect(document.activeElement).toBe(screen.getByRole("button", { name: /导入 TXT 文件/i }));
 

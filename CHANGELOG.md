@@ -7,6 +7,14 @@ the version being released.
 
 ## [Unreleased]
 
+### Added
+
+- Link the workbench header to the GitHub repository. The link opens in a new tab without
+  giving the opened page access to the workbench, so the draft and the current take stay
+  intact, and its accessible name is translated into all four interface languages. On phones
+  the header tightens its spacing so the API status, language switch and link stay on one row
+  down to a 320px-wide screen.
+
 ## [1.0.3] - 2026-11-17
 
 ### Security
