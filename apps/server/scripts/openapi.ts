@@ -111,8 +111,18 @@ export function buildOpenApiDocument(): object {
           security: secured,
           responses: {
             "200": {
-              description: "Voice catalog.",
+              description:
+                "Voice catalog, brotli- or gzip-encoded when Accept-Encoding allows. The weak ETag changes only when the catalog does.",
+              headers: {
+                ETag: {
+                  description: "Weak validator of the catalog; send it back in If-None-Match.",
+                  schema: { type: "string" },
+                },
+              },
               content: json("#/components/schemas/VoicesResponse"),
+            },
+            "304": {
+              description: "Not Modified: If-None-Match names the current catalog.",
             },
             "401": SPEECH_ERRORS["401"],
             "429": error("RATE_LIMITED: voice discovery quota exceeded."),

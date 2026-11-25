@@ -65,8 +65,15 @@ export function registerStaticHosting(
     root: webDistDir,
     prefix: "/",
     wildcard: true,
+    // The web build writes .br and .gz siblings of its text files; clients that accept them get
+    // those bytes, everyone else the original. Absent siblings fall back to the original too.
+    preCompressed: true,
     setHeaders(reply: FastifyReply, filePath: string): void {
-      const normalized = path.relative(webDistDir, filePath).replace(/\\/g, "/");
+      // A precompressed sibling (index.html.br) keeps the caching policy of the file it encodes.
+      const normalized = path
+        .relative(webDistDir, filePath)
+        .replace(/\\/g, "/")
+        .replace(/\.(?:br|gz)$/, "");
       if (normalized.startsWith("assets/")) {
         reply.header("Cache-Control", "public, max-age=31536000, immutable");
       } else if (normalized.endsWith("index.html")) {

@@ -15,6 +15,15 @@ the version being released.
   the header tightens its spacing so the API status, language switch and link stay on one row
   down to a 320px-wide screen.
 
+### Changed
+
+- Serve the web workbench compressed. The production build writes brotli and gzip copies of
+  its text assets, and the server sends the one a browser accepts, so the main script drops
+  from about 393 KB to 103 KB on the wire. `GET /api/voices` is compressed the same way and
+  carries a weak `ETag`, answering `304 Not Modified` while the catalog is unchanged; the
+  catalog is compressed once per voice-cache refresh, not per request. Speech streaming is
+  unchanged.
+
 ## [1.0.3] - 2026-11-17
 
 ### Security

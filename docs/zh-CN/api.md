@@ -119,7 +119,7 @@ curl -X POST http://127.0.0.1:8080/api/speech \
 
 ## 3. 音色查询接口 (`GET /api/voices`)
 
-获取当前 Microsoft Edge TTS 支持的所有音色清单。数据在服务端内存中缓存 6 小时。
+获取当前 Microsoft Edge TTS 支持的所有音色清单。数据在服务端内存中缓存 6 小时。客户端支持时，响应会以 brotli 或 gzip 压缩，并带有弱 `ETag`；在 `If-None-Match` 中回传它，音色清单未变化时会得到 `304 Not Modified`。
 
 ### cURL 调用示例
 

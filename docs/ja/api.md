@@ -102,7 +102,7 @@ curl -X POST http://127.0.0.1:8080/v1/audio/speech \
 
 ## 3. 音色一覧取得 API (`GET /api/voices`)
 
-Microsoft Edge TTS で現在利用可能な音色一覧を返します（6 時間キャッシュ）。
+Microsoft Edge TTS で現在利用可能な音色一覧を返します（6 時間キャッシュ）。クライアントが対応していればレスポンスは brotli または gzip で圧縮され、弱い `ETag` が付きます。`If-None-Match` で送り返すと、一覧が変わっていない間は `304 Not Modified` が返ります。
 
 ### cURL 実行例
 

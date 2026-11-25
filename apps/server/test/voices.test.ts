@@ -1,3 +1,4 @@
+import { brotliDecompressSync, gunzipSync } from "node:zlib";
 import { describe, it, expect, afterEach } from "vitest";
 import type { FastifyInstance } from "fastify";
 import type { SynthesisResult, TtsVoice } from "@edgetts/tts-core";
@@ -198,5 +199,60 @@ describe("GET /api/voices", () => {
     expect(response.statusCode).toBe(200);
     const json = response.json() as { voices: unknown[] };
     expect(json.voices.length).toBe(2);
+  });
+
+  it("compresses the catalog for clients that accept br or gzip", async () => {
+    app = createApp({ ttsService: new FakeTtsService() });
+    const plain = await app.inject({ method: "GET", url: "/api/voices" });
+
+    const br = await app.inject({
+      method: "GET",
+      url: "/api/voices",
+      headers: { "accept-encoding": "gzip, deflate, br" },
+    });
+    const gzip = await app.inject({
+      method: "GET",
+      url: "/api/voices",
+      headers: { "accept-encoding": "gzip" },
+    });
+
+    expect(plain.headers["content-encoding"]).toBeUndefined();
+    expect(br.headers["content-encoding"]).toBe("br");
+    expect(gzip.headers["content-encoding"]).toBe("gzip");
+    expect(brotliDecompressSync(br.rawPayload).toString()).toBe(plain.body);
+    expect(gunzipSync(gzip.rawPayload).toString()).toBe(plain.body);
+    for (const response of [plain, br, gzip]) {
+      expect(response.statusCode).toBe(200);
+      expect(response.headers["content-type"]).toContain("application/json");
+      expect(response.headers["vary"]).toContain("Accept-Encoding");
+      expect(response.headers["cache-control"]).toBe("private, no-cache");
+      expect(response.headers["etag"]).toBe(plain.headers["etag"]);
+    }
+  });
+
+  it("answers 304 without a body while If-None-Match names the current catalog", async () => {
+    const fakeService = new FakeTtsService();
+    app = createApp({ ttsService: fakeService });
+    const first = await app.inject({ method: "GET", url: "/api/voices" });
+    const etag = String(first.headers["etag"]);
+
+    const unchanged = await app.inject({
+      method: "GET",
+      url: "/api/voices",
+      headers: { "if-none-match": etag },
+    });
+    expect(unchanged.statusCode).toBe(304);
+    expect(unchanged.body).toBe("");
+    expect(unchanged.headers["etag"]).toBe(etag);
+
+    fakeService.voicesToReturn = fakeService.voicesToReturn.slice(0, 1);
+    const changed = await app.inject({
+      method: "GET",
+      url: "/api/voices",
+      headers: { "if-none-match": etag },
+    });
+    expect(changed.statusCode).toBe(200);
+    expect(changed.headers["etag"]).not.toBe(etag);
+    expect(VoicesResponseSchema.parse(changed.json()).voices).toHaveLength(1);
   });
 });

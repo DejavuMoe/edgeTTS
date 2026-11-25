@@ -119,7 +119,7 @@ curl -X POST http://127.0.0.1:8080/api/speech \
 
 ## 3. Voice Discovery API (`GET /api/voices`)
 
-Returns the catalog of available Edge TTS voices. Results are cached in memory for 6 hours.
+Returns the catalog of available Edge TTS voices. Results are cached in memory for 6 hours. Responses are brotli- or gzip-compressed when the client accepts it and carry a weak `ETag`; send it back in `If-None-Match` to get `304 Not Modified` while the catalog is unchanged.
 
 ### cURL Example
 

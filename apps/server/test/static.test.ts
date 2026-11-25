@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { brotliCompressSync, brotliDecompressSync, gunzipSync, gzipSync } from "node:zlib";
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import type { FastifyInstance } from "fastify";
 import type { SynthesisResult, TtsVoice } from "@edgetts/tts-core";
@@ -354,6 +355,80 @@ describe("Production Static Web Hosting & SPA Fallback", () => {
       url: "/api/voices",
     });
     expect(voicesRes.statusCode).toBe(401);
+  });
+
+  describe("precompressed siblings from the web build", () => {
+    const script = "console.log('edgetts bundle');";
+
+    beforeEach(() => {
+      fs.writeFileSync(
+        path.join(tempDir, "assets", "index-test1234.js.br"),
+        brotliCompressSync(script),
+      );
+      fs.writeFileSync(path.join(tempDir, "assets", "index-test1234.js.gz"), gzipSync(script));
+      const html = fs.readFileSync(path.join(tempDir, "index.html"));
+      fs.writeFileSync(path.join(tempDir, "index.html.br"), brotliCompressSync(html));
+    });
+
+    it("serves the encoding a client accepts with the original type and cache policy", async () => {
+      app = createApp({ ttsService: dummyService }, { serveStatic: true, webDistDir: tempDir });
+
+      const br = await app.inject({
+        method: "GET",
+        url: "/assets/index-test1234.js",
+        headers: { "accept-encoding": "gzip, deflate, br" },
+      });
+      const gzip = await app.inject({
+        method: "GET",
+        url: "/assets/index-test1234.js",
+        headers: { "accept-encoding": "gzip" },
+      });
+
+      expect(br.headers["content-encoding"]).toBe("br");
+      expect(brotliDecompressSync(br.rawPayload).toString()).toBe(script);
+      expect(gzip.headers["content-encoding"]).toBe("gzip");
+      expect(gunzipSync(gzip.rawPayload).toString()).toBe(script);
+      for (const response of [br, gzip]) {
+        expect(response.statusCode).toBe(200);
+        expect(response.headers["content-type"]).toContain("javascript");
+        expect(response.headers["cache-control"]).toBe("public, max-age=31536000, immutable");
+        expect(response.headers["vary"]).toContain("accept-encoding");
+      }
+    });
+
+    it("falls back to the original file without a sibling or an accepted encoding", async () => {
+      app = createApp({ ttsService: dummyService }, { serveStatic: true, webDistDir: tempDir });
+
+      const noSibling = await app.inject({
+        method: "GET",
+        url: "/assets/index-test1234.css",
+        headers: { "accept-encoding": "br" },
+      });
+      const identity = await app.inject({ method: "GET", url: "/assets/index-test1234.js" });
+
+      expect(noSibling.headers["content-encoding"]).toBeUndefined();
+      expect(noSibling.body).toBe("body { background: #000; }");
+      expect(identity.headers["content-encoding"]).toBeUndefined();
+      expect(identity.body).toBe(script);
+      expect(identity.headers["vary"]).toContain("accept-encoding");
+    });
+
+    it("keeps index.html uncached when its compressed copy is served, SPA fallback included", async () => {
+      app = createApp({ ttsService: dummyService }, { serveStatic: true, webDistDir: tempDir });
+
+      for (const url of ["/", "/index.html", "/workbench/settings"]) {
+        const response = await app.inject({
+          method: "GET",
+          url,
+          headers: { "accept-encoding": "br" },
+        });
+        expect(response.statusCode).toBe(200);
+        expect(response.headers["content-type"]).toContain("text/html");
+        expect(response.headers["content-encoding"]).toBe("br");
+        expect(response.headers["cache-control"]).toBe("no-cache");
+        expect(brotliDecompressSync(response.rawPayload).toString()).toContain("EdgeTTS Workbench");
+      }
+    });
   });
 });
 

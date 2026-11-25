@@ -1,8 +1,9 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import { precompress } from "./vite-precompress.js";
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), precompress()],
   server: {
     port: 5173,
     proxy: {
