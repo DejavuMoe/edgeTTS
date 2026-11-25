@@ -298,10 +298,11 @@ describe("EdgeTTS Web Workbench", () => {
       await user.type(searchInput, "female");
       options = await getPickerOptions(user, select);
       expect(options.length).toBe(3);
+      // Locale groups follow the interface's order: zh-CN first, then 美国英语, 日语.
       expect(options.map((o) => o.getAttribute("data-value"))).toEqual([
+        "zh-CN-XiaoxiaoNeural",
         "en-US-JennyNeural",
         "ja-JP-NanamiNeural",
-        "zh-CN-XiaoxiaoNeural",
       ]);
       await closePicker(user, select);
     });
@@ -1698,12 +1699,13 @@ describe("EdgeTTS Web Workbench", () => {
       expect(options.length).toBe(4);
       expect(options[0]?.getAttribute("data-value")).toBe("all");
       expect(options[0]?.textContent).toContain("全部地区 (4)");
-      expect(options[1]?.getAttribute("data-value")).toBe("en-US");
-      expect(options[1]?.textContent).toContain("en-US (1)");
-      expect(options[2]?.getAttribute("data-value")).toBe("ja-JP");
-      expect(options[2]?.textContent).toContain("ja-JP (1)");
-      expect(options[3]?.getAttribute("data-value")).toBe("zh-CN");
-      expect(options[3]?.textContent).toContain("zh-CN (2)");
+      // The interface's own locale first, then the rest by the pinyin of their names.
+      expect(options[1]?.getAttribute("data-value")).toBe("zh-CN");
+      expect(options[1]?.textContent).toContain("zh-CN (2)");
+      expect(options[2]?.getAttribute("data-value")).toBe("en-US");
+      expect(options[2]?.textContent).toContain("en-US (1)");
+      expect(options[3]?.getAttribute("data-value")).toBe("ja-JP");
+      expect(options[3]?.textContent).toContain("ja-JP (1)");
       await closePicker(user, localeSelect);
     });
 
@@ -1815,28 +1817,28 @@ describe("EdgeTTS Web Workbench", () => {
       await openPicker(user, voiceSelect);
       const groups = within(voiceSelect).getAllByRole("group");
 
-      // Groups should be:
-      // 1. 收藏 (Jenny, Yunxi)
-      // 2. ja-JP (Nanami)
-      // 3. zh-CN (Xiaoxiao - Yunxi is in favorites, so not in zh-CN group)
+      // Groups should be, with locales in the interface's order (its own locale first):
+      // 1. 收藏 (Yunxi, Jenny)
+      // 2. zh-CN (Xiaoxiao - Yunxi is in favorites, so not in zh-CN group)
+      // 3. ja-JP (Nanami)
       expect(groups.length).toBe(3);
       expect(groups[0]?.getAttribute("aria-label")).toBe("收藏");
       const favOptions = Array.from(groups[0]?.querySelectorAll("[role='option']") ?? []).map((o) =>
         o.getAttribute("data-value"),
       );
-      expect(favOptions).toEqual(["en-US-JennyNeural", "zh-CN-YunxiNeural"]);
+      expect(favOptions).toEqual(["zh-CN-YunxiNeural", "en-US-JennyNeural"]);
 
-      expect(groups[1]?.getAttribute("aria-label")).toBe("ja-JP");
-      const jaOptions = Array.from(groups[1]?.querySelectorAll("[role='option']") ?? []).map((o) =>
-        o.getAttribute("data-value"),
-      );
-      expect(jaOptions).toEqual(["ja-JP-NanamiNeural"]);
-
-      expect(groups[2]?.getAttribute("aria-label")).toBe("zh-CN");
-      const zhOptions = Array.from(groups[2]?.querySelectorAll("[role='option']") ?? []).map((o) =>
+      expect(groups[1]?.getAttribute("aria-label")).toBe("zh-CN");
+      const zhOptions = Array.from(groups[1]?.querySelectorAll("[role='option']") ?? []).map((o) =>
         o.getAttribute("data-value"),
       );
       expect(zhOptions).toEqual(["zh-CN-XiaoxiaoNeural"]);
+
+      expect(groups[2]?.getAttribute("aria-label")).toBe("ja-JP");
+      const jaOptions = Array.from(groups[2]?.querySelectorAll("[role='option']") ?? []).map((o) =>
+        o.getAttribute("data-value"),
+      );
+      expect(jaOptions).toEqual(["ja-JP-NanamiNeural"]);
       await closePicker(user, voiceSelect);
     });
 

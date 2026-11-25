@@ -36,6 +36,16 @@ describe("localeDisplayName", () => {
   it("returns null for invalid locales", () => {
     expect(localeDisplayName("not a locale", "en")).toBeNull();
   });
+
+  it("names the catalog locales Intl leaves unnamed, in every interface language", () => {
+    expect(localeDisplayName("zh-CN-liaoning", "zh-CN")).toBe("中文（东北官话，辽宁）");
+    expect(localeDisplayName("zh-CN-shaanxi", "zh-TW")).toBe("中文（中原官話，陝西）");
+    expect(localeDisplayName("zh-CN-liaoning", "en")).toBe(
+      "Chinese (Northeastern Mandarin, Liaoning)",
+    );
+    expect(localeDisplayName("iu-Cans-CA", "ja")).toBe("イヌクティトゥット語 (音節文字、カナダ)");
+    expect(localeDisplayName("iu-Latn-CA", "en")).toBe("Inuktitut (Latin, Canada)");
+  });
 });
 
 describe("voice monograms", () => {

@@ -1,8 +1,13 @@
 import { useState } from "react";
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, afterEach, vi } from "vitest";
 import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { Select, type SelectOption, type SelectGroup } from "../../src/ui/Select.js";
+import {
+  Select,
+  findTypeaheadIndex,
+  type SelectOption,
+  type SelectGroup,
+} from "../../src/ui/Select.js";
 
 describe("UI Primitive: Select", () => {
   afterEach(() => {
@@ -154,6 +159,94 @@ describe("UI Primitive: Select", () => {
     // Click outside
     fireEvent.mouseDown(screen.getByTestId("outside-area"));
     expect(trigger.getAttribute("aria-expanded")).toBe("false");
+  });
+
+  describe("type-ahead", () => {
+    const activeValue = (trigger: HTMLElement): string | undefined =>
+      trigger.getAttribute("aria-activedescendant")?.replace(/^.*-opt-/, "");
+
+    it("opens the menu on a letter and moves to the first option that starts with it", async () => {
+      const user = userEvent.setup();
+      render(<TestSelectWrapper />);
+      const trigger = screen.getByRole("combobox", { name: "Test Select Label" });
+      trigger.focus();
+
+      await user.keyboard("g");
+      expect(trigger.getAttribute("aria-expanded")).toBe("true");
+      expect(activeValue(trigger)).toBe("g1");
+
+      await user.keyboard("{Enter}");
+      expect(trigger.getAttribute("data-value")).toBe("g1");
+    });
+
+    it("matches secondary labels and lets Space join a query being typed", async () => {
+      const user = userEvent.setup();
+      render(<TestSelectWrapper />);
+      const trigger = screen.getByRole("combobox", { name: "Test Select Label" });
+      trigger.focus();
+
+      await user.keyboard("sub");
+      expect(activeValue(trigger)).toBe("g1");
+      await user.keyboard("{Escape}");
+
+      // "option t" reaches Option Two; the space continues the query instead of selecting.
+      await user.keyboard("option t");
+      expect(trigger.getAttribute("aria-expanded")).toBe("true");
+      expect(activeValue(trigger)).toBe("opt2");
+    });
+
+    it("cycles through options that start with a repeated letter, skipping disabled ones", async () => {
+      const user = userEvent.setup();
+      render(<TestSelectWrapper />);
+      const trigger = screen.getByRole("combobox", { name: "Test Select Label" });
+      trigger.focus();
+
+      await user.keyboard("o");
+      expect(activeValue(trigger)).toBe("opt2");
+      // Option Three is disabled, so the next "o" wraps around to Option One.
+      await user.keyboard("o");
+      expect(activeValue(trigger)).toBe("opt1");
+    });
+
+    it("starts a new query after a pause", () => {
+      vi.useFakeTimers();
+      try {
+        render(<TestSelectWrapper />);
+        const trigger = screen.getByRole("combobox", { name: "Test Select Label" });
+        fireEvent.keyDown(trigger, { key: "g" });
+        expect(activeValue(trigger)).toBe("g1");
+        vi.advanceTimersByTime(600);
+        // A fresh "o", not "go", which would match nothing.
+        fireEvent.keyDown(trigger, { key: "o" });
+        expect(activeValue(trigger)).toBe("opt1");
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("leaves shortcuts with modifier keys alone", () => {
+      render(<TestSelectWrapper />);
+      const trigger = screen.getByRole("combobox", { name: "Test Select Label" });
+      fireEvent.keyDown(trigger, { key: "g", ctrlKey: true });
+      fireEvent.keyDown(trigger, { key: "g", metaKey: true });
+      fireEvent.keyDown(trigger, { key: "g", altKey: true });
+      expect(trigger.getAttribute("aria-expanded")).toBe("false");
+    });
+
+    it("finds matches case- and width-insensitively and returns -1 when nothing matches", () => {
+      const options: SelectOption[] = [
+        { value: "zh-CN", label: "zh-CN (6)", secondaryLabel: "中文（中国）" },
+        { value: "ja-JP", label: "ja-JP (2)", secondaryLabel: "日本語 (日本)" },
+        { value: "zh-HK", label: "zh-HK (3)", secondaryLabel: "中文（香港）" },
+      ];
+      expect(findTypeaheadIndex(options, "ja", 0)).toBe(1);
+      expect(findTypeaheadIndex(options, "zh", 0)).toBe(0);
+      expect(findTypeaheadIndex(options, "z", 0)).toBe(2);
+      // Queries arrive normalized; option labels are normalized here, so "（" matches "(".
+      expect(findTypeaheadIndex(options, "中文(香", 0)).toBe(2);
+      expect(findTypeaheadIndex(options, "xx", 0)).toBe(-1);
+      expect(findTypeaheadIndex([], "a", -1)).toBe(-1);
+    });
   });
 
   it("does not open when disabled", async () => {

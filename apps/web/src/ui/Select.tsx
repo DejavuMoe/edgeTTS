@@ -27,6 +27,49 @@ export interface SelectProps {
   "aria-labelledby"?: string;
 }
 
+/** Type-ahead keeps adding letters to the search until the user pauses this long. */
+const TYPEAHEAD_RESET_MS = 500;
+
+function typeaheadForm(text: string): string {
+  return text.normalize("NFKC").toLowerCase();
+}
+
+/**
+ * The option type-ahead moves to for `query` (already in typeahead form): the first enabled
+ * option, searching onward from `from` and wrapping, whose label or secondary label starts with
+ * it. A single letter starts after `from`, so pressing it again moves to the next match; a
+ * longer query keeps the current option while it still matches. A run of one repeated letter
+ * ("zzz") that matches nothing cycles through that letter's options, like a native select.
+ */
+export function findTypeaheadIndex(
+  options: readonly SelectOption[],
+  query: string,
+  from: number,
+): number {
+  const startsWith = (start: number, prefix: string): number => {
+    for (let step = 0; step < options.length; step++) {
+      const index = (((start + step) % options.length) + options.length) % options.length;
+      const option = options[index];
+      if (!option || option.disabled) continue;
+      if (
+        typeaheadForm(option.label).startsWith(prefix) ||
+        (option.secondaryLabel !== undefined &&
+          typeaheadForm(option.secondaryLabel).startsWith(prefix))
+      ) {
+        return index;
+      }
+    }
+    return -1;
+  };
+
+  const chars = Array.from(query);
+  const first = chars[0] ?? "";
+  if (chars.length <= 1) return startsWith(from + 1, query);
+  const match = startsWith(from, query);
+  if (match >= 0 || !chars.every((c) => c === first)) return match;
+  return startsWith(from + 1, first);
+}
+
 interface DropdownPosition {
   top?: number;
   bottom?: number;
@@ -62,6 +105,20 @@ export function Select({
 
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const typeahead = useRef<{ query: string; timer: ReturnType<typeof setTimeout> | undefined }>({
+    query: "",
+    timer: undefined,
+  });
+
+  useEffect(() => {
+    const state = typeahead.current;
+    return () => clearTimeout(state.timer);
+  }, []);
+
+  // Each visit to the menu types afresh: closing it drops a query still being typed.
+  useEffect(() => {
+    if (!isOpen) typeahead.current.query = "";
+  }, [isOpen]);
 
   // Flatten all selectable options for indexing and navigation
   const flatOptions = useMemo<SelectOption[]>(() => {
@@ -175,9 +232,42 @@ export function Select({
     }
   }, [isOpen, focusedIndex]);
 
+  /**
+   * Type-ahead, open or closed: letters jump to the option whose label or secondary label starts
+   * with what was typed ("ja" for ja-JP, "jap" for "Japanese (Japan)"), opening the menu first.
+   * Space joins the query while one is being typed, and otherwise opens or selects.
+   */
+  const handleTypeahead = (e: React.KeyboardEvent): boolean => {
+    const state = typeahead.current;
+    if (
+      e.key.length !== 1 ||
+      e.ctrlKey ||
+      e.metaKey ||
+      e.altKey ||
+      e.nativeEvent.isComposing ||
+      (e.key === " " && state.query === "")
+    ) {
+      return false;
+    }
+    e.preventDefault();
+    clearTimeout(state.timer);
+    state.query += typeaheadForm(e.key);
+    state.timer = setTimeout(() => {
+      state.query = "";
+    }, TYPEAHEAD_RESET_MS);
+
+    const from = isOpen ? focusedIndex : flatOptions.findIndex((opt) => opt.value === value);
+    const match = findTypeaheadIndex(flatOptions, state.query, from);
+    if (!isOpen) openDropdown();
+    if (match >= 0) setFocusedIndex(match);
+    return true;
+  };
+
   // Keyboard navigation
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (disabled) return;
+
+    if (handleTypeahead(e)) return;
 
     if (!isOpen) {
       if (e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === "Enter" || e.key === " ") {

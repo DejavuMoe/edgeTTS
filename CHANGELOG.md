@@ -58,6 +58,20 @@ the version being released.
 - Say why the voice list is empty. While the catalog loads, placeholder rows stand in and the
   list is marked busy, instead of reporting that no voices match. A locked catalog asks for
   the API Key, and an empty catalog says no voices are available.
+- Find voices by language name and order locales for the interface language:
+  - **Search.** The voice search matches a locale's name in all four interface languages,
+    so "日语", "Japanese" and "日本語" all find Japanese voices in any interface. It also
+    knows common names that the locale names leave out, such as "粤语" or "Cantonese" for
+    zh-HK and "东北话" for the Liaoning voice. Full-width letters match their normal forms.
+  - **Order.** The locale filter and the voice list put the interface's own locale first,
+    then the rest of its language, then all other locales sorted by their names in the
+    interface language (pinyin for 简体中文, gojūon for 日本語), instead of by code from
+    af-ZA. Favorites follow the same order.
+  - **Type-ahead.** In the locale filter and the other drop-down menus, typing jumps to the
+    first option whose code or name starts with the typed letters, opening the menu if
+    needed. Pressing the same letter again moves to the next match.
+  - **Names.** The Liaoning and Shaanxi Mandarin voices and the two Inuktitut locales now
+    have names in every interface language, where browsers showed only their codes.
 
 ### Fixed
 

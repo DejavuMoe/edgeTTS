@@ -1,5 +1,7 @@
-import { translate, type UiLocale } from "../i18n.js";
+import { LANGUAGE_OPTIONS, translate, type UiLocale } from "../i18n.js";
 import type { VoiceDto } from "@edgetts/shared";
+import { LOCALE_SEARCH_ALIASES } from "./locale-aliases.js";
+import { localeDisplayName } from "./voice-names.js";
 
 export interface LocaleOption {
   readonly locale: string;
@@ -22,6 +24,41 @@ export interface CatalogFilterCriteria {
   readonly favoriteIds: ReadonlySet<string>;
 }
 
+const collators = new Map<string, Intl.Collator>();
+
+function collatorFor(uiLocale: UiLocale): Intl.Collator {
+  let collator = collators.get(uiLocale);
+  if (!collator) {
+    collator = new Intl.Collator(uiLocale);
+    collators.set(uiLocale, collator);
+  }
+  return collator;
+}
+
+/**
+ * Orders locales for the interface language: the interface's own locale first (zh-CN for
+ * 简体中文), then the rest of its language, then all others, each tier by the name the
+ * interface shows for it. So a Japanese interface starts with Japanese voices and lists the
+ * rest in its own reading order, instead of by code from af-ZA.
+ */
+export function compareLocales(uiLocale: UiLocale): (a: string, b: string) => number {
+  const language = uiLocale.split("-")[0];
+  const rank = (locale: string): number =>
+    locale === uiLocale ? 0 : locale.split("-")[0] === language ? 1 : 2;
+  const names = new Map<string, string>();
+  const nameOf = (locale: string): string => {
+    let name = names.get(locale);
+    if (name === undefined) {
+      name = localeDisplayName(locale, uiLocale) ?? locale;
+      names.set(locale, name);
+    }
+    return name;
+  };
+  const collator = collatorFor(uiLocale);
+  return (a, b) =>
+    rank(a) - rank(b) || collator.compare(nameOf(a), nameOf(b)) || a.localeCompare(b);
+}
+
 export function getLocaleOptions(
   voices: readonly VoiceDto[],
   locale: UiLocale = "zh-CN",
@@ -31,7 +68,7 @@ export function getLocaleOptions(
     counts.set(v.locale, (counts.get(v.locale) ?? 0) + 1);
   }
 
-  const sortedLocales = Array.from(counts.keys()).sort((a, b) => a.localeCompare(b));
+  const sortedLocales = Array.from(counts.keys()).sort(compareLocales(locale));
 
   const allOption: LocaleOption = {
     locale: "all",
@@ -54,22 +91,44 @@ export function formatVoiceGender(gender: string, locale: UiLocale = "zh-CN"): s
     : gender;
 }
 
+/** Case- and width-insensitive form for substring search: "ＣＨＩＮＥＳＥ（" matches "chinese (". */
+function searchForm(text: string): string {
+  return text.normalize("NFKC").toLowerCase();
+}
+
+const localeSearchTexts = new Map<string, string>();
+
+/**
+ * Everything a locale answers to in a search: its code, its name in every interface language,
+ * so "日语" finds Japanese voices whichever language the interface is in, and its aliases.
+ */
+function localeSearchText(locale: string): string {
+  let text = localeSearchTexts.get(locale);
+  if (text === undefined) {
+    const names = LANGUAGE_OPTIONS.map(({ value }) => localeDisplayName(locale, value) ?? "");
+    // One name per line, so a query cannot match across the end of one and the start of the next.
+    text = searchForm([locale, ...names, ...(LOCALE_SEARCH_ALIASES[locale] ?? [])].join("\n"));
+    localeSearchTexts.set(locale, text);
+  }
+  return text;
+}
+
 export function matchesVoiceSearch(
   voice: VoiceDto,
   search: string,
   locale: UiLocale = "zh-CN",
 ): boolean {
-  const q = search.trim().toLowerCase();
+  const q = searchForm(search.trim());
   if (!q) {
     return true;
   }
 
   return (
-    voice.displayName.toLowerCase().includes(q) ||
+    searchForm(voice.displayName).includes(q) ||
     voice.id.toLowerCase().includes(q) ||
-    voice.locale.toLowerCase().includes(q) ||
+    localeSearchText(voice.locale).includes(q) ||
     voice.gender.toLowerCase().includes(q) ||
-    formatVoiceGender(voice.gender, locale).toLowerCase().includes(q)
+    searchForm(formatVoiceGender(voice.gender, locale)).includes(q)
   );
 }
 
@@ -109,10 +168,11 @@ export function getGroupedVoices(
     }
   }
 
-  // Sort favorites: locale -> displayName -> id
+  const compareLocale = compareLocales(locale);
+  // Sort favorites: locale (in the interface's order) -> displayName -> id
   favorites.sort(
     (a, b) =>
-      a.locale.localeCompare(b.locale) ||
+      compareLocale(a.locale, b.locale) ||
       a.displayName.localeCompare(b.displayName) ||
       a.id.localeCompare(b.id),
   );
@@ -127,8 +187,8 @@ export function getGroupedVoices(
     });
   }
 
-  // Sort locale groups by locale lexical ascending
-  const sortedLocales = Array.from(nonFavoritesByLocale.keys()).sort((a, b) => a.localeCompare(b));
+  // Locale groups in the same order as the locale filter
+  const sortedLocales = Array.from(nonFavoritesByLocale.keys()).sort(compareLocale);
 
   for (const loc of sortedLocales) {
     const list = nonFavoritesByLocale.get(loc)!;

@@ -1,4 +1,6 @@
 import type { VoiceDto } from "@edgetts/shared";
+import type { UiLocale } from "../i18n.js";
+import { LOCALE_NAME_OVERRIDES } from "./locale-aliases.js";
 
 /**
  * The speaker's name without vendor boilerplate: "Microsoft Xiaoxiao Online (Natural) -
@@ -27,6 +29,8 @@ function languageNames(uiLocale: string): Intl.DisplayNames | null {
 
 /** "zh-CN" in the interface language, e.g. "中文（中国）" or "Chinese (China)"; null if unknown. */
 export function localeDisplayName(locale: string, uiLocale: string): string | null {
+  const override = LOCALE_NAME_OVERRIDES[locale]?.[uiLocale as UiLocale];
+  if (override) return override;
   try {
     return languageNames(uiLocale)?.of(locale) ?? null;
   } catch {
