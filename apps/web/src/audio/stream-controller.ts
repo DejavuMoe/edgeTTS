@@ -1,11 +1,60 @@
-export function isMediaSourceAudioSupported(): boolean {
+interface MediaSourceConstructor {
+  new (): MediaSource;
+  isTypeSupported(type: string): boolean;
+}
+
+/**
+ * Safari's power-managed MediaSource (Safari 17.1+). It is the only MediaSource on iPhone,
+ * where it opens only for a media element with remote playback (AirPlay) disabled. Not yet in
+ * TypeScript's DOM types.
+ */
+type WindowWithManagedMediaSource = Window & {
+  ManagedMediaSource?: MediaSourceConstructor;
+};
+
+function canStreamMp3(candidate: MediaSourceConstructor | undefined): boolean {
   return (
-    typeof window !== "undefined" &&
-    typeof window.MediaSource !== "undefined" &&
-    typeof window.MediaSource.isTypeSupported === "function" &&
-    window.MediaSource.isTypeSupported("audio/mpeg")
+    typeof candidate === "function" &&
+    typeof candidate.isTypeSupported === "function" &&
+    candidate.isTypeSupported("audio/mpeg")
   );
 }
+
+/**
+ * The MediaSource to stream MP3 into: the standard one where it plays MP3, else Safari's
+ * ManagedMediaSource; null when neither does, and takes play once they have all arrived.
+ */
+function streamingMediaSource(): MediaSourceConstructor | null {
+  if (typeof window === "undefined") return null;
+  const standard = window.MediaSource as MediaSourceConstructor | undefined;
+  if (canStreamMp3(standard)) return standard!;
+  const managed = (window as WindowWithManagedMediaSource).ManagedMediaSource;
+  return canStreamMp3(managed) ? managed! : null;
+}
+
+export function isMediaSourceAudioSupported(): boolean {
+  return streamingMediaSource() !== null;
+}
+
+/**
+ * Whether takes stream through Safari's ManagedMediaSource, as on iPhone. Its media element
+ * must then have remote playback disabled, or the stream never opens.
+ */
+export function usesManagedMediaSource(): boolean {
+  const source = streamingMediaSource();
+  return (
+    source !== null &&
+    typeof window !== "undefined" &&
+    source === (window as WindowWithManagedMediaSource).ManagedMediaSource
+  );
+}
+
+/**
+ * How long a ManagedMediaSource may take to open before the take is fetched whole instead. It
+ * opens within moments once the element loads it; this is for a device that never opens it, so
+ * the take still plays, as it did before streaming was possible there.
+ */
+export const MANAGED_SOURCE_OPEN_TIMEOUT_MS = 3000;
 
 /** Bytes between progress reports: 1.4 s of standard-quality audio, 0.7 s of high. */
 export const PROGRESS_THROTTLE_BYTES = 8 * 1024;
@@ -271,13 +320,16 @@ export class StreamPlaybackController {
 
     try {
       // Fallback path: If MediaSource is unavailable or audio/mpeg is unsupported
-      if (!isMediaSourceAudioSupported()) {
+      const MediaSourceType = streamingMediaSource();
+      if (!MediaSourceType) {
         await this.playBlobFallback(session, response, signal, callbacks);
         return;
       }
 
       // Primary path: MediaSource audio/mpeg streaming
-      const mediaSource = new MediaSource();
+      const managed =
+        MediaSourceType === (window as WindowWithManagedMediaSource).ManagedMediaSource;
+      const mediaSource = new MediaSourceType();
       session.mediaSource = mediaSource;
       const mediaUrl = URL.createObjectURL(mediaSource);
       session.mediaUrl = mediaUrl;
@@ -291,14 +343,15 @@ export class StreamPlaybackController {
       callbacks.onStreamReady(mediaUrl);
 
       // Wait for sourceopen
-      await new Promise<void>((resolve, reject) => {
+      const opened = await new Promise<boolean>((resolve, reject) => {
         if (mediaSource.readyState === "open") {
-          resolve();
+          resolve(true);
           return;
         }
+        let timer: ReturnType<typeof setTimeout> | undefined;
         const onOpen = () => {
           cleanup();
-          resolve();
+          resolve(true);
         };
         const onError = () => {
           cleanup();
@@ -306,9 +359,14 @@ export class StreamPlaybackController {
         };
         const onAbortOpen = () => {
           cleanup();
-          resolve();
+          resolve(true);
+        };
+        const onTimeout = () => {
+          cleanup();
+          resolve(false);
         };
         const cleanup = () => {
+          clearTimeout(timer);
           mediaSource.removeEventListener("sourceopen", onOpen);
           mediaSource.removeEventListener("error", onError);
           signal.removeEventListener("abort", onAbortOpen);
@@ -317,14 +375,22 @@ export class StreamPlaybackController {
         mediaSource.addEventListener("error", onError);
         if (signal.aborted) {
           cleanup();
-          resolve();
+          resolve(true);
           return;
         }
         signal.addEventListener("abort", onAbortOpen, { once: true });
+        if (managed) timer = setTimeout(onTimeout, MANAGED_SOURCE_OPEN_TIMEOUT_MS);
       });
 
       if (!this.isCurrentSession(session) || signal.aborted) {
         this.cleanupSession(session);
+        return;
+      }
+
+      if (!opened) {
+        // The device never opened the stream: play the take once it has all arrived.
+        this.cleanupMediaSourceResources(session);
+        await this.playBlobFallback(session, response, signal, callbacks);
         return;
       }
 

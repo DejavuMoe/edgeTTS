@@ -20,7 +20,7 @@ edgeTTS is a self-hosted API and browser workbench for Microsoft Edge speech syn
 - **Speech APIs**: `/v1/audio/speech` accepts a subset of the OpenAI speech request format, with Edge voice IDs and MP3 output. `/api/speech` supports long text and speed, pitch and volume controls.
 - **Text segmentation**: Splits at paragraph, line, sentence or whitespace boundaries while preserving Unicode. Whitespace-only segments are skipped during synthesis.
 - **Bounded concurrency**: Four active streams, sixteen FIFO queue slots, and one permit held for each complete long-text request.
-- **Browser workbench**: Four UI languages, voice search and favorites, local TXT import, MP3 playback and download. Streaming uses MediaSource where supported; other browsers wait for a complete Blob.
+- **Browser workbench**: Four UI languages, voice search, previews and favorites, local TXT import, MP3 playback and download, and the last few takes kept for comparison. Streaming uses MediaSource where supported, or Safari's ManagedMediaSource on iPhone; other browsers wait for a complete Blob.
 - **Simple deployment**: One Fastify process serves the UI and API. Bearer authentication and a hardened container configuration are provided.
 
 ## Quick Start

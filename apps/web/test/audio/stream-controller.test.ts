@@ -1,7 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
+  isMediaSourceAudioSupported,
+  MANAGED_SOURCE_OPEN_TIMEOUT_MS,
   PROGRESS_THROTTLE_BYTES,
   StreamPlaybackController,
+  usesManagedMediaSource,
 } from "../../src/audio/stream-controller.js";
 
 describe("StreamPlaybackController Session Isolation & URL Lifecycle", () => {
@@ -1026,5 +1029,159 @@ describe("StreamPlaybackController Session Isolation & URL Lifecycle", () => {
       // Stale session A must not emit progress
       expect(callbacksA.onProgress).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe("Safari's ManagedMediaSource", () => {
+  type Win = Window & { MediaSource?: unknown; ManagedMediaSource?: unknown };
+  const win = window as Win;
+  let originalMediaSource: unknown;
+  let originalManaged: unknown;
+  let originalCreateObjectURL: typeof URL.createObjectURL;
+  let originalRevokeObjectURL: typeof URL.revokeObjectURL;
+  let attached: unknown[];
+
+  /** A MediaSource stand-in that opens at once (`open`) or never (`closed`). */
+  function mediaSourceClass(readyState: "open" | "closed", plays = true) {
+    return class extends EventTarget {
+      static isTypeSupported = vi.fn((type: string) => plays && type === "audio/mpeg");
+      readyState = readyState;
+      buffer = Object.assign(new EventTarget(), {
+        updating: false,
+        appendBuffer: vi.fn(function (this: EventTarget) {
+          queueMicrotask(() => this.dispatchEvent(new Event("updateend")));
+        }),
+        abort: vi.fn(),
+      });
+      addSourceBuffer = vi.fn(() => this.buffer);
+      endOfStream = vi.fn();
+    };
+  }
+
+  function audioResponse(bytes: number[]): Response {
+    return new Response(new Uint8Array(bytes), { headers: { "Content-Type": "audio/mpeg" } });
+  }
+
+  function callbacks() {
+    return {
+      onStreamReady: vi.fn(),
+      onDownloadReady: vi.fn(),
+      onError: vi.fn(),
+      onFinish: vi.fn(),
+    };
+  }
+
+  beforeEach(() => {
+    originalMediaSource = win.MediaSource;
+    originalManaged = win.ManagedMediaSource;
+    originalCreateObjectURL = URL.createObjectURL;
+    originalRevokeObjectURL = URL.revokeObjectURL;
+    attached = [];
+    URL.createObjectURL = vi.fn((source: Blob | MediaSource) => {
+      attached.push(source);
+      return `blob:mock-url-${attached.length}`;
+    });
+    URL.revokeObjectURL = vi.fn();
+  });
+
+  afterEach(() => {
+    win.MediaSource = originalMediaSource;
+    if (originalManaged === undefined) delete win.ManagedMediaSource;
+    else win.ManagedMediaSource = originalManaged;
+    URL.createObjectURL = originalCreateObjectURL;
+    URL.revokeObjectURL = originalRevokeObjectURL;
+    vi.useRealTimers();
+  });
+
+  it("streams through it where it is the only MediaSource, as on iPhone", async () => {
+    delete win.MediaSource;
+    const Managed = mediaSourceClass("open");
+    win.ManagedMediaSource = Managed;
+    expect(isMediaSourceAudioSupported()).toBe(true);
+    expect(usesManagedMediaSource()).toBe(true);
+
+    const handlers = callbacks();
+    await new StreamPlaybackController().startStream(
+      audioResponse([1, 2, 3]),
+      new AbortController().signal,
+      handlers,
+    );
+
+    // The player is given the managed source to stream, then the whole take to download.
+    expect(attached[0]).toBeInstanceOf(Managed);
+    expect(handlers.onStreamReady).toHaveBeenCalledExactlyOnceWith("blob:mock-url-1");
+    const source = attached[0] as InstanceType<typeof Managed>;
+    expect(source.buffer.appendBuffer).toHaveBeenCalledTimes(1);
+    expect(source.endOfStream).toHaveBeenCalled();
+    expect(handlers.onDownloadReady).toHaveBeenCalledWith("blob:mock-url-2", expect.any(Blob));
+    expect(handlers.onFinish).toHaveBeenCalledTimes(1);
+    expect(handlers.onError).not.toHaveBeenCalled();
+  });
+
+  it("keeps the standard MediaSource wherever it plays MP3", () => {
+    win.MediaSource = mediaSourceClass("open");
+    win.ManagedMediaSource = mediaSourceClass("open");
+    expect(isMediaSourceAudioSupported()).toBe(true);
+    expect(usesManagedMediaSource()).toBe(false);
+
+    // A MediaSource that cannot play MP3 gives way to the managed one.
+    win.MediaSource = mediaSourceClass("open", false);
+    expect(usesManagedMediaSource()).toBe(true);
+
+    // Neither plays MP3: takes play once they have all arrived.
+    win.ManagedMediaSource = mediaSourceClass("open", false);
+    expect(isMediaSourceAudioSupported()).toBe(false);
+    expect(usesManagedMediaSource()).toBe(false);
+  });
+
+  it("plays the take whole when the managed source never opens", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    delete win.MediaSource;
+    win.ManagedMediaSource = mediaSourceClass("closed");
+    const handlers = callbacks();
+
+    const started = new StreamPlaybackController().startStream(
+      audioResponse([4, 5, 6]),
+      new AbortController().signal,
+      handlers,
+    );
+    await vi.advanceTimersByTimeAsync(MANAGED_SOURCE_OPEN_TIMEOUT_MS - 1);
+    expect(handlers.onStreamReady).toHaveBeenCalledExactlyOnceWith("blob:mock-url-1");
+    expect(handlers.onDownloadReady).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(1);
+    await started;
+    // The unopened stream is released and the player is given the whole take instead.
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:mock-url-1");
+    expect(handlers.onStreamReady).toHaveBeenLastCalledWith("blob:mock-url-2");
+    const take = handlers.onDownloadReady.mock.calls[0]![1] as Blob;
+    expect(handlers.onDownloadReady).toHaveBeenCalledWith("blob:mock-url-2", take);
+    expect([...new Uint8Array(await take.arrayBuffer())]).toEqual([4, 5, 6]);
+    expect(handlers.onFinish).toHaveBeenCalledTimes(1);
+    expect(handlers.onError).not.toHaveBeenCalled();
+  });
+
+  it("waits as long as it takes for the standard MediaSource to open", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const Standard = mediaSourceClass("closed");
+    win.MediaSource = Standard;
+    const handlers = callbacks();
+    const controller = new StreamPlaybackController();
+
+    const started = controller.startStream(
+      audioResponse([7, 8]),
+      new AbortController().signal,
+      handlers,
+    );
+    await vi.advanceTimersByTimeAsync(MANAGED_SOURCE_OPEN_TIMEOUT_MS * 10);
+    expect(handlers.onStreamReady).toHaveBeenCalledTimes(1);
+    expect(handlers.onDownloadReady).not.toHaveBeenCalled();
+
+    const source = attached[0] as InstanceType<typeof Standard>;
+    source.readyState = "open";
+    source.dispatchEvent(new Event("sourceopen"));
+    await started;
+    expect(handlers.onStreamReady).toHaveBeenCalledTimes(1);
+    expect(handlers.onDownloadReady).toHaveBeenCalledWith("blob:mock-url-2", expect.any(Blob));
   });
 });

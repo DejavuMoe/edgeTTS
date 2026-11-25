@@ -1,3 +1,4 @@
+import { usesManagedMediaSource } from "../audio/stream-controller.js";
 import { useWaveform } from "../audio/useWaveform.js";
 import { MAX_WAVEFORM_SOURCE_BYTES } from "../audio/waveform.js";
 import { useI18n } from "../i18n.js";
@@ -111,6 +112,7 @@ export function ResultPanel({
               peaks={peaks}
               live={isGenerating}
               expectedDuration={telemetry?.expectedSeconds}
+              disableRemotePlayback={usesManagedMediaSource()}
             >
               {completedResult && (
                 <div

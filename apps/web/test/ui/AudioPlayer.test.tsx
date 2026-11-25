@@ -323,4 +323,13 @@ describe("UI Primitive: AudioPlayer", () => {
     render(<AudioPlayer src="blob:http://localhost/test.mp3" playButtonRef={playButtonRef} />);
     expect(playButtonRef.current).toBe(screen.getByRole("button", { name: "播放" }));
   });
+
+  it("turns remote playback off when asked, as Safari's ManagedMediaSource needs", () => {
+    const { container, rerender } = render(<AudioPlayer src="blob:http://localhost/test.mp3" />);
+    const audio = container.querySelector("audio")!;
+    expect(audio.disableRemotePlayback).toBe(false);
+
+    rerender(<AudioPlayer src="blob:http://localhost/test.mp3" disableRemotePlayback />);
+    expect(audio.disableRemotePlayback).toBe(true);
+  });
 });

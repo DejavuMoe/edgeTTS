@@ -121,6 +121,12 @@ the version being released.
     pointer or keyboard, where it used to stay disabled until the end. Its length reads as
     an estimate until the take is complete, and screen readers hear the time played and
     the time received.
+- Stream takes on iPhone. iOS has no MediaSource, so takes used to play only once they had
+  all arrived. Where MediaSource is missing or cannot play MP3, takes now stream through
+  Safari's ManagedMediaSource (Safari 17.1 and later), and the player disables remote
+  playback, which that API requires. If the stream has not opened within 3 seconds, the take
+  is fetched whole and played as before. Browsers with MediaSource are unchanged. This has
+  not yet been confirmed on a physical iPhone.
 
 ### Fixed
 

@@ -5,6 +5,7 @@ import React, {
   useCallback,
   useEffect,
   useImperativeHandle,
+  useLayoutEffect,
   useRef,
   useState,
 } from "react";
@@ -29,6 +30,11 @@ export interface AudioPlayerProps {
   live?: boolean | undefined;
   /** About how long a live take will be, in seconds; unknown when absent. */
   expectedDuration?: number | null | undefined;
+  /**
+   * Keeps the audio off AirPlay and other remote playback. Safari's ManagedMediaSource streams
+   * only to an element that does.
+   */
+  disableRemotePlayback?: boolean | undefined;
 }
 
 /** How often a live take's received length is read while it arrives. */
@@ -95,6 +101,7 @@ export const AudioPlayer = forwardRef<HTMLAudioElement, AudioPlayerProps>(functi
     playButtonRef,
     live = false,
     expectedDuration,
+    disableRemotePlayback = false,
   },
   ref,
 ) {
@@ -103,6 +110,11 @@ export const AudioPlayer = forwardRef<HTMLAudioElement, AudioPlayerProps>(functi
 
   // Forward ref to internal audio element
   useImperativeHandle(ref, () => audioRef.current as HTMLAudioElement);
+
+  // Set in the commit that adds the element, before the browser starts loading its source.
+  useLayoutEffect(() => {
+    if (audioRef.current) audioRef.current.disableRemotePlayback = disableRemotePlayback;
+  }, [disableRemotePlayback]);
 
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [currentTime, setCurrentTime] = useState<number>(0);

@@ -800,6 +800,41 @@ describe("EdgeTTS Web Workbench", () => {
       expect(audio).toBeDefined();
       expect(createdUrls.length).toBeGreaterThan(0);
     });
+
+    it("streams through Safari's ManagedMediaSource with remote playback off, as on iPhone", async () => {
+      const user = userEvent.setup();
+      class MockSourceBuffer extends EventTarget {
+        updating = false;
+        appendBuffer = vi.fn(() => {
+          queueMicrotask(() => this.dispatchEvent(new Event("updateend")));
+        });
+        abort = vi.fn();
+      }
+      class MockManagedMediaSource extends EventTarget {
+        readyState = "open";
+        static isTypeSupported = vi.fn((type: string) => type === "audio/mpeg");
+        addSourceBuffer = vi.fn(() => new MockSourceBuffer());
+        endOfStream = vi.fn();
+      }
+      // jsdom has no MediaSource, as iPhone has none: only the managed one.
+      expect(window.MediaSource).toBeUndefined();
+      const win = window as unknown as { ManagedMediaSource?: typeof MockManagedMediaSource };
+      win.ManagedMediaSource = MockManagedMediaSource;
+      try {
+        render(<App />);
+        await screen.findByLabelText(/选择声音/i);
+        await user.type(screen.getByLabelText(/文本内容/i), "Managed stream test");
+        await user.click(screen.getByRole("button", { name: /合成语音/i }));
+
+        const player = await screen.findByRole("region", { name: /语音合成播放器/i });
+        expect(MockManagedMediaSource.isTypeSupported).toHaveBeenCalledWith("audio/mpeg");
+        // Without this the managed source never opens on iPhone.
+        expect(player.querySelector("audio")!.disableRemotePlayback).toBe(true);
+        await screen.findByRole("link", { name: /下载合成音频/i });
+      } finally {
+        delete win.ManagedMediaSource;
+      }
+    });
   });
 
   describe("API Key Authentication UI & Lifecycle", () => {
