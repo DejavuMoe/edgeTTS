@@ -32,6 +32,11 @@ the version being released.
   instead of all at once when the avatar chunk loads. Monograms still stand in until a
   portrait is drawn. The longest task while the catalog loads at 4x CPU slowdown drops from
   about 637 ms to about 200 ms, and scrolling the list draws portraits without long tasks.
+- Keep Zod out of the browser bundle, shrinking the main script from about 393 KB to 303 KB
+  before compression. The workbench validates the health and voices responses with small
+  hand-written parsers that a test keeps in step with the shared Zod schemas, and imports
+  limits from the new dependency-free `@edgetts/shared/limits` entry. A lint rule allows
+  only type imports from the `@edgetts/shared` root in browser code.
 
 ## [1.0.3] - 2026-11-17
 

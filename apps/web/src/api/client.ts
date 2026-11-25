@@ -1,10 +1,5 @@
-import {
-  type HealthResponse,
-  HealthResponseSchema,
-  type NativeSpeechRequest,
-  type VoiceDto,
-  VoicesResponseSchema,
-} from "@edgetts/shared";
+import type { HealthResponse, NativeSpeechRequest, VoiceDto } from "@edgetts/shared";
+import { parseHealthResponse, parseVoicesResponse } from "./responses.js";
 
 export class ApiHttpError extends Error {
   readonly status: number;
@@ -52,7 +47,7 @@ export async function fetchHealth(signal?: AbortSignal): Promise<HealthResponse>
       throw new ApiHttpError(response.status, `Health check failed with status ${response.status}`);
     }
     const data: unknown = await response.json();
-    return HealthResponseSchema.parse(data);
+    return parseHealthResponse(data);
   });
 }
 
@@ -72,7 +67,7 @@ export async function fetchVoices(
         );
       }
       const data: unknown = await response.json();
-      return VoicesResponseSchema.parse(data).voices;
+      return parseVoicesResponse(data);
     },
   );
 }

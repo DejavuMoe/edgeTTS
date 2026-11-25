@@ -1,4 +1,4 @@
-import { MAX_VOICE_ID_LENGTH } from "@edgetts/shared";
+import { MAX_VOICE_ID_LENGTH } from "@edgetts/shared/limits";
 
 export { MAX_VOICE_ID_LENGTH };
 

@@ -1,7 +1,12 @@
-import { countCodePoints, MAX_VOICE_ID_LENGTH, VOICE_ID_REGEX } from "@edgetts/tts-core";
 import { z } from "zod";
+import {
+  countCodePoints,
+  MAX_NATIVE_INPUT_CODE_POINTS,
+  MAX_VOICE_ID_LENGTH,
+  VOICE_ID_REGEX,
+} from "./limits.js";
 
-export { countCodePoints, MAX_VOICE_ID_LENGTH, VOICE_ID_REGEX };
+export * from "./limits.js";
 
 export const HealthResponseSchema = z.object({
   status: z.literal("ok"),
@@ -82,8 +87,6 @@ export const SpeechRequestSchema = z
   .strict();
 
 export type SpeechRequest = z.infer<typeof SpeechRequestSchema>;
-
-export const MAX_NATIVE_INPUT_CODE_POINTS = 20_000;
 
 export function isValidXmlText(text: string): boolean {
   for (let index = 0; index < text.length;) {

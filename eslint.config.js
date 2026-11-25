@@ -135,4 +135,23 @@ export default tseslint.config(
     },
   },
   ...ARCHITECTURE_BOUNDARIES,
+  {
+    // Not a layer boundary but a bundle one: the package root builds its Zod schemas on import.
+    files: ["apps/web/src/**/*.{ts,tsx}"],
+    rules: {
+      "@typescript-eslint/no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "@edgetts/shared",
+              allowTypeImports: true,
+              message:
+                "Only types may come from the @edgetts/shared root, which would ship Zod to the browser; import values from @edgetts/shared/limits.",
+            },
+          ],
+        },
+      ],
+    },
+  },
 );

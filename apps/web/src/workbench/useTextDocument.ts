@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { countCodePoints, MAX_NATIVE_INPUT_CODE_POINTS } from "@edgetts/shared";
+import { countCodePoints, MAX_NATIVE_INPUT_CODE_POINTS } from "@edgetts/shared/limits";
 import type { MessageKey } from "../i18n.js";
 import { readImportedTextFile } from "../lib/text-import.js";
 import { countLines } from "../lib/text-stats.js";

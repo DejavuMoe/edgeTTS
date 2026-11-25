@@ -18,7 +18,10 @@ EdgeTtsProvider (edge-provider)    connection setup, timeouts, XML escaping
 NativeEdgeClient (edge-provider)  HTTPS voices, v2 authentication, ws transport
 ```
 
-`packages/shared` holds the request and response schemas used by the server and the browser.
+`packages/shared` holds the request and response Zod schemas used by the server, and the
+types the browser shares with it. Its root builds the schemas on import, so browser code takes
+only types from it and its limits from the dependency-free `@edgetts/shared/limits` entry; the
+browser parses the two responses it reads with small hand-written parsers instead of Zod.
 Only `apps/server/src/composition.ts` constructs `EdgeTtsProvider`. These import boundaries
 are enforced by `no-restricted-imports` in `eslint.config.js` and verified by
 `pnpm test:architecture`, so a violation fails CI rather than waiting for review.

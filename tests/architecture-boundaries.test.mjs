@@ -108,3 +108,35 @@ describe("architecture boundaries", () => {
     }
   }
 });
+
+// Not a layer boundary: the @edgetts/shared root builds Zod schemas on import, so the browser
+// may take only types from it and values from the dependency-free `limits` entry.
+describe("browser bundle keeps Zod out", () => {
+  const WEB_FILE = "apps/web/src/__probe__.tsx";
+
+  async function zodImports(code) {
+    const [result] = await eslint.lintText(code, { filePath: WEB_FILE });
+    return result.messages.filter(
+      (message) => message.ruleId === "@typescript-eslint/no-restricted-imports",
+    );
+  }
+
+  for (const code of [
+    'import { VoicesResponseSchema } from "@edgetts/shared";',
+    'import { MAX_NATIVE_INPUT_CODE_POINTS } from "@edgetts/shared";',
+  ]) {
+    it(`rejects \`${code}\``, async () => {
+      assert.equal((await zodImports(code)).length, 1);
+    });
+  }
+
+  for (const code of [
+    'import type { VoiceDto } from "@edgetts/shared";',
+    'import { type VoiceDto } from "@edgetts/shared";',
+    'import { MAX_NATIVE_INPUT_CODE_POINTS } from "@edgetts/shared/limits";',
+  ]) {
+    it(`allows \`${code}\``, async () => {
+      assert.deepEqual(await zodImports(code), []);
+    });
+  }
+});

@@ -1,5 +1,5 @@
 import type { MessageKey } from "../i18n.js";
-import { countCodePoints, MAX_NATIVE_INPUT_CODE_POINTS } from "@edgetts/shared";
+import { countCodePoints, MAX_NATIVE_INPUT_CODE_POINTS } from "@edgetts/shared/limits";
 
 /**
  * Maximum allowed size for imported TXT files (256 KiB = 262,144 bytes).

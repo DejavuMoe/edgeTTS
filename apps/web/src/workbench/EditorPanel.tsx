@@ -1,5 +1,5 @@
 import { useId, useRef, type ReactNode } from "react";
-import { MAX_NATIVE_INPUT_CODE_POINTS } from "@edgetts/shared";
+import { MAX_NATIVE_INPUT_CODE_POINTS } from "@edgetts/shared/limits";
 import { useI18n } from "../i18n.js";
 import type { useTextDocument } from "./useTextDocument.js";
 
