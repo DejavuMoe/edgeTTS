@@ -37,6 +37,19 @@ the version being released.
   hand-written parsers that a test keeps in step with the shared Zod schemas, and imports
   limits from the new dependency-free `@edgetts/shared/limits` entry. A lint rule allows
   only type imports from the `@edgetts/shared` root in browser code.
+- Make the synthesis flow work from the keyboard and with screen readers:
+  - **Shortcut.** Ctrl/⌘+Enter now synthesizes from anywhere on the page, not only from the
+    text, so a voice or setting can be changed and heard straight away. The voice search,
+    the API key field, links and dialogs keep the keys for themselves.
+  - **Focus.** Focus moves to Cancel when a synthesis starts, then to the take's Play button
+    when the take is ready, or back to Synthesize after a cancellation or failure. Focus on
+    any other control that is still usable stays where it is.
+  - **Seeking.** In the player's timeline, the arrow keys seek by 5 seconds, Page Up and
+    Page Down by 30 seconds, and Home and End jump to either end. The timeline reads out as
+    time played of the total, for example "0:05 of 1:05".
+  - **Announcements.** The status line no longer announces the received byte count every
+    half second. It announces only the stage, and a finished take is announced as ready to
+    play.
 
 ## [1.0.3] - 2026-11-17
 

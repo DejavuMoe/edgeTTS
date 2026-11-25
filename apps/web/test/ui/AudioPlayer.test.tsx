@@ -125,4 +125,84 @@ describe("UI Primitive: AudioPlayer", () => {
     expect(downloadLink.getAttribute("href")).toBe("blob:http://localhost/download.mp3");
     expect(downloadLink.getAttribute("download")).toBe("test_output.mp3");
   });
+
+  describe("seek slider keyboard", () => {
+    /** Renders a 65-second take at `start` seconds; returns the slider and the live position. */
+    function renderLoaded(start: number) {
+      render(<AudioPlayer src="blob:http://localhost/test.mp3" />);
+      const audio = document.querySelector("audio")!;
+      let position = start;
+      Object.defineProperty(audio, "duration", { value: 65, configurable: true });
+      Object.defineProperty(audio, "currentTime", {
+        configurable: true,
+        get: () => position,
+        set: (value: number) => {
+          position = value;
+        },
+      });
+      fireEvent.loadedMetadata(audio);
+      fireEvent.timeUpdate(audio);
+      const slider = screen.getByLabelText("音频时间进度条") as HTMLInputElement;
+      return { slider, position: () => position };
+    }
+
+    it.each([
+      ["ArrowRight", 15],
+      ["ArrowUp", 15],
+      ["ArrowLeft", 5],
+      ["ArrowDown", 5],
+      ["PageUp", 40],
+      ["Home", 0],
+      ["End", 65],
+    ])("%s moves the take to %s s", (key, expected) => {
+      const { slider, position } = renderLoaded(10);
+      const event = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true });
+      fireEvent(slider, event);
+
+      expect(event.defaultPrevented).toBe(true);
+      expect(position()).toBe(expected);
+      expect(slider.value).toBe(String(expected));
+    });
+
+    it("stops at the start and the end instead of passing them", () => {
+      const { slider, position } = renderLoaded(62);
+      fireEvent.keyDown(slider, { key: "PageUp" });
+      expect(position()).toBe(65);
+
+      fireEvent.keyDown(slider, { key: "PageDown" });
+      fireEvent.keyDown(slider, { key: "PageDown" });
+      fireEvent.keyDown(slider, { key: "PageDown" });
+      expect(position()).toBe(0);
+    });
+
+    it("leaves other keys and modified arrows to the browser", () => {
+      const { slider, position } = renderLoaded(10);
+      for (const init of [{ key: "Tab" }, { key: "ArrowRight", altKey: true }]) {
+        const event = new KeyboardEvent("keydown", { ...init, bubbles: true, cancelable: true });
+        fireEvent(slider, event);
+        expect(event.defaultPrevented).toBe(false);
+      }
+      expect(position()).toBe(10);
+    });
+
+    it("reads the position as time played of the whole take", () => {
+      const { slider } = renderLoaded(5);
+      expect(slider.getAttribute("aria-valuetext")).toBe("已播放 0:05，共 1:05");
+
+      fireEvent.keyDown(slider, { key: "ArrowRight" });
+      expect(slider.getAttribute("aria-valuetext")).toBe("已播放 0:10，共 1:05");
+    });
+
+    it("gives no time text while the length is still unknown", () => {
+      render(<AudioPlayer src="blob:http://localhost/test.mp3" />);
+      const slider = screen.getByLabelText("音频时间进度条");
+      expect(slider.hasAttribute("aria-valuetext")).toBe(false);
+    });
+  });
+
+  it("hands its play button to playButtonRef", () => {
+    const playButtonRef = createRef<HTMLButtonElement>();
+    render(<AudioPlayer src="blob:http://localhost/test.mp3" playButtonRef={playButtonRef} />);
+    expect(playButtonRef.current).toBe(screen.getByRole("button", { name: "播放" }));
+  });
 });

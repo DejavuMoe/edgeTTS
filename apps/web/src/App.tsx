@@ -7,7 +7,9 @@ import { EditorPanel } from "./workbench/EditorPanel.js";
 import { ParameterControls } from "./workbench/ParameterControls.js";
 import { ResultPanel } from "./workbench/ResultPanel.js";
 import { SynthesisActions } from "./workbench/SynthesisActions.js";
+import { useGenerateShortcut } from "./workbench/useGenerateShortcut.js";
 import { useSynthesis } from "./workbench/useSynthesis.js";
+import { useSynthesisFocus } from "./workbench/useSynthesisFocus.js";
 import { useSynthesisParameters } from "./workbench/useSynthesisParameters.js";
 import { useTextDocument } from "./workbench/useTextDocument.js";
 import { useVoiceFilters } from "./workbench/useVoiceFilters.js";
@@ -29,6 +31,9 @@ export function App() {
 function Workbench() {
   const { locale, t } = useI18n();
   const clearDialogRef = useRef<HTMLDialogElement>(null);
+  const cancelButtonRef = useRef<HTMLButtonElement>(null);
+  const synthesizeButtonRef = useRef<HTMLButtonElement>(null);
+  const playButtonRef = useRef<HTMLButtonElement>(null);
   // Synchronous preference hydration on initial render
   const [initialPreferences] = useState<WorkbenchPreferencesV1>(() => loadWorkbenchPreferences());
 
@@ -42,6 +47,11 @@ function Workbench() {
     onUnauthorized: connection.requireReauthentication,
   });
   const { isGenerating } = synthesis;
+  useSynthesisFocus(isGenerating, synthesis.audioSrc !== null, {
+    cancel: cancelButtonRef,
+    synthesize: synthesizeButtonRef,
+    play: playButtonRef,
+  });
 
   const canGenerate =
     !isGenerating &&
@@ -64,6 +74,8 @@ function Workbench() {
     );
   };
 
+  useGenerateShortcut(handleGenerate);
+
   const handleRequestClear = (): void => {
     if (!isGenerating && textDocument.text.length > 0) clearDialogRef.current?.showModal();
   };
@@ -82,17 +94,18 @@ function Workbench() {
         <EditorPanel
           textDocument={textDocument}
           isGenerating={isGenerating}
-          onGenerate={handleGenerate}
           onRequestClear={handleRequestClear}
           actions={
             <SynthesisActions
               synthesis={synthesis}
               canGenerate={canGenerate}
               onGenerate={handleGenerate}
+              cancelButtonRef={cancelButtonRef}
+              synthesizeButtonRef={synthesizeButtonRef}
             />
           }
         />
-        <ResultPanel synthesis={synthesis} />
+        <ResultPanel synthesis={synthesis} playButtonRef={playButtonRef} />
 
         <aside className="inspector" aria-label={t("语音参数配置")}>
           {auth.required && <AuthCard auth={auth} />}

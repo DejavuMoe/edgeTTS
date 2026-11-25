@@ -2,8 +2,11 @@ import { describe, it, expect } from "vitest";
 import {
   parseSynthesisPlanHeaders,
   formatAudioBytes,
+  formatGeneratingBytesText,
+  formatGeneratingPhaseText,
   formatGeneratingStatusText,
   MAX_TELEMETRY_HEADER_VALUE,
+  STATUS_SEPARATOR,
 } from "../../src/lib/synthesis-telemetry.js";
 
 describe("Synthesis Telemetry", () => {
@@ -195,6 +198,39 @@ describe("Synthesis Telemetry", () => {
         bytesReceived: 0,
       });
       expect(textWithoutCount).toBe("正在流式接收音频");
+    });
+  });
+
+  describe("formatGeneratingPhaseText and formatGeneratingBytesText", () => {
+    it("keeps the byte count out of the phase that is announced", () => {
+      const streaming = { phase: "streaming" as const, segmentCount: 12, bytesReceived: 127795 };
+      expect(formatGeneratingPhaseText(streaming)).toBe("正在流式接收音频 · 共 12 段");
+      expect(formatGeneratingBytesText(streaming)).toBe("124.8 KiB");
+      expect(formatGeneratingPhaseText(streaming, "en")).not.toContain("KiB");
+    });
+
+    it("has no byte count before streaming starts or before the first byte", () => {
+      expect(
+        formatGeneratingBytesText({ phase: "requesting", segmentCount: 3, bytesReceived: 4096 }),
+      ).toBeNull();
+      expect(
+        formatGeneratingBytesText({ phase: "streaming", segmentCount: 3, bytesReceived: 0 }),
+      ).toBeNull();
+    });
+
+    it("joins to the same status line that is shown", () => {
+      const samples = [
+        { phase: "requesting" as const, segmentCount: null, bytesReceived: 0 },
+        { phase: "requesting" as const, segmentCount: 4, bytesReceived: 2048 },
+        { phase: "streaming" as const, segmentCount: null, bytesReceived: 86016 },
+        { phase: "streaming" as const, segmentCount: 5, bytesReceived: 0 },
+      ];
+      for (const sample of samples) {
+        const bytes = formatGeneratingBytesText(sample);
+        expect(formatGeneratingStatusText(sample)).toBe(
+          [formatGeneratingPhaseText(sample), ...(bytes ? [bytes] : [])].join(STATUS_SEPARATOR),
+        );
+      }
     });
   });
 });

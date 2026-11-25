@@ -1,3 +1,4 @@
+import type { RefObject } from "react";
 import { useI18n } from "../i18n.js";
 import type { useSynthesis } from "./useSynthesis.js";
 
@@ -5,10 +6,18 @@ export interface SynthesisActionsProps {
   readonly synthesis: ReturnType<typeof useSynthesis>;
   readonly canGenerate: boolean;
   readonly onGenerate: () => void;
+  readonly cancelButtonRef?: RefObject<HTMLButtonElement | null>;
+  readonly synthesizeButtonRef?: RefObject<HTMLButtonElement | null>;
 }
 
 /** The synthesize action, and cancel while it runs. Sits at the end of the text it submits. */
-export function SynthesisActions({ synthesis, canGenerate, onGenerate }: SynthesisActionsProps) {
+export function SynthesisActions({
+  synthesis,
+  canGenerate,
+  onGenerate,
+  cancelButtonRef,
+  synthesizeButtonRef,
+}: SynthesisActionsProps) {
   const { t } = useI18n();
   const { isGenerating } = synthesis;
 
@@ -16,6 +25,7 @@ export function SynthesisActions({ synthesis, canGenerate, onGenerate }: Synthes
     <div className="synthesis-actions action-buttons">
       {isGenerating && (
         <button
+          ref={cancelButtonRef}
           type="button"
           className="btn btn-secondary"
           onClick={synthesis.cancel}
@@ -26,6 +36,7 @@ export function SynthesisActions({ synthesis, canGenerate, onGenerate }: Synthes
         </button>
       )}
       <button
+        ref={synthesizeButtonRef}
         type="button"
         className="btn btn-primary btn-synthesize"
         onClick={onGenerate}

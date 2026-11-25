@@ -18,7 +18,13 @@ export interface AudioPlayerProps {
   children?: React.ReactNode;
   /** Loudness per bar (0..1). When present the timeline is drawn as the take's waveform. */
   peaks?: readonly number[] | null | undefined;
+  /** The play/pause button, for callers that move focus to it when a take is ready. */
+  playButtonRef?: React.Ref<HTMLButtonElement> | undefined;
 }
+
+/** Seconds an arrow key moves the timeline; Page Up / Page Down move it further. */
+const SEEK_STEP_SECONDS = 5;
+const SEEK_PAGE_SECONDS = 30;
 
 const BAR_PITCH = 3;
 const BAR_WIDTH = 2;
@@ -60,7 +66,16 @@ function WaveformBars({
 }
 
 export const AudioPlayer = forwardRef<HTMLAudioElement, AudioPlayerProps>(function AudioPlayer(
-  { src, downloadUrl, downloadFilename, className = "", "aria-label": ariaLabel, children, peaks },
+  {
+    src,
+    downloadUrl,
+    downloadFilename,
+    className = "",
+    "aria-label": ariaLabel,
+    children,
+    peaks,
+    playButtonRef,
+  },
   ref,
 ) {
   const { t } = useI18n();
@@ -132,15 +147,40 @@ export const AudioPlayer = forwardRef<HTMLAudioElement, AudioPlayerProps>(functi
     setIsMuted(audio.muted);
   }, []);
 
-  const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const seekTo = (targetTime: number) => {
     const audio = audioRef.current;
     if (!audio) return;
-    const targetTime = parseFloat(e.target.value);
     audio.currentTime = targetTime;
     setCurrentTime(targetTime);
   };
 
+  const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
+    seekTo(parseFloat(e.target.value));
+  };
+
   const isDurationFinite = Number.isFinite(duration) && duration > 0;
+
+  // The slider's own step is fine-grained for dragging, which would make each arrow key
+  // press move a twentieth of a second. Keys move by steps a listener can hear instead.
+  const handleSeekKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    const audio = audioRef.current;
+    if (!audio || !isDurationFinite) return;
+    const position = audio.currentTime;
+    const targets: Record<string, number> = {
+      ArrowLeft: position - SEEK_STEP_SECONDS,
+      ArrowDown: position - SEEK_STEP_SECONDS,
+      ArrowRight: position + SEEK_STEP_SECONDS,
+      ArrowUp: position + SEEK_STEP_SECONDS,
+      PageDown: position - SEEK_PAGE_SECONDS,
+      PageUp: position + SEEK_PAGE_SECONDS,
+      Home: 0,
+      End: duration,
+    };
+    const target = targets[e.key];
+    if (target === undefined || e.altKey || e.ctrlKey || e.metaKey) return;
+    e.preventDefault();
+    seekTo(Math.min(duration, Math.max(0, target)));
+  };
 
   // Where a click on the waveform would seek to, shown while the pointer is over it.
   const [hoverRatio, setHoverRatio] = useState<number | null>(null);
@@ -173,6 +213,7 @@ export const AudioPlayer = forwardRef<HTMLAudioElement, AudioPlayerProps>(functi
 
         {/* Play / Pause button */}
         <button
+          ref={playButtonRef}
           type="button"
           className="ui-audio-btn ui-audio-play-btn"
           onClick={togglePlay}
@@ -231,8 +272,17 @@ export const AudioPlayer = forwardRef<HTMLAudioElement, AudioPlayerProps>(functi
               step="0.05"
               value={isDurationFinite ? currentTime : 0}
               onChange={handleSeek}
+              onKeyDown={handleSeekKeyDown}
               disabled={!isDurationFinite}
               aria-label={t("音频时间进度条")}
+              aria-valuetext={
+                isDurationFinite
+                  ? t("已播放 {current}，共 {total}", {
+                      current: formatTime(currentTime),
+                      total: formatTime(duration),
+                    })
+                  : undefined
+              }
               style={
                 {
                   "--slider-progress": `${progressPercent}%`,

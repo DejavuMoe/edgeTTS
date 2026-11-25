@@ -6,7 +6,6 @@ import type { useTextDocument } from "./useTextDocument.js";
 export interface EditorPanelProps {
   readonly textDocument: ReturnType<typeof useTextDocument>;
   readonly isGenerating: boolean;
-  readonly onGenerate: () => void;
   readonly onRequestClear: () => void;
   /** The submit controls, placed at the end of the text like a send button. */
   readonly actions: ReactNode;
@@ -15,7 +14,6 @@ export interface EditorPanelProps {
 export function EditorPanel({
   textDocument,
   isGenerating,
-  onGenerate,
   onRequestClear,
   actions,
 }: EditorPanelProps) {
@@ -75,12 +73,6 @@ export function EditorPanel({
         placeholder={t("在此输入需要合成为语音的文本内容...")}
         value={textDocument.text}
         onChange={(e) => textDocument.edit(e.target.value)}
-        onKeyDown={(e) => {
-          if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
-            e.preventDefault();
-            onGenerate();
-          }
-        }}
         disabled={isGenerating}
         spellCheck={false}
         aria-describedby={noteId}

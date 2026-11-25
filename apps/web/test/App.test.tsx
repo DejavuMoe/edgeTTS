@@ -2612,6 +2612,12 @@ describe("EdgeTTS Web Workbench", () => {
           const indicator = screen.getByRole("status", { name: "合成状态" });
           expect(indicator.textContent).toContain("共 5 段");
           expect(indicator.textContent).toContain("32.0 KiB");
+          // The count ticks up as bytes arrive; only the stage is read out.
+          const bytes = indicator.querySelector('[aria-hidden="true"]:not(.live-dot)');
+          expect(bytes?.textContent).toBe(" · 32.0 KiB");
+          expect(indicator.textContent?.replace(bytes?.textContent ?? "", "")).toBe(
+            "正在流式接收音频 · 共 5 段",
+          );
         });
 
         // Finish stream
@@ -3077,6 +3083,178 @@ describe("EdgeTTS Web Workbench", () => {
       ]);
       expect(screen.getByRole("listbox", { name: /选择声音/i })).toBeDefined();
       expect(screen.getByRole("radiogroup", { name: "音质" })).toBeDefined();
+    });
+  });
+
+  describe("Keyboard and screen reader flow around a synthesis", () => {
+    /** Holds speech requests until `respond` is called; an abort rejects them as fetch does. */
+    function holdSpeech() {
+      const pending: ((response: Response) => void)[] = [];
+      fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = requestUrl(input);
+        if (url === "/api/health") return new Response(JSON.stringify({ status: "ok" }));
+        if (url === "/api/voices") return new Response(JSON.stringify({ voices: mockVoices }));
+        if (url === "/api/speech") {
+          return new Promise<Response>((resolve, reject) => {
+            pending.push(resolve);
+            init?.signal?.addEventListener("abort", () => {
+              const err = new Error("Aborted");
+              err.name = "AbortError";
+              reject(err);
+            });
+          });
+        }
+        return new Response(null, { status: 404 });
+      });
+      return {
+        calls: () => pending.length,
+        respond: async () => {
+          await act(async () => {
+            pending.at(-1)?.(
+              new Response(new Uint8Array([1, 2, 3, 4]), {
+                status: 200,
+                headers: { "Content-Type": "audio/mpeg", "X-EdgeTTS-Segment-Count": "2" },
+              }),
+            );
+          });
+        },
+      };
+    }
+
+    async function renderWithText(): Promise<void> {
+      render(<App />);
+      await screen.findByLabelText(/选择声音/i);
+      fireEvent.change(screen.getByLabelText(/文本内容/i), { target: { value: "Flow test" } });
+    }
+
+    const announcer = (): HTMLElement =>
+      document.querySelector<HTMLElement>('.visually-hidden[role="status"]')!;
+
+    it("moves focus to cancel when synthesis starts and to play when the take is ready", async () => {
+      const speech = holdSpeech();
+      await renderWithText();
+      const generate = screen.getByRole("button", { name: "合成语音" });
+      generate.focus();
+      fireEvent.click(generate);
+
+      const cancel = await screen.findByRole("button", { name: "取消合成" });
+      await waitFor(() => expect(document.activeElement).toBe(cancel));
+
+      await speech.respond();
+      await waitFor(() =>
+        expect(document.activeElement).toBe(screen.getByRole("button", { name: "播放" })),
+      );
+    });
+
+    it("returns focus to synthesize when the synthesis is cancelled", async () => {
+      holdSpeech();
+      await renderWithText();
+      fireEvent.keyDown(document.body, { key: "Enter", ctrlKey: true });
+
+      const cancel = await screen.findByRole("button", { name: "取消合成" });
+      await waitFor(() => expect(document.activeElement).toBe(cancel));
+      fireEvent.click(cancel);
+
+      await screen.findByText("已取消生成");
+      expect(document.activeElement).toBe(screen.getByRole("button", { name: "合成语音" }));
+    });
+
+    it("leaves focus on a control that is still usable", async () => {
+      const speech = holdSpeech();
+      await renderWithText();
+      const repository = screen.getByRole("link", { name: "在 GitHub 查看源代码" });
+      repository.focus();
+      fireEvent.click(screen.getByRole("button", { name: "合成语音" }));
+
+      await screen.findByRole("button", { name: "取消合成" });
+      expect(document.activeElement).toBe(repository);
+
+      await speech.respond();
+      await screen.findByRole("button", { name: "播放" });
+      await waitFor(() => expect(screen.queryByRole("button", { name: "取消合成" })).toBeNull());
+      expect(document.activeElement).toBe(repository);
+    });
+
+    it("synthesizes on Ctrl+Enter from controls outside the text, not from fields that keep Enter", async () => {
+      const speech = holdSpeech();
+      await renderWithText();
+      const dialogButton = document.querySelector("dialog button")!;
+      const keepers = [
+        screen.getByLabelText(/搜索声音/i),
+        screen.getByRole("link", { name: "在 GitHub 查看源代码" }),
+        dialogButton,
+      ];
+      for (const element of keepers) {
+        fireEvent.keyDown(element, { key: "Enter", ctrlKey: true });
+        fireEvent.keyDown(element, { key: "Enter", metaKey: true });
+      }
+      expect(speech.calls()).toBe(0);
+
+      // A slider, a voice in the list and a plain button all hand the keys to synthesis.
+      fireEvent.keyDown(screen.getByLabelText(/^语速/i), { key: "Enter", metaKey: true });
+      expect(speech.calls()).toBe(1);
+      fireEvent.click(await screen.findByRole("button", { name: "取消合成" }));
+      await screen.findByText("已取消生成");
+
+      fireEvent.keyDown(screen.getByRole("listbox", { name: /选择声音/i }), {
+        key: "Enter",
+        ctrlKey: true,
+      });
+      expect(speech.calls()).toBe(2);
+      fireEvent.click(await screen.findByRole("button", { name: "取消合成" }));
+      await screen.findByText("已取消生成");
+
+      fireEvent.keyDown(screen.getByRole("button", { name: "清空当前文本" }), {
+        key: "Enter",
+        ctrlKey: true,
+      });
+      expect(speech.calls()).toBe(3);
+    });
+
+    it("ignores Ctrl+Enter that a control already handled or that composes text", async () => {
+      const speech = holdSpeech();
+      await renderWithText();
+      const textarea = screen.getByLabelText(/文本内容/i);
+
+      const handleKey = (e: Event): void => e.preventDefault();
+      textarea.addEventListener("keydown", handleKey);
+      fireEvent.keyDown(textarea, { key: "Enter", ctrlKey: true });
+      textarea.removeEventListener("keydown", handleKey);
+      fireEvent.keyDown(textarea, { key: "Enter", ctrlKey: true, isComposing: true });
+      expect(speech.calls()).toBe(0);
+
+      fireEvent.keyDown(textarea, { key: "Enter", ctrlKey: true });
+      expect(speech.calls()).toBe(1);
+    });
+
+    it("announces the stage of a synthesis but not its byte count, then announces the take", async () => {
+      const speech = holdSpeech();
+      await renderWithText();
+      expect(announcer().textContent).toBe("");
+      fireEvent.click(screen.getByRole("button", { name: "合成语音" }));
+
+      const status = await screen.findByRole("status", { name: "合成状态" });
+      expect(status.textContent).toBe("正在等待语音服务…");
+      expect(announcer().textContent).toBe("");
+
+      await speech.respond();
+      await waitFor(() => expect(announcer().textContent).toBe("合成完成，可以播放"));
+      expect(screen.queryByRole("status", { name: "合成状态" })).toBeNull();
+
+      // A new synthesis clears the announcement, so the next finished take is announced again.
+      fireEvent.click(screen.getByRole("button", { name: "合成语音" }));
+      await screen.findByRole("status", { name: "合成状态" });
+      expect(announcer().textContent).toBe("");
+    });
+
+    it("does not announce a finished take after a cancellation", async () => {
+      holdSpeech();
+      await renderWithText();
+      fireEvent.click(screen.getByRole("button", { name: "合成语音" }));
+      fireEvent.click(await screen.findByRole("button", { name: "取消合成" }));
+
+      expect((await screen.findByRole("alert")).textContent).toBe("已取消生成");
+      expect(announcer().textContent).toBe("");
     });
   });
 });

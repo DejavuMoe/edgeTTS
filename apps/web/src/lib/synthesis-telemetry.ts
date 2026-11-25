@@ -105,15 +105,18 @@ export function formatAudioBytes(bytes: number): string {
   return `${mib.toFixed(1)} MiB`;
 }
 
-/**
- * Formats user-facing status indicator text during synthesis.
- */
-export function formatGeneratingStatusText(
-  telemetry: {
-    readonly phase: "requesting" | "streaming";
-    readonly segmentCount: number | null;
-    readonly bytesReceived: number;
-  },
+/** Joins the parts of the generating status line. */
+export const STATUS_SEPARATOR = " · ";
+
+interface GeneratingStatus {
+  readonly phase: "requesting" | "streaming";
+  readonly segmentCount: number | null;
+  readonly bytesReceived: number;
+}
+
+/** The stage a synthesis is at, without its byte count: what a screen reader announces. */
+export function formatGeneratingPhaseText(
+  telemetry: Omit<GeneratingStatus, "bytesReceived">,
   locale: UiLocale = "zh-CN",
 ): string {
   if (telemetry.phase === "requesting") {
@@ -124,8 +127,24 @@ export function formatGeneratingStatusText(
   if (telemetry.segmentCount !== null && telemetry.segmentCount > 0) {
     parts.push(translate("共 {count} 段", locale, { count: telemetry.segmentCount }));
   }
-  if (telemetry.bytesReceived > 0) {
-    parts.push(formatAudioBytes(telemetry.bytesReceived));
-  }
-  return parts.join(" · ");
+  return parts.join(STATUS_SEPARATOR);
+}
+
+/** The audio received so far, shown after the phase once streaming has begun; else null. */
+export function formatGeneratingBytesText(telemetry: GeneratingStatus): string | null {
+  return telemetry.phase === "streaming" && telemetry.bytesReceived > 0
+    ? formatAudioBytes(telemetry.bytesReceived)
+    : null;
+}
+
+/**
+ * Formats user-facing status indicator text during synthesis.
+ */
+export function formatGeneratingStatusText(
+  telemetry: GeneratingStatus,
+  locale: UiLocale = "zh-CN",
+): string {
+  const bytes = formatGeneratingBytesText(telemetry);
+  const phase = formatGeneratingPhaseText(telemetry, locale);
+  return bytes ? `${phase}${STATUS_SEPARATOR}${bytes}` : phase;
 }
