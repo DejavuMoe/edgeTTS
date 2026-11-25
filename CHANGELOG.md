@@ -7,6 +7,8 @@ the version being released.
 
 ## [Unreleased]
 
+## [1.0.4] - 2026-11-26
+
 ### Added
 
 - Link the workbench header to the GitHub repository. The link opens in a new tab without
@@ -26,12 +28,12 @@ the version being released.
   sits below the text. Tapping it scrolls to the picker and focuses the voice list.
 - Compare voices and takes by ear:
   - **Voice preview.** The current voice's portrait is now a button, marked by a speaker
-    badge, that plays a short line in the voice's own language, never the user's text. The line is matched to the locale, so written
-    Chinese follows the region and Cantonese voices speak Cantonese. Languages without a
-    written line read their own name and a date from the browser's locale data. The preview
-    uses the current speed, pitch and volume at standard quality. The last 16 previews are
-    kept in memory, so hearing one again sends no request. Pressing the button again, or
-    choosing another voice, stops it.
+    badge, that plays a short line in the voice's own language, never the user's text. The
+    line is matched to the locale, so written Chinese follows the region and Cantonese voices
+    speak Cantonese. Languages without a written line read their own name and a date from the
+    browser's locale data. The preview uses the current speed, pitch and volume at standard
+    quality. The last 16 previews are kept in memory, so hearing one again sends no request.
+    Pressing the button again, or choosing another voice, stops it.
   - **Earlier takes.** The last five takes stay below the player, the current one included,
     until they pass 64 MiB of audio. The newest take is always kept. Each earlier take shows
     its voice, settings, length and time, and can be played or downloaded on its own. Takes
