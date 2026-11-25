@@ -93,6 +93,19 @@ the version being released.
   column.
 - Let password managers save and fill the API Key. The field is now marked as a password,
   where autocomplete used to be off. The workbench itself still keeps the key in memory only.
+- Show synthesis progress in time instead of bytes:
+  - **Status.** While audio arrives, the status line shows how much of it has arrived as
+    time, with about what share of the take that is, for example "0:10 received (about
+    25%)". Both qualities are constant-bitrate MP3 (48 and 96 kbps), so the bytes convert
+    exactly. The share comes from an estimate of the take's length, made from the text and
+    the speed, that stays within 10% for Chinese, Japanese, Korean, English and French
+    samples. It never reaches 100% before the take is complete. The line updates about
+    every second of audio instead of every 5.5 seconds.
+  - **Seeking.** The player's timeline works while the take is still arriving. It spans the
+    estimated length, marks the part received, and seeks anywhere within that part by
+    pointer or keyboard, where it used to stay disabled until the end. Its length reads as
+    an estimate until the take is complete, and screen readers hear the time played and
+    the time received.
 
 ### Fixed
 

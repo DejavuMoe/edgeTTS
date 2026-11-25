@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { StreamPlaybackController } from "../../src/audio/stream-controller.js";
+import {
+  PROGRESS_THROTTLE_BYTES,
+  StreamPlaybackController,
+} from "../../src/audio/stream-controller.js";
 
 describe("StreamPlaybackController Session Isolation & URL Lifecycle", () => {
   let originalMediaSource: unknown;
@@ -694,7 +697,12 @@ describe("StreamPlaybackController Session Isolation & URL Lifecycle", () => {
   });
 
   describe("Streaming Telemetry & Byte Accounting", () => {
-    it.each([32768, 1024])(
+    it("reports progress about every second of audio", () => {
+      // 48 kbps is 6000 bytes a second: one report per 1.4 s of standard audio.
+      expect(PROGRESS_THROTTLE_BYTES).toBe(8 * 1024);
+    });
+
+    it.each([PROGRESS_THROTTLE_BYTES, 1024])(
       "accumulates bytes with %i-byte chunks, throttles progress, and reports final bytes",
       async (chunkSize) => {
         class MockSourceBuffer extends EventTarget {
@@ -721,17 +729,19 @@ describe("StreamPlaybackController Session Isolation & URL Lifecycle", () => {
         const controller = new StreamPlaybackController();
         const progressReports: number[] = [];
 
-        // Chunks: 32 KiB, empty (0 bytes), 32 KiB, 10 KiB
+        // One threshold's worth, empty (0 bytes), one threshold's worth, then a tail below it.
+        const step = PROGRESS_THROTTLE_BYTES;
+        const tailBytes = step - 3 * 1024;
         const chunk1 = new Uint8Array(chunkSize).fill(1);
         const chunkEmpty = new Uint8Array(0);
         const chunk2 = new Uint8Array(chunkSize).fill(2);
-        const chunk3 = new Uint8Array(10 * 1024).fill(3);
+        const chunk3 = new Uint8Array(tailBytes).fill(3);
 
         const stream = new ReadableStream<Uint8Array>({
           start(ctrl) {
-            for (let bytes = 0; bytes < 32768; bytes += chunkSize) ctrl.enqueue(chunk1);
+            for (let bytes = 0; bytes < step; bytes += chunkSize) ctrl.enqueue(chunk1);
             ctrl.enqueue(chunkEmpty);
-            for (let bytes = 0; bytes < 32768; bytes += chunkSize) ctrl.enqueue(chunk2);
+            for (let bytes = 0; bytes < step; bytes += chunkSize) ctrl.enqueue(chunk2);
             ctrl.enqueue(chunk3);
             ctrl.close();
           },
@@ -754,12 +764,12 @@ describe("StreamPlaybackController Session Isolation & URL Lifecycle", () => {
         expect(callbacks.onFinish).toHaveBeenCalledTimes(1);
         expect(progressReports.length).toBe(3);
 
-        // Chunk 1 reported 32768
-        expect(progressReports[0]).toBe(32768);
-        // Chunk 2 reported 65536
-        expect(progressReports[1]).toBe(65536);
-        // Final chunk 3 (10 KiB) emitted at stream finish even below 32 KiB threshold: 75776
-        expect(progressReports[progressReports.length - 1]).toBe(75776);
+        // First threshold reached
+        expect(progressReports[0]).toBe(step);
+        // Second threshold reached
+        expect(progressReports[1]).toBe(2 * step);
+        // The tail is emitted at stream finish even though it is below the threshold
+        expect(progressReports[progressReports.length - 1]).toBe(2 * step + tailBytes);
 
         // Monotonic non-decreasing
         for (let i = 1; i < progressReports.length; i++) {
@@ -768,7 +778,7 @@ describe("StreamPlaybackController Session Isolation & URL Lifecycle", () => {
       },
     );
 
-    it("emits final byte count when total stream size is below throttle threshold (< 32 KiB)", async () => {
+    it("emits final byte count when total stream size is below throttle threshold", async () => {
       class MockSourceBuffer extends EventTarget {
         updating = false;
         appendBuffer = vi.fn(() => {
@@ -793,7 +803,7 @@ describe("StreamPlaybackController Session Isolation & URL Lifecycle", () => {
       const controller = new StreamPlaybackController();
       const progressReports: number[] = [];
 
-      const smallChunk = new Uint8Array(4096).fill(1);
+      const smallChunk = new Uint8Array(PROGRESS_THROTTLE_BYTES / 2).fill(1);
       const stream = new ReadableStream<Uint8Array>({
         start(ctrl) {
           ctrl.enqueue(smallChunk);
@@ -816,7 +826,7 @@ describe("StreamPlaybackController Session Isolation & URL Lifecycle", () => {
       await controller.startStream(mockResponse, ac.signal, callbacks);
 
       expect(callbacks.onFinish).toHaveBeenCalledTimes(1);
-      expect(progressReports).toEqual([4096]);
+      expect(progressReports).toEqual([PROGRESS_THROTTLE_BYTES / 2]);
     });
 
     it("Blob fallback reports final blob.size via onProgress", async () => {

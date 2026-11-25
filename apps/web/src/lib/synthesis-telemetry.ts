@@ -1,4 +1,5 @@
 import { translate, type UiLocale } from "../i18n.js";
+import { formatMediaTime } from "./media-time.js";
 /**
  * Telemetry and metadata utilities for EdgeTTS speech synthesis.
  */
@@ -13,6 +14,10 @@ export interface GenerationTelemetryState {
   readonly segmentCount: number | null;
   readonly maxSegmentCodePoints: number | null;
   readonly bytesReceived: number;
+  /** Bytes per second of the audio being received; the MP3 is constant bitrate. */
+  readonly bytesPerSecond?: number | null;
+  /** About how long the take will be, in seconds; null when the text gives no estimate. */
+  readonly expectedSeconds?: number | null;
 }
 
 /**
@@ -112,6 +117,21 @@ interface GeneratingStatus {
   readonly phase: "requesting" | "streaming";
   readonly segmentCount: number | null;
   readonly bytesReceived: number;
+  readonly bytesPerSecond?: number | null;
+  readonly expectedSeconds?: number | null;
+}
+
+/** The estimate can run short, so a take still arriving never shows as complete. */
+const MAX_ARRIVING_PERCENT = 99;
+
+/** The share of the expected length that has arrived, as a whole percent; null if unknown. */
+export function estimateArrivedPercent(
+  receivedSeconds: number,
+  expectedSeconds: number | null | undefined,
+): number | null {
+  if (!expectedSeconds || !Number.isFinite(expectedSeconds) || expectedSeconds <= 0) return null;
+  const percent = Math.floor((Math.max(0, receivedSeconds) / expectedSeconds) * 100);
+  return Math.min(MAX_ARRIVING_PERCENT, percent);
 }
 
 /** The stage a synthesis is at, without its byte count: what a screen reader announces. */
@@ -138,13 +158,34 @@ export function formatGeneratingBytesText(telemetry: GeneratingStatus): string |
 }
 
 /**
+ * How much audio has arrived, shown after the phase once streaming has begun; else null. With
+ * the bitrate known it is seconds of audio and, when the text gave an estimate, about what share
+ * of the take that is; otherwise the byte count.
+ */
+export function formatGeneratingProgressText(
+  telemetry: GeneratingStatus,
+  locale: UiLocale = "zh-CN",
+): string | null {
+  const bytes = formatGeneratingBytesText(telemetry);
+  const bytesPerSecond = telemetry.bytesPerSecond;
+  if (bytes === null || !bytesPerSecond || bytesPerSecond <= 0) return bytes;
+
+  const seconds = telemetry.bytesReceived / bytesPerSecond;
+  const time = formatMediaTime(seconds);
+  const percent = estimateArrivedPercent(seconds, telemetry.expectedSeconds);
+  return percent === null
+    ? translate("已接收 {time}", locale, { time })
+    : translate("已接收 {time}（约 {percent}%）", locale, { time, percent });
+}
+
+/**
  * Formats user-facing status indicator text during synthesis.
  */
 export function formatGeneratingStatusText(
   telemetry: GeneratingStatus,
   locale: UiLocale = "zh-CN",
 ): string {
-  const bytes = formatGeneratingBytesText(telemetry);
+  const progress = formatGeneratingProgressText(telemetry, locale);
   const phase = formatGeneratingPhaseText(telemetry, locale);
-  return bytes ? `${phase}${STATUS_SEPARATOR}${bytes}` : phase;
+  return progress ? `${phase}${STATUS_SEPARATOR}${progress}` : phase;
 }

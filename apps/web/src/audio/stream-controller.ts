@@ -7,7 +7,8 @@ export function isMediaSourceAudioSupported(): boolean {
   );
 }
 
-export const PROGRESS_THROTTLE_BYTES = 32 * 1024;
+/** Bytes between progress reports: 1.4 s of standard-quality audio, 0.7 s of high. */
+export const PROGRESS_THROTTLE_BYTES = 8 * 1024;
 
 export interface StreamPlaybackCallbacks {
   readonly onStreamReady: (mediaUrl: string) => void;

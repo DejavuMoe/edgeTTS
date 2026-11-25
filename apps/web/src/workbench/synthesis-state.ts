@@ -16,8 +16,15 @@ export interface SynthesisState {
   readonly telemetry: GenerationTelemetryState | null;
 }
 
+/** What the requested audio will be: its bitrate, and about how long it will run. */
+export interface ExpectedAudio {
+  readonly bytesPerSecond: number;
+  /** Seconds, estimated from the text and speed; null when the text gives no estimate. */
+  readonly expectedSeconds: number | null;
+}
+
 export type SynthesisEvent =
-  | { readonly type: "started" }
+  | { readonly type: "started"; readonly expected?: ExpectedAudio }
   | { readonly type: "planned"; readonly plan: SynthesisPlanMetadata }
   | { readonly type: "streamReady"; readonly mediaUrl: string }
   | { readonly type: "progressed"; readonly bytesReceived: number }
@@ -60,6 +67,8 @@ export function synthesisReducer(state: SynthesisState, event: SynthesisEvent): 
           segmentCount: null,
           maxSegmentCodePoints: null,
           bytesReceived: 0,
+          bytesPerSecond: event.expected?.bytesPerSecond ?? null,
+          expectedSeconds: event.expected?.expectedSeconds ?? null,
         },
       };
     case "planned":

@@ -2643,94 +2643,105 @@ describe("EdgeTTS Web Workbench", () => {
       await screen.findByLabelText(/语音合成播放器/i);
     });
 
-    it("displays long-text segment count and received bytes during streaming", async () => {
-      const originalMediaSource = window.MediaSource;
-      try {
-        class MockSourceBuffer extends EventTarget {
-          updating = false;
-          appendBuffer = vi.fn(() => {
-            queueMicrotask(() => {
-              this.dispatchEvent(new Event("updateend"));
+    // 32 KiB is 5.5 s at 48 kbps and 2.7 s at 96 kbps; the text runs about 49.5 s at 1.0×.
+    it.each([
+      { quality: null, speed: null, progress: "已接收 0:05（约 11%）" },
+      { quality: /高品质/i, speed: "1.5", progress: "已接收 0:02（约 8%）" },
+    ])(
+      "displays long-text segment count and received audio time during streaming ($progress)",
+      async ({ quality, speed, progress }) => {
+        const originalMediaSource = window.MediaSource;
+        try {
+          class MockSourceBuffer extends EventTarget {
+            updating = false;
+            appendBuffer = vi.fn(() => {
+              queueMicrotask(() => {
+                this.dispatchEvent(new Event("updateend"));
+              });
             });
-          });
-          abort = vi.fn();
-        }
-
-        const mockBuffer = new MockSourceBuffer();
-        class MockMediaSource extends EventTarget {
-          readyState = "open";
-          addSourceBuffer = vi.fn(() => mockBuffer as unknown as SourceBuffer);
-          endOfStream = vi.fn();
-          static isTypeSupported = vi.fn(() => true);
-        }
-
-        // @ts-expect-error Mocking MediaSource
-        window.MediaSource = MockMediaSource;
-
-        let pushChunk!: (chunk: Uint8Array) => void;
-        let closeStream!: () => void;
-        const stream = new ReadableStream<Uint8Array>({
-          start(ctrl) {
-            pushChunk = (c) => ctrl.enqueue(c);
-            closeStream = () => ctrl.close();
-          },
-        });
-
-        fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
-          const url = requestUrl(input);
-          if (url === "/api/health") return new Response(JSON.stringify({ status: "ok" }));
-          if (url === "/api/voices") return new Response(JSON.stringify({ voices: mockVoices }));
-          if (url === "/api/speech") {
-            return new Response(stream, {
-              status: 200,
-              headers: {
-                "Content-Type": "audio/mpeg",
-                "X-EdgeTTS-Segment-Count": "5",
-                "X-EdgeTTS-Segment-Max-Code-Points": "300",
-              },
-            });
+            abort = vi.fn();
           }
-          return new Response(null, { status: 404 });
-        });
 
-        render(<App />);
-        await screen.findByLabelText(/选择声音/i);
+          const mockBuffer = new MockSourceBuffer();
+          class MockMediaSource extends EventTarget {
+            readyState = "open";
+            addSourceBuffer = vi.fn(() => mockBuffer as unknown as SourceBuffer);
+            endOfStream = vi.fn();
+            static isTypeSupported = vi.fn(() => true);
+          }
 
-        const textarea = screen.getByLabelText(/文本内容/i) as HTMLTextAreaElement;
-        fireEvent.change(textarea, { target: { value: "长文本测试内容。".repeat(30) } }); // > 300 code points
+          // @ts-expect-error Mocking MediaSource
+          window.MediaSource = MockMediaSource;
 
-        fireEvent.click(screen.getByRole("button", { name: /合成语音/i }));
+          let pushChunk!: (chunk: Uint8Array) => void;
+          let closeStream!: () => void;
+          const stream = new ReadableStream<Uint8Array>({
+            start(ctrl) {
+              pushChunk = (c) => ctrl.enqueue(c);
+              closeStream = () => ctrl.close();
+            },
+          });
 
-        // Status indicator displays plan segment count once stream starts
-        pushChunk(new Uint8Array(32 * 1024));
+          fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+            const url = requestUrl(input);
+            if (url === "/api/health") return new Response(JSON.stringify({ status: "ok" }));
+            if (url === "/api/voices") return new Response(JSON.stringify({ voices: mockVoices }));
+            if (url === "/api/speech") {
+              return new Response(stream, {
+                status: 200,
+                headers: {
+                  "Content-Type": "audio/mpeg",
+                  "X-EdgeTTS-Segment-Count": "5",
+                  "X-EdgeTTS-Segment-Max-Code-Points": "300",
+                },
+              });
+            }
+            return new Response(null, { status: 404 });
+          });
 
-        await waitFor(() => {
-          const indicator = screen.getByRole("status", { name: "合成状态" });
-          expect(indicator.textContent).toContain("共 5 段");
-          expect(indicator.textContent).toContain("32.0 KiB");
-          // The count ticks up as bytes arrive; only the stage is read out.
-          const bytes = indicator.querySelector('[aria-hidden="true"]:not(.live-dot)');
-          expect(bytes?.textContent).toBe(" · 32.0 KiB");
-          expect(indicator.textContent?.replace(bytes?.textContent ?? "", "")).toBe(
-            "正在流式接收音频 · 共 5 段",
-          );
-        });
+          const user = userEvent.setup();
+          render(<App />);
+          await screen.findByLabelText(/选择声音/i);
+          if (quality) await selectPickerOption(user, screen.getByLabelText(/音质/i), quality);
+          if (speed)
+            fireEvent.change(screen.getByLabelText(/^语速/i), { target: { value: speed } });
 
-        // Finish stream
-        closeStream();
-        await screen.findByLabelText(/语音合成播放器/i);
+          const textarea = screen.getByLabelText(/文本内容/i) as HTMLTextAreaElement;
+          fireEvent.change(textarea, { target: { value: "长文本测试内容。".repeat(30) } }); // > 300 code points
 
-        // Indicator disappears upon completion
-        expect(screen.queryByRole("status", { name: "合成状态" })).toBeNull();
+          fireEvent.click(screen.getByRole("button", { name: /合成语音/i }));
 
-        // Completed metadata includes segment count and audio bytes
-        const metadata = screen.getByLabelText(/音频生成信息/i);
-        expect(metadata.textContent).toContain("5 段");
-        expect(metadata.textContent).toContain("32.0 KiB");
-      } finally {
-        window.MediaSource = originalMediaSource as typeof MediaSource;
-      }
-    });
+          // Status indicator displays plan segment count once stream starts
+          pushChunk(new Uint8Array(32 * 1024));
+
+          await waitFor(() => {
+            const indicator = screen.getByRole("status", { name: "合成状态" });
+            expect(indicator.textContent).toContain("共 5 段");
+            expect(indicator.textContent).toContain(progress);
+            // The received time ticks up as audio arrives; only the stage is read out.
+            const received = indicator.querySelector('[aria-hidden="true"]:not(.live-dot)');
+            expect(received?.textContent).toBe(` · ${progress}`);
+            expect(indicator.textContent?.replace(received?.textContent ?? "", "")).toBe(
+              "正在流式接收音频 · 共 5 段",
+            );
+          });
+
+          // Finish stream
+          closeStream();
+          await screen.findByLabelText(/语音合成播放器/i);
+
+          // Indicator disappears upon completion
+          expect(screen.queryByRole("status", { name: "合成状态" })).toBeNull();
+
+          // Completed metadata includes segment count and audio bytes
+          const metadata = screen.getByLabelText(/音频生成信息/i);
+          expect(metadata.textContent).toContain("5 段");
+          expect(metadata.textContent).toContain("32.0 KiB");
+        } finally {
+          window.MediaSource = originalMediaSource as typeof MediaSource;
+        }
+      },
+    );
 
     it("handles missing segment headers gracefully and still displays bytes", async () => {
       fetchMock.mockImplementation(async (input: RequestInfo | URL) => {

@@ -4,6 +4,7 @@ import { synthesizeSpeech } from "../api/client.js";
 import { StreamPlaybackController } from "../audio/stream-controller.js";
 import type { MessageKey } from "../i18n.js";
 import { createCompletedResultMeta, type GenerationSnapshot } from "../lib/result-metadata.js";
+import { AUDIO_BYTES_PER_SECOND, estimateSpeechSeconds } from "../lib/speech-estimate.js";
 import { parseSynthesisPlanHeaders } from "../lib/synthesis-telemetry.js";
 import { INITIAL_SYNTHESIS_STATE, synthesisReducer } from "./synthesis-state.js";
 
@@ -67,7 +68,14 @@ export function useSynthesis({ getApiKey, onUnauthorized }: SynthesisOptions) {
 
     // Clean up previous playback stream, download URL, and completed metadata
     streamControllerRef.current?.cleanup();
-    dispatch({ type: "started" });
+    const expectedSeconds = estimateSpeechSeconds(request.input, request.speed ?? 1);
+    dispatch({
+      type: "started",
+      expected: {
+        bytesPerSecond: AUDIO_BYTES_PER_SECOND[request.quality ?? "standard"],
+        expectedSeconds: expectedSeconds > 0 ? expectedSeconds : null,
+      },
+    });
 
     const controller = new AbortController();
     abortControllerRef.current = controller;

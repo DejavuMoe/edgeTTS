@@ -438,6 +438,8 @@
   --surface: var(--paper);
   --track: var(--rule-strong);
   --fill: var(--ink);
+  /* Received but not yet played, on a timeline whose take is still arriving. */
+  --buffered: color-mix(in srgb, var(--ink) 35%, var(--track));
   width: 100%;
   height: 20px;
   margin: 0;
@@ -457,7 +459,9 @@
   background: linear-gradient(
     to right,
     var(--fill) var(--slider-progress, 0%),
-    var(--track) var(--slider-progress, 0%)
+    var(--buffered) var(--slider-progress, 0%),
+    var(--buffered) var(--slider-buffered, 0%),
+    var(--track) var(--slider-buffered, 0%)
   );
 }
 
@@ -467,7 +471,9 @@
   background: linear-gradient(
     to right,
     var(--fill) var(--slider-progress, 0%),
-    var(--track) var(--slider-progress, 0%)
+    var(--buffered) var(--slider-progress, 0%),
+    var(--buffered) var(--slider-buffered, 0%),
+    var(--track) var(--slider-buffered, 0%)
   );
 }
 

@@ -809,7 +809,7 @@
 
 .result-status {
   display: inline-flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
   color: var(--ink-2);
   font-size: 13px;
@@ -817,10 +817,16 @@
   line-height: 20px;
 }
 
+.result-status-text {
+  min-width: 0;
+}
+
+/* Centred on the first line of the status, however many lines it wraps to. */
 .live-dot {
   flex: none;
   width: 8px;
   height: 8px;
+  margin-top: 6px;
   border-radius: 50%;
   background: var(--accent);
   animation: pulse 1.4s ease-in-out infinite;

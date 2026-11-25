@@ -1,4 +1,5 @@
 import { useI18n } from "../i18n.js";
+import { formatMediaTime as formatTime } from "../lib/media-time.js";
 import React, {
   forwardRef,
   useCallback,
@@ -20,6 +21,23 @@ export interface AudioPlayerProps {
   peaks?: readonly number[] | null | undefined;
   /** The play/pause button, for callers that move focus to it when a take is ready. */
   playButtonRef?: React.Ref<HTMLButtonElement> | undefined;
+  /**
+   * The take is still arriving, so the media has no duration yet. The timeline spans
+   * `expectedDuration` (or what has arrived, when that is longer), marks the part received,
+   * and seeks only within it.
+   */
+  live?: boolean | undefined;
+  /** About how long a live take will be, in seconds; unknown when absent. */
+  expectedDuration?: number | null | undefined;
+}
+
+/** How often a live take's received length is read while it arrives. */
+const LIVE_BUFFER_POLL_MS = 500;
+
+/** Where the audio received so far ends, in seconds. */
+function bufferedEndOf(audio: HTMLAudioElement): number {
+  const ranges = audio.buffered;
+  return ranges && ranges.length > 0 ? ranges.end(ranges.length - 1) : 0;
 }
 
 /** Seconds an arrow key moves the timeline; Page Up / Page Down move it further. */
@@ -75,6 +93,8 @@ export const AudioPlayer = forwardRef<HTMLAudioElement, AudioPlayerProps>(functi
     children,
     peaks,
     playButtonRef,
+    live = false,
+    expectedDuration,
   },
   ref,
 ) {
@@ -88,13 +108,29 @@ export const AudioPlayer = forwardRef<HTMLAudioElement, AudioPlayerProps>(functi
   const [currentTime, setCurrentTime] = useState<number>(0);
   const [duration, setDuration] = useState<number>(NaN);
   const [isMuted, setIsMuted] = useState<boolean>(false);
+  const [bufferedEnd, setBufferedEnd] = useState<number>(0);
 
   // Reset state on src change
   useEffect(() => {
     setIsPlaying(false);
     setCurrentTime(0);
     setDuration(NaN);
+    setBufferedEnd(0);
   }, [src]);
+
+  // A stream fires few events as it grows, so its received length is also read on a timer.
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!live || !audio) return;
+    const update = () => setBufferedEnd(bufferedEndOf(audio));
+    update();
+    const timer = window.setInterval(update, LIVE_BUFFER_POLL_MS);
+    audio.addEventListener("progress", update);
+    return () => {
+      window.clearInterval(timer);
+      audio.removeEventListener("progress", update);
+    };
+  }, [live, src]);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -147,24 +183,38 @@ export const AudioPlayer = forwardRef<HTMLAudioElement, AudioPlayerProps>(functi
     setIsMuted(audio.muted);
   }, []);
 
+  const isDurationFinite = Number.isFinite(duration) && duration > 0;
+  const expectedLength =
+    expectedDuration && Number.isFinite(expectedDuration) && expectedDuration > 0
+      ? expectedDuration
+      : 0;
+  // What the timeline spans, and the furthest point a seek may reach: while the take arrives,
+  // the expected length and the part received; once complete, the whole take.
+  const timelineEnd = live
+    ? Math.max(expectedLength, bufferedEnd)
+    : isDurationFinite
+      ? duration
+      : 0;
+  const seekEnd = live ? bufferedEnd : timelineEnd;
+  const canSeek = seekEnd > 0;
+
   const seekTo = (targetTime: number) => {
     const audio = audioRef.current;
-    if (!audio) return;
-    audio.currentTime = targetTime;
-    setCurrentTime(targetTime);
+    if (!audio || !canSeek) return;
+    const time = Math.min(seekEnd, Math.max(0, targetTime));
+    audio.currentTime = time;
+    setCurrentTime(time);
   };
 
   const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
     seekTo(parseFloat(e.target.value));
   };
 
-  const isDurationFinite = Number.isFinite(duration) && duration > 0;
-
   // The slider's own step is fine-grained for dragging, which would make each arrow key
   // press move a twentieth of a second. Keys move by steps a listener can hear instead.
   const handleSeekKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     const audio = audioRef.current;
-    if (!audio || !isDurationFinite) return;
+    if (!audio || !canSeek) return;
     const position = audio.currentTime;
     const targets: Record<string, number> = {
       ArrowLeft: position - SEEK_STEP_SECONDS,
@@ -174,12 +224,12 @@ export const AudioPlayer = forwardRef<HTMLAudioElement, AudioPlayerProps>(functi
       PageDown: position - SEEK_PAGE_SECONDS,
       PageUp: position + SEEK_PAGE_SECONDS,
       Home: 0,
-      End: duration,
+      End: seekEnd,
     };
     const target = targets[e.key];
     if (target === undefined || e.altKey || e.ctrlKey || e.metaKey) return;
     e.preventDefault();
-    seekTo(Math.min(duration, Math.max(0, target)));
+    seekTo(target);
   };
 
   // Where a click on the waveform would seek to, shown while the pointer is over it.
@@ -189,16 +239,14 @@ export const AudioPlayer = forwardRef<HTMLAudioElement, AudioPlayerProps>(functi
     const rect = e.currentTarget.getBoundingClientRect();
     setHoverRatio(Math.min(1, Math.max(0, (e.clientX - rect.left) / (rect.width || 1))));
   };
-  const progressPercent = isDurationFinite
-    ? Math.min(100, Math.max(0, (currentTime / duration) * 100))
-    : 0;
-
-  const formatTime = (secs: number): string => {
-    if (!Number.isFinite(secs) || secs < 0) return "--:--";
-    const m = Math.floor(secs / 60);
-    const s = Math.floor(secs % 60);
-    return `${m}:${s.toString().padStart(2, "0")}`;
-  };
+  const percentOfTimeline = (seconds: number): number =>
+    timelineEnd > 0 ? Math.min(100, Math.max(0, (seconds / timelineEnd) * 100)) : 0;
+  const progressPercent = percentOfTimeline(currentTime);
+  const totalText = live
+    ? expectedLength > 0
+      ? t("约 {time}", { time: formatTime(timelineEnd) })
+      : formatTime(NaN)
+    : formatTime(duration);
 
   return (
     <div className={`player-wrapper ${className}`}>
@@ -236,7 +284,7 @@ export const AudioPlayer = forwardRef<HTMLAudioElement, AudioPlayerProps>(functi
           <div className="player-heading">
             <div className="player-title">{children}</div>
             <span className="ui-audio-time" aria-label={t("播放时间")}>
-              {formatTime(currentTime)} / {formatTime(duration)}
+              {formatTime(currentTime)} / {totalText}
             </span>
           </div>
           <div
@@ -268,24 +316,31 @@ export const AudioPlayer = forwardRef<HTMLAudioElement, AudioPlayerProps>(functi
               type="range"
               className="control-slider ui-audio-seek-slider"
               min="0"
-              max={isDurationFinite ? duration : 100}
+              max={timelineEnd > 0 ? timelineEnd : 100}
               step="0.05"
-              value={isDurationFinite ? currentTime : 0}
+              value={timelineEnd > 0 ? Math.min(currentTime, timelineEnd) : 0}
               onChange={handleSeek}
               onKeyDown={handleSeekKeyDown}
-              disabled={!isDurationFinite}
+              disabled={!canSeek}
               aria-label={t("音频时间进度条")}
               aria-valuetext={
-                isDurationFinite
-                  ? t("已播放 {current}，共 {total}", {
-                      current: formatTime(currentTime),
-                      total: formatTime(duration),
-                    })
-                  : undefined
+                !canSeek
+                  ? undefined
+                  : live
+                    ? t("已播放 {current}，已接收 {received}", {
+                        current: formatTime(currentTime),
+                        received: formatTime(bufferedEnd),
+                      })
+                    : t("已播放 {current}，共 {total}", {
+                        current: formatTime(currentTime),
+                        total: formatTime(duration),
+                      })
               }
               style={
                 {
                   "--slider-progress": `${progressPercent}%`,
+                  // The part of a live take received so far; seeks stay within it.
+                  ...(live ? { "--slider-buffered": `${percentOfTimeline(bufferedEnd)}%` } : {}),
                 } as React.CSSProperties
               }
             />

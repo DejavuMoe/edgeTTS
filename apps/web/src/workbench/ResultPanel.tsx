@@ -3,8 +3,8 @@ import { MAX_WAVEFORM_SOURCE_BYTES } from "../audio/waveform.js";
 import { useI18n } from "../i18n.js";
 import { formatResultMetadataDisplay, formatResultSummary } from "../lib/result-metadata.js";
 import {
-  formatGeneratingBytesText,
   formatGeneratingPhaseText,
+  formatGeneratingProgressText,
   STATUS_SEPARATOR,
 } from "../lib/synthesis-telemetry.js";
 import { shortVoiceName } from "../lib/voice-names.js";
@@ -35,7 +35,7 @@ export function ResultPanel({ synthesis, playButtonRef }: ResultPanelProps) {
       : null,
   );
 
-  const bytesText = telemetry && formatGeneratingBytesText(telemetry);
+  const progressText = telemetry && formatGeneratingProgressText(telemetry, locale);
   // The status line announces itself only when the stage changes; nothing marks the end of a
   // synthesis there, because the line goes away. This region is always present, so a finished
   // take is announced: cancellation and failure already are, by their alerts.
@@ -58,9 +58,14 @@ export function ResultPanel({ synthesis, playButtonRef }: ResultPanelProps) {
           {isGenerating && telemetry && (
             <span className="result-status" role="status" aria-label={t("合成状态")}>
               <span className="live-dot" aria-hidden="true" />
-              {formatGeneratingPhaseText(telemetry, locale)}
-              {/* Bytes tick up several times a second: shown, never read out. */}
-              {bytesText && <span aria-hidden="true">{`${STATUS_SEPARATOR}${bytesText}`}</span>}
+              {/* One run of text, so a long line wraps as a sentence beside the dot. */}
+              <span className="result-status-text">
+                {formatGeneratingPhaseText(telemetry, locale)}
+                {/* The amount received ticks up every second or so: shown, never read out. */}
+                {progressText && (
+                  <span aria-hidden="true">{`${STATUS_SEPARATOR}${progressText}`}</span>
+                )}
+              </span>
             </span>
           )}
 
@@ -88,6 +93,8 @@ export function ResultPanel({ synthesis, playButtonRef }: ResultPanelProps) {
               aria-label={t("语音合成播放器")}
               className="result-track"
               peaks={peaks}
+              live={isGenerating}
+              expectedDuration={telemetry?.expectedSeconds}
             >
               {completedResult && (
                 <div

@@ -1,9 +1,13 @@
 import { describe, it, expect } from "vitest";
+import { translate } from "../../src/i18n.js";
+import { formatMediaTime } from "../../src/lib/media-time.js";
 import {
   parseSynthesisPlanHeaders,
+  estimateArrivedPercent,
   formatAudioBytes,
   formatGeneratingBytesText,
   formatGeneratingPhaseText,
+  formatGeneratingProgressText,
   formatGeneratingStatusText,
   MAX_TELEMETRY_HEADER_VALUE,
   STATUS_SEPARATOR,
@@ -231,6 +235,86 @@ describe("Synthesis Telemetry", () => {
           [formatGeneratingPhaseText(sample), ...(bytes ? [bytes] : [])].join(STATUS_SEPARATOR),
         );
       }
+    });
+  });
+
+  describe("formatGeneratingProgressText", () => {
+    // 60,000 bytes of standard-quality audio is 10 seconds.
+    const streaming = {
+      phase: "streaming" as const,
+      segmentCount: 3,
+      bytesReceived: 60_000,
+      bytesPerSecond: 6000,
+    };
+
+    it("shows the audio received as time, with its share of the expected length", () => {
+      expect(formatGeneratingProgressText({ ...streaming, expectedSeconds: 40 })).toBe(
+        "已接收 0:10（约 25%）",
+      );
+      expect(formatGeneratingProgressText({ ...streaming, bytesPerSecond: 12000 })).toBe(
+        "已接收 0:05",
+      );
+    });
+
+    it("never shows a take still arriving as complete, even past its estimate", () => {
+      expect(formatGeneratingProgressText({ ...streaming, expectedSeconds: 10 })).toBe(
+        "已接收 0:10（约 99%）",
+      );
+      expect(formatGeneratingProgressText({ ...streaming, expectedSeconds: 4 })).toBe(
+        "已接收 0:10（约 99%）",
+      );
+    });
+
+    it("falls back to the byte count when the bitrate is unknown", () => {
+      expect(formatGeneratingProgressText({ ...streaming, bytesPerSecond: null })).toBe(
+        formatAudioBytes(60_000),
+      );
+      expect(
+        formatGeneratingProgressText({ phase: "streaming", segmentCount: 3, bytesReceived: 4096 }),
+      ).toBe("4.0 KiB");
+    });
+
+    it("has nothing to show before streaming starts or before the first byte", () => {
+      expect(
+        formatGeneratingProgressText({ ...streaming, phase: "requesting", expectedSeconds: 40 }),
+      ).toBeNull();
+      expect(formatGeneratingProgressText({ ...streaming, bytesReceived: 0 })).toBeNull();
+    });
+
+    it("joins the status line after the phase", () => {
+      const sample = { ...streaming, expectedSeconds: 40 };
+      expect(formatGeneratingStatusText(sample)).toBe(
+        `正在流式接收音频 · 共 3 段${STATUS_SEPARATOR}已接收 0:10（约 25%）`,
+      );
+    });
+
+    it("is written in each interface language", () => {
+      for (const locale of ["zh-CN", "zh-TW", "en", "ja"] as const) {
+        expect(formatGeneratingProgressText({ ...streaming, expectedSeconds: 40 }, locale)).toBe(
+          translate("已接收 {time}（约 {percent}%）", locale, { time: "0:10", percent: 25 }),
+        );
+      }
+    });
+  });
+
+  describe("estimateArrivedPercent", () => {
+    it("rounds down, and gives nothing without an estimate", () => {
+      expect(estimateArrivedPercent(9.99, 10)).toBe(99);
+      expect(estimateArrivedPercent(0.5, 10)).toBe(5);
+      expect(estimateArrivedPercent(5, null)).toBeNull();
+      expect(estimateArrivedPercent(5, 0)).toBeNull();
+      expect(estimateArrivedPercent(5, Number.POSITIVE_INFINITY)).toBeNull();
+    });
+  });
+
+  describe("formatMediaTime", () => {
+    it("writes minutes and seconds, and dashes when unknown", () => {
+      expect(formatMediaTime(0)).toBe("0:00");
+      expect(formatMediaTime(65.9)).toBe("1:05");
+      expect(formatMediaTime(3725)).toBe("62:05");
+      expect(formatMediaTime(Number.NaN)).toBe("--:--");
+      expect(formatMediaTime(Number.POSITIVE_INFINITY)).toBe("--:--");
+      expect(formatMediaTime(-1)).toBe("--:--");
     });
   });
 });

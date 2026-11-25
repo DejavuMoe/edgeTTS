@@ -1,6 +1,6 @@
 import React, { createRef } from "react";
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, screen, cleanup, fireEvent } from "@testing-library/react";
+import { act, render, screen, cleanup, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { AudioPlayer } from "../../src/ui/AudioPlayer.js";
 
@@ -197,6 +197,124 @@ describe("UI Primitive: AudioPlayer", () => {
       render(<AudioPlayer src="blob:http://localhost/test.mp3" />);
       const slider = screen.getByLabelText("音频时间进度条");
       expect(slider.hasAttribute("aria-valuetext")).toBe(false);
+    });
+  });
+
+  describe("a take still arriving", () => {
+    /**
+     * Renders a live take expected to run `expected` seconds with `received` seconds of it in,
+     * playing at `start`. The media reports no duration, as a stream does until it ends.
+     */
+    function renderLive(start: number, received: number, expected: number | null = 60) {
+      const view = render(
+        <AudioPlayer src="blob:http://localhost/live.mp3" live expectedDuration={expected} />,
+      );
+      const audio = document.querySelector("audio")!;
+      let position = start;
+      let receivedEnd = received;
+      Object.defineProperty(audio, "duration", { value: Infinity, configurable: true });
+      Object.defineProperty(audio, "buffered", {
+        configurable: true,
+        get: () => ({
+          length: receivedEnd > 0 ? 1 : 0,
+          start: () => 0,
+          end: () => receivedEnd,
+        }),
+      });
+      Object.defineProperty(audio, "currentTime", {
+        configurable: true,
+        get: () => position,
+        set: (value: number) => {
+          position = value;
+        },
+      });
+      fireEvent.durationChange(audio);
+      fireEvent.progress(audio);
+      fireEvent.timeUpdate(audio);
+      const slider = screen.getByLabelText("音频时间进度条") as HTMLInputElement;
+      return {
+        view,
+        audio,
+        slider,
+        position: () => position,
+        receive(seconds: number) {
+          receivedEnd = seconds;
+        },
+      };
+    }
+
+    it("spans the expected length and marks the part received", () => {
+      const { slider } = renderLive(5, 20);
+      expect(slider.disabled).toBe(false);
+      expect(slider.max).toBe("60");
+      expect(slider.value).toBe("5");
+      expect(screen.getByLabelText("播放时间").textContent).toBe("0:05 / 约 1:00");
+      expect(parseFloat(slider.style.getPropertyValue("--slider-buffered"))).toBeCloseTo(33.33, 1);
+      expect(slider.getAttribute("aria-valuetext")).toBe("已播放 0:05，已接收 0:20");
+    });
+
+    it("seeks only within the audio received so far", () => {
+      const { slider, position } = renderLive(5, 20);
+      fireEvent.change(slider, { target: { value: "50" } });
+      expect(position()).toBe(20);
+
+      fireEvent.keyDown(slider, { key: "Home" });
+      expect(position()).toBe(0);
+      fireEvent.keyDown(slider, { key: "End" });
+      expect(position()).toBe(20);
+
+      fireEvent.keyDown(slider, { key: "ArrowLeft" });
+      fireEvent.keyDown(slider, { key: "ArrowRight" });
+      fireEvent.keyDown(slider, { key: "ArrowRight" });
+      expect(position()).toBe(20);
+    });
+
+    it("follows the audio as it arrives, past the estimate when it runs long", () => {
+      const { audio, slider, receive } = renderLive(5, 20);
+      receive(70);
+      fireEvent.progress(audio);
+      expect(slider.max).toBe("70");
+      expect(screen.getByLabelText("播放时间").textContent).toBe("0:05 / 约 1:10");
+      expect(slider.style.getPropertyValue("--slider-buffered")).toBe("100%");
+    });
+
+    it("reads what has arrived on a timer, for streams that fire no events", () => {
+      vi.useFakeTimers();
+      try {
+        const { slider, receive } = renderLive(5, 20);
+        receive(30);
+        act(() => {
+          vi.advanceTimersByTime(500);
+        });
+        expect(slider.getAttribute("aria-valuetext")).toBe("已播放 0:05，已接收 0:30");
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("cannot seek before any audio arrives", () => {
+      const { slider } = renderLive(0, 0);
+      expect(slider.disabled).toBe(true);
+      expect(slider.hasAttribute("aria-valuetext")).toBe(false);
+    });
+
+    it("leaves the length unknown without an estimate, still seeking what arrived", () => {
+      const { slider, position } = renderLive(5, 20, null);
+      expect(screen.getByLabelText("播放时间").textContent).toBe("0:05 / --:--");
+      expect(slider.max).toBe("20");
+      fireEvent.keyDown(slider, { key: "End" });
+      expect(position()).toBe(20);
+    });
+
+    it("takes the media's own length once the take is complete", () => {
+      const { view, audio, slider } = renderLive(5, 20);
+      view.rerender(<AudioPlayer src="blob:http://localhost/live.mp3" expectedDuration={60} />);
+      Object.defineProperty(audio, "duration", { value: 58, configurable: true });
+      fireEvent.durationChange(audio);
+      expect(slider.max).toBe("58");
+      expect(screen.getByLabelText("播放时间").textContent).toBe("0:05 / 0:58");
+      expect(slider.style.getPropertyValue("--slider-buffered")).toBe("");
+      expect(slider.getAttribute("aria-valuetext")).toBe("已播放 0:05，共 0:58");
     });
   });
 

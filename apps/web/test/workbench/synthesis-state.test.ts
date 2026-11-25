@@ -48,7 +48,25 @@ describe("synthesisReducer", () => {
         segmentCount: null,
         maxSegmentCodePoints: null,
         bytesReceived: 0,
+        bytesPerSecond: null,
+        expectedSeconds: null,
       },
+    });
+  });
+
+  it("carries the expected bitrate and length of the requested audio", () => {
+    const state = run([
+      { type: "started", expected: { bytesPerSecond: 12000, expectedSeconds: 42.5 } },
+      { type: "streamReady", mediaUrl: "blob:media" },
+      { type: "progressed", bytesReceived: 8192 },
+    ]);
+    expect(state.telemetry).toEqual({
+      phase: "streaming",
+      segmentCount: null,
+      maxSegmentCodePoints: null,
+      bytesReceived: 8192,
+      bytesPerSecond: 12000,
+      expectedSeconds: 42.5,
     });
   });
 
@@ -62,6 +80,8 @@ describe("synthesisReducer", () => {
         segmentCount: 2,
         maxSegmentCodePoints: 300,
         bytesReceived: 4096,
+        bytesPerSecond: null,
+        expectedSeconds: null,
       },
     });
   });
