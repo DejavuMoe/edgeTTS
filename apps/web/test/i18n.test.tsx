@@ -4,6 +4,7 @@ import { App } from "../src/App.js";
 import {
   LANGUAGE_OPTIONS,
   UI_LOCALE_KEY,
+  detectUiLocale,
   loadUiLocale,
   messages,
   translate,
@@ -182,6 +183,41 @@ describe("workbench localization", () => {
     }
     expect(fetch).toHaveBeenCalledTimes(3);
     expect(URL.revokeObjectURL).not.toHaveBeenCalled();
+  });
+
+  it("picks the interface language from the browser's preferred languages", () => {
+    expect(detectUiLocale(["zh-CN"])).toBe("zh-CN");
+    expect(detectUiLocale(["zh"])).toBe("zh-CN");
+    expect(detectUiLocale(["zh-Hans-HK"])).toBe("zh-CN");
+    expect(detectUiLocale(["zh-TW"])).toBe("zh-TW");
+    expect(detectUiLocale(["zh-HK"])).toBe("zh-TW");
+    expect(detectUiLocale(["zh-Hant"])).toBe("zh-TW");
+    expect(detectUiLocale(["zh_MO"])).toBe("zh-TW");
+    expect(detectUiLocale(["en-GB"])).toBe("en");
+    expect(detectUiLocale(["JA"])).toBe("ja");
+    // The first supported language wins.
+    expect(detectUiLocale(["fr-FR", "ja-JP", "en-US"])).toBe("ja");
+    expect(detectUiLocale(["fr-FR", "de"])).toBeNull();
+    expect(detectUiLocale([])).toBeNull();
+  });
+
+  it("opens in the browser's language on a first visit, then keeps the chosen one", async () => {
+    const languages = vi.spyOn(navigator, "languages", "get").mockReturnValue(["en-US", "en"]);
+    expect(loadUiLocale()).toBe("en");
+    await act(async () => {
+      render(<App />);
+    });
+    expect(document.documentElement.lang).toBe("en");
+    expect(screen.getByRole("button", { name: "Import TXT file" })).toBeDefined();
+
+    // A language chosen in the workbench wins over the browser's.
+    localStorage.setItem(UI_LOCALE_KEY, "ja");
+    expect(loadUiLocale()).toBe("ja");
+
+    // With no supported browser language, the workbench opens in 简体中文.
+    localStorage.clear();
+    languages.mockReturnValue(["fr-FR"]);
+    expect(loadUiLocale()).toBe("zh-CN");
   });
 
   it("falls back safely for invalid or blocked preference storage", async () => {

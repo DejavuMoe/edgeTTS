@@ -14,6 +14,16 @@ the version being released.
   intact, and its accessible name is translated into all four interface languages. On phones
   the header tightens its spacing so the API status, language switch and link stay on one row
   down to a 320px-wide screen.
+- Import a TXT file by dropping it on the text. While a file is dragged over the text, the
+  sheet says it will import it. The dropped file goes through the same checks as Import TXT.
+  Dropped text is left to the editor, and a file dropped while a synthesis runs is ignored
+  instead of opening in the tab.
+- Open the workbench in the browser's language on a first visit. 繁體中文 is used for Chinese
+  in traditional script or from Taiwan, Hong Kong or Macau, and 简体中文 for other Chinese.
+  English and Japanese are matched by language, and anything else still opens in 简体中文. A
+  language chosen in the workbench is kept as before.
+- Name the selected voice next to the synthesize button on phones, where the voice picker
+  sits below the text. Tapping it scrolls to the picker and focuses the voice list.
 
 ### Changed
 
@@ -72,6 +82,17 @@ the version being released.
     needed. Pressing the same letter again moves to the next match.
   - **Names.** The Liaoning and Shaanxi Mandarin voices and the two Inuktitut locales now
     have names in every interface language, where browsers showed only their codes.
+- Guard the text against accidental loss:
+  - **Import.** An import that replaces existing text says so and offers Undo, which puts
+    the previous text back until the text is next edited. This matches Clear, which asks
+    first. The previous text is kept in memory only.
+  - **Leaving.** While there is text, closing, reloading or leaving the page asks for
+    confirmation. The text is still never written to browser storage.
+- Show the API Key card where it is needed first. On phones it now comes before the text
+  instead of below every setting. On wider screens it sits at the top of the settings
+  column.
+- Let password managers save and fill the API Key. The field is now marked as a password,
+  where autocomplete used to be off. The workbench itself still keeps the key in memory only.
 
 ### Fixed
 

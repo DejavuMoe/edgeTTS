@@ -83,7 +83,7 @@ Authorization: Bearer <API_KEY>
 1. **不支持 Query 参数传 Key**：系统明确**不接受**通过 URL 参数（如 `?api_key=` 或 `?token=`）传递凭据。URL 参数容易在反向代理访问日志、浏览器历史及 CDN 缓存中泄露。
 2. **常量时间安全比对**：API Key 的校验基于底层 `crypto.timingSafeEqual` 与哈希计算，防范计时侧信道攻击（Timing Attacks）。
 3. **最小长度限制**：密钥长度必须大于等于 16 字符，且不得包含空白符。
-4. **前端工作台瞬态存储**：在 Web 工作台中输入的 API Key 严格保存在浏览器 React 运行时内存中，绝不写入 `localStorage`、`sessionStorage`、Cookie 或 URL Hash。刷新页面后需重新输入。
+4. **前端工作台瞬态存储**：在 Web 工作台中输入的 API Key 严格保存在浏览器 React 运行时内存中，绝不写入 `localStorage`、`sessionStorage`、Cookie 或 URL Hash。刷新页面后需重新输入；输入框允许浏览器的密码管理器提议保存并自动填写，是否保存由用户决定。
 
 ## 并发控制与队列管理
 

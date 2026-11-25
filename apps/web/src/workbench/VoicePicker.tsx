@@ -1,4 +1,4 @@
-import { useId, useRef } from "react";
+import { useId, useRef, type Ref } from "react";
 import type { VoiceDto } from "@edgetts/shared";
 import { type MessageKey, useI18n } from "../i18n.js";
 import { formatVoiceGender } from "../lib/voice-catalog.js";
@@ -16,6 +16,7 @@ export interface VoicePickerProps {
   readonly onSelectVoice: (voiceId: string) => void;
   readonly filters: ReturnType<typeof useVoiceFilters>;
   readonly catalogStatus: CatalogStatus;
+  readonly sectionRef?: Ref<HTMLElement>;
 }
 
 function StarIcon({ filled }: { readonly filled: boolean }) {
@@ -39,6 +40,7 @@ export function VoicePicker({
   onSelectVoice,
   filters,
   catalogStatus,
+  sectionRef,
 }: VoicePickerProps) {
   const { locale, t } = useI18n();
   const titleId = useId();
@@ -61,7 +63,7 @@ export function VoicePicker({
           : filters.emptyMessage;
 
   return (
-    <section className="inspector-section voice-section" aria-labelledby={titleId}>
+    <section ref={sectionRef} className="inspector-section voice-section" aria-labelledby={titleId}>
       <div className="section-header">
         <h2 id={titleId} className="section-title">
           {t("声音")}

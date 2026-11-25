@@ -83,7 +83,7 @@ Authorization: Bearer <API_KEY>
 1. **No Query Parameter Tokens**: edgeTTS intentionally does **not** accept API keys in query parameters (such as `?api_key=` or `?token=`). Query parameters are frequently logged in plain text by reverse proxies, browser histories, and server access logs.
 2. **Constant-Time Verification**: Key comparison uses `crypto.timingSafeEqual` over cryptographic hashes to prevent timing side-channel attacks.
 3. **Minimum Length**: Keys must contain at least 16 non-whitespace characters.
-4. **Transient Browser Memory**: When using the Web Workbench, the API key is retained strictly in volatile React state. It is never written to `localStorage`, `sessionStorage`, cookies, or the page URL.
+4. **Transient Browser Memory**: When using the Web Workbench, the API key is retained strictly in volatile React state. It is never written to `localStorage`, `sessionStorage`, cookies, or the page URL, so it must be entered again after a reload. The key field lets the browser's password manager offer to save and fill it; whether to save it is up to the user.
 
 ## Concurrency Limiting & Queue Management
 

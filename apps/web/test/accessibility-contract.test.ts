@@ -134,20 +134,23 @@ describe("CSS accessibility and responsive layout contract", () => {
   });
 
   it("places the result below the text it was made from, beside a full-height inspector", () => {
+    // A needed API Key sits atop the inspector column; without one its row takes no space.
     expect(ruleBody(".workbench")).toMatch(
-      /grid-template-areas:\s*"sheet inspector"\s*"result inspector"/,
+      /grid-template-areas:\s*"sheet auth"\s*"sheet inspector"\s*"result inspector"/,
     );
+    expect(ruleBody(".workbench")).toMatch(/grid-template-rows:\s*auto minmax\(0, 1fr\) auto/);
+    expect(ruleBody(".auth-slot")).toMatch(/grid-area:\s*auth/);
     expect(ruleBody(".sheet")).toMatch(/grid-area:\s*sheet/);
     expect(ruleBody(".result")).toMatch(/grid-area:\s*result/);
     expect(ruleBody(".inspector")).toMatch(/grid-area:\s*inspector/);
   });
 
-  it("stacks to a single column below 768px in working order: text, result, settings", () => {
+  it("stacks to a single column below 768px in working order: key, text, result, settings", () => {
     const mobile = css.match(/@media\s*\(\s*max-width:\s*767px\s*\)\s*\{([\s\S]*?)\n\}/)?.[1];
     expect(mobile).toBeDefined();
     expect(mobile).toMatch(/\.workbench\s*\{[^}]*grid-template-columns:\s*1fr/);
     expect(mobile).toMatch(
-      /\.workbench\s*\{[^}]*grid-template-areas:\s*"sheet"\s*"result"\s*"inspector"/,
+      /\.workbench\s*\{[^}]*grid-template-areas:\s*"auth"\s*"sheet"\s*"result"\s*"inspector"/,
     );
     // Nothing is pinned over the content, so nothing can paint over it either.
     expect(mobile).not.toMatch(/position:\s*(?:sticky|fixed)/);

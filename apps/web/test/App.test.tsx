@@ -1,6 +1,15 @@
 import React from "react";
 import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from "vitest";
-import { act, render, screen, waitFor, fireEvent, cleanup, within } from "@testing-library/react";
+import {
+  act,
+  render,
+  screen,
+  waitFor,
+  fireEvent,
+  cleanup,
+  within,
+  createEvent,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { VoiceDto } from "@edgetts/shared";
 import { App, isValidApiKeyFormat, MIN_API_KEY_LENGTH } from "../src/App.js";
@@ -824,6 +833,10 @@ describe("EdgeTTS Web Workbench", () => {
       const keyInput = screen.getByLabelText(/API Key/i) as HTMLInputElement;
       expect(keyInput).toBeDefined();
       expect(keyInput.type).toBe("password");
+      // A password manager may fill the key, and the card leads the workbench: on phones it
+      // sits above the text instead of below every setting.
+      expect(keyInput.getAttribute("autocomplete")).toBe("current-password");
+      expect(document.querySelector("main")?.firstElementChild?.contains(authCard)).toBe(true);
 
       const unlockBtn = screen.getByRole("button", { name: /解锁/i }) as HTMLButtonElement;
       expect(unlockBtn).toBeDefined();
@@ -2232,6 +2245,87 @@ describe("EdgeTTS Web Workbench", () => {
       expect(textarea.value).toBe("File B content");
     });
 
+    it("lets an import that replaced text be undone, until the text is edited", async () => {
+      const user = userEvent.setup();
+      render(<App />);
+      await screen.findByLabelText(/选择声音/i);
+
+      const textarea = screen.getByLabelText(/文本内容/i) as HTMLTextAreaElement;
+      const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+
+      // Into empty text: nothing is replaced, so there is nothing to undo.
+      fireEvent.change(fileInput, { target: { files: [createTxtFile("First file", "a.txt")] } });
+      await waitFor(() => expect(textarea.value).toBe("First file"));
+      expect(screen.queryByRole("button", { name: "撤销" })).toBeNull();
+
+      // Over existing text: the replacement is announced and can be undone.
+      fireEvent.change(textarea, { target: { value: "My draft" } });
+      fireEvent.change(fileInput, { target: { files: [createTxtFile("Second file", "b.txt")] } });
+      await waitFor(() => expect(textarea.value).toBe("Second file"));
+      const notice = screen.getByText("已用“b.txt”替换原文本。");
+      expect(notice.closest('[role="status"]')).not.toBeNull();
+      await user.click(screen.getByRole("button", { name: "撤销" }));
+      expect(textarea.value).toBe("My draft");
+      expect(document.activeElement).toBe(textarea);
+      expect(screen.queryByText("已用“b.txt”替换原文本。")).toBeNull();
+
+      // Editing after an import drops the undo, which would otherwise discard the edit.
+      fireEvent.change(fileInput, { target: { files: [createTxtFile("Third file", "c.txt")] } });
+      await waitFor(() => expect(textarea.value).toBe("Third file"));
+      expect(screen.getByRole("button", { name: "撤销" })).toBeDefined();
+      fireEvent.change(textarea, { target: { value: "Third file, edited" } });
+      expect(screen.queryByRole("button", { name: "撤销" })).toBeNull();
+    });
+
+    it("imports a TXT file dropped on the text sheet and leaves dragged text alone", async () => {
+      render(<App />);
+      await screen.findByLabelText(/选择声音/i);
+
+      const sheet = screen.getByRole("region", { name: "文本编辑区域" });
+      const textarea = screen.getByLabelText(/文本内容/i) as HTMLTextAreaElement;
+      const dataTransfer = {
+        types: ["Files"],
+        files: [createTxtFile("Dropped text", "dropped.txt")],
+        dropEffect: "none",
+      };
+
+      fireEvent.dragEnter(sheet, { dataTransfer });
+      expect(sheet.classList.contains("is-drop-target")).toBe(true);
+      expect(sheet.getAttribute("data-drop-label")).toBe("松开以导入 TXT");
+
+      const drop = createEvent.drop(sheet, { dataTransfer });
+      fireEvent(sheet, drop);
+      expect(drop.defaultPrevented).toBe(true);
+      await waitFor(() => expect(textarea.value).toBe("Dropped text"));
+      expect(sheet.classList.contains("is-drop-target")).toBe(false);
+
+      // Text dragged within or into the page keeps the textarea's own behaviour.
+      const textDrag = createEvent.dragOver(sheet, {
+        dataTransfer: { types: ["text/plain"], files: [] },
+      });
+      fireEvent(sheet, textDrag);
+      expect(textDrag.defaultPrevented).toBe(false);
+      expect(sheet.classList.contains("is-drop-target")).toBe(false);
+    });
+
+    it("asks before leaving the page while there is text, and not otherwise", async () => {
+      render(<App />);
+      await screen.findByLabelText(/选择声音/i);
+
+      const textarea = screen.getByLabelText(/文本内容/i) as HTMLTextAreaElement;
+      const leavePrevented = (): boolean => {
+        const event = new Event("beforeunload", { cancelable: true });
+        window.dispatchEvent(event);
+        return event.defaultPrevented;
+      };
+
+      expect(leavePrevented()).toBe(false);
+      fireEvent.change(textarea, { target: { value: "Unsaved words" } });
+      expect(leavePrevented()).toBe(true);
+      fireEvent.change(textarea, { target: { value: "   " } });
+      expect(leavePrevented()).toBe(false);
+    });
+
     it("successfully imports TXT in React.StrictMode with effect replay", async () => {
       render(
         <React.StrictMode>
@@ -3006,7 +3100,12 @@ describe("EdgeTTS Web Workbench", () => {
       await user.tab();
       expect(document.activeElement).toBe(textarea);
 
-      // The synthesize action ends the text it submits, before the settings.
+      // The current voice (shown on phones only; jsdom applies no CSS) and the synthesize
+      // action end the text they submit, before the settings.
+      await user.tab();
+      expect(document.activeElement).toBe(
+        screen.getByRole("button", { name: "更换声音（当前：Xiaoxiao）" }),
+      );
       await user.tab();
       expect(document.activeElement).toBe(screen.getByRole("button", { name: /合成语音/i }));
 
@@ -3041,6 +3140,36 @@ describe("EdgeTTS Web Workbench", () => {
 
       await user.tab();
       expect(document.activeElement).toBe(screen.getByLabelText(/^音量/i));
+    });
+
+    it("names the selected voice by the synthesize button and jumps to the voice list", async () => {
+      const descriptor = Object.getOwnPropertyDescriptor(Element.prototype, "scrollIntoView");
+      const scrollIntoView = vi.fn();
+      Object.defineProperty(Element.prototype, "scrollIntoView", {
+        configurable: true,
+        writable: true,
+        value: scrollIntoView,
+      });
+      try {
+        const user = userEvent.setup();
+        render(<App />);
+        await screen.findByLabelText(/选择声音/i);
+
+        const button = screen.getByRole("button", { name: "更换声音（当前：Xiaoxiao）" });
+        expect(screen.getByRole("region", { name: "文本编辑区域" }).contains(button)).toBe(true);
+        expect(button.textContent).toBe("Xiaoxiao");
+
+        await user.click(button);
+        expect(scrollIntoView).toHaveBeenCalledTimes(1);
+        expect(document.activeElement).toBe(screen.getByRole("listbox", { name: /选择声音/i }));
+
+        // Choosing another voice renames it.
+        await user.click(screen.getByRole("option", { name: /Yunxi/ }));
+        expect(screen.getByRole("button", { name: "更换声音（当前：Yunxi）" })).toBeDefined();
+      } finally {
+        if (descriptor) Object.defineProperty(Element.prototype, "scrollIntoView", descriptor);
+        else Reflect.deleteProperty(Element.prototype, "scrollIntoView");
+      }
     });
 
     it("disabled controls are natively skipped during Tab navigation", async () => {

@@ -126,6 +126,10 @@ const zhCN = {
   已收藏: "已收藏",
   加入收藏: "加入收藏",
   恢复默认: "恢复默认",
+  "已用“{name}”替换原文本。": "已用“{name}”替换原文本。",
+  撤销: "撤销",
+  "松开以导入 TXT": "松开以导入 TXT",
+  "更换声音（当前：{name}）": "更换声音（当前：{name}）",
 };
 export type MessageKey = keyof typeof zhCN;
 
@@ -238,6 +242,10 @@ const zhTW: Record<MessageKey, string> = {
   已收藏: "已收藏",
   加入收藏: "加入收藏",
   恢复默认: "還原預設",
+  "已用“{name}”替换原文本。": "已用「{name}」取代原本的文字。",
+  撤销: "復原",
+  "松开以导入 TXT": "放開以匯入 TXT",
+  "更换声音（当前：{name}）": "更換聲音（目前：{name}）",
 };
 
 const en: Record<MessageKey, string> = {
@@ -349,6 +357,10 @@ const en: Record<MessageKey, string> = {
   已收藏: "Favorited",
   加入收藏: "Favorite",
   恢复默认: "Reset",
+  "已用“{name}”替换原文本。": "Replaced the text with “{name}”.",
+  撤销: "Undo",
+  "松开以导入 TXT": "Drop to import the TXT file",
+  "更换声音（当前：{name}）": "Change voice (current: {name})",
 };
 
 const ja: Record<MessageKey, string> = {
@@ -461,6 +473,10 @@ const ja: Record<MessageKey, string> = {
   已收藏: "登録済み",
   加入收藏: "お気に入りに追加",
   恢复默认: "リセット",
+  "已用“{name}”替换原文本。": "テキストを「{name}」に置き換えました。",
+  撤销: "元に戻す",
+  "松开以导入 TXT": "ドロップして TXT を読み込む",
+  "更换声音（当前：{name}）": "音声を変更（現在：{name}）",
 };
 
 export const messages = { "zh-CN": zhCN, "zh-TW": zhTW, en, ja };
@@ -476,13 +492,46 @@ export function translate(
   );
 }
 
-export function loadUiLocale(): UiLocale {
-  try {
-    const stored = localStorage.getItem(UI_LOCALE_KEY);
-    return LANGUAGE_OPTIONS.find(({ value }) => value === stored)?.value ?? "zh-CN";
-  } catch {
-    return "zh-CN";
+/**
+ * The interface language for the browser's preferred languages, first match wins: Chinese in
+ * traditional script (zh-Hant, or Taiwan, Hong Kong and Macau without a script) gets 繁體中文,
+ * other Chinese 简体中文, and any English or Japanese tag its language. Null if none fits.
+ */
+export function detectUiLocale(languages: readonly string[]): UiLocale | null {
+  for (const tag of languages) {
+    const subtags = tag.toLowerCase().split(/[-_]/);
+    switch (subtags[0]) {
+      case "zh":
+        if (subtags.includes("hans")) return "zh-CN";
+        return subtags.some((s) => ["hant", "tw", "hk", "mo"].includes(s)) ? "zh-TW" : "zh-CN";
+      case "en":
+        return "en";
+      case "ja":
+        return "ja";
+    }
   }
+  return null;
+}
+
+function browserLanguages(): readonly string[] {
+  if (typeof navigator === "undefined") return [];
+  if (navigator.languages?.length) return navigator.languages;
+  return navigator.language ? [navigator.language] : [];
+}
+
+/** The language chosen earlier in this browser, else the browser's own, else 简体中文. */
+export function loadUiLocale(): UiLocale {
+  let stored: string | null = null;
+  try {
+    stored = localStorage.getItem(UI_LOCALE_KEY);
+  } catch {
+    // Blocked storage: fall through to the browser's languages.
+  }
+  return (
+    LANGUAGE_OPTIONS.find(({ value }) => value === stored)?.value ??
+    detectUiLocale(browserLanguages()) ??
+    "zh-CN"
+  );
 }
 
 const I18nContext = createContext<{
