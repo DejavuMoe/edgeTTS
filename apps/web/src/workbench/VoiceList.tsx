@@ -1,5 +1,15 @@
-import { forwardRef, useEffect, useId, useImperativeHandle, useMemo, useRef } from "react";
+import {
+  forwardRef,
+  memo,
+  useCallback,
+  useEffect,
+  useId,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+} from "react";
 import type { KeyboardEvent } from "react";
+import type { VoiceDto } from "@edgetts/shared";
 import { useI18n } from "../i18n.js";
 import { formatVoiceGender, type VoiceGroup } from "../lib/voice-catalog.js";
 import { localeDisplayName, shortVoiceName } from "../lib/voice-names.js";
@@ -17,11 +27,47 @@ export interface VoiceListProps {
 
 const PAGE_STEP = 8;
 
+interface VoiceOptionProps {
+  readonly voice: VoiceDto;
+  readonly optionId: string;
+  readonly selected: boolean;
+  readonly meta: string;
+  readonly onActivate: (voiceId: string) => void;
+}
+
+/** One row. Memoized: moving the selection re-renders the two rows it touches, not all of them. */
+const VoiceOption = memo(function VoiceOption({
+  voice,
+  optionId,
+  selected,
+  meta,
+  onActivate,
+}: VoiceOptionProps) {
+  return (
+    <div
+      id={optionId}
+      role="option"
+      aria-selected={selected}
+      data-value={voice.id}
+      className="voice-option"
+      title={voice.displayName}
+      onClick={() => onActivate(voice.id)}
+    >
+      <VoiceAvatar voice={voice} />
+      <span className="voice-option-name">{shortVoiceName(voice)}</span>
+      <span className="voice-option-meta">{meta}</span>
+    </div>
+  );
+});
+
 /**
  * An always-visible single-select listbox. Selection follows focus (choosing a voice is cheap
  * and reversible), which keeps arrow-key browsing to one keystroke per voice.
+ *
+ * Memoized, so typing in the editor or synthesis progress does not re-render hundreds of rows;
+ * callers keep `groups` and `onSelect` stable between changes.
  */
-export const VoiceList = forwardRef<HTMLDivElement | null, VoiceListProps>(function VoiceList(
+const VoiceListBox = forwardRef<HTMLDivElement | null, VoiceListProps>(function VoiceList(
   { groups, selectedVoiceId, onSelect, "aria-label": ariaLabel, disabled, emptyMessage },
   ref,
 ) {
@@ -90,6 +136,15 @@ export const VoiceList = forwardRef<HTMLDivElement | null, VoiceListProps>(funct
     if (voiceId && voiceId !== selectedVoiceId) onSelect(voiceId);
   };
 
+  const activate = useCallback(
+    (voiceId: string): void => {
+      if (inactive) return;
+      onSelect(voiceId);
+      listRef.current?.focus();
+    },
+    [inactive, onSelect],
+  );
+
   return (
     <div
       ref={listRef}
@@ -113,34 +168,21 @@ export const VoiceList = forwardRef<HTMLDivElement | null, VoiceListProps>(funct
                 <span>{regionName ?? group.label}</span>
                 {regionName && <span className="voice-group-code">{group.locale}</span>}
               </div>
-              {group.voices.map((voice) => {
-                const selected = voice.id === selectedVoiceId;
-                return (
-                  <div
-                    key={voice.id}
-                    id={optionId(voice.id)}
-                    role="option"
-                    aria-selected={selected}
-                    data-value={voice.id}
-                    className="voice-option"
-                    title={voice.displayName}
-                    onClick={() => {
-                      if (inactive) return;
-                      onSelect(voice.id);
-                      listRef.current?.focus();
-                    }}
-                  >
-                    <VoiceAvatar voice={voice} />
-                    <span className="voice-option-name">{shortVoiceName(voice)}</span>
-                    <span className="voice-option-meta">
-                      {/* A locale group already names the locale; favorites mix them. */}
-                      {group.locale
-                        ? formatVoiceGender(voice.gender, locale)
-                        : `${voice.locale} · ${formatVoiceGender(voice.gender, locale)}`}
-                    </span>
-                  </div>
-                );
-              })}
+              {group.voices.map((voice) => (
+                <VoiceOption
+                  key={voice.id}
+                  voice={voice}
+                  optionId={optionId(voice.id)}
+                  selected={voice.id === selectedVoiceId}
+                  meta={
+                    // A locale group already names the locale; favorites mix them.
+                    group.locale
+                      ? formatVoiceGender(voice.gender, locale)
+                      : `${voice.locale} · ${formatVoiceGender(voice.gender, locale)}`
+                  }
+                  onActivate={activate}
+                />
+              ))}
             </div>
           );
         })
@@ -148,3 +190,5 @@ export const VoiceList = forwardRef<HTMLDivElement | null, VoiceListProps>(funct
     </div>
   );
 });
+
+export const VoiceList = memo(VoiceListBox);

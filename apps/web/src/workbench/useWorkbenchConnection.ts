@@ -108,10 +108,11 @@ export function useWorkbenchConnection(preferredVoiceId: string) {
     }
   };
 
-  const selectVoice = (voiceId: string): void => {
+  // Stable, so the memoized voice list does not re-render when anything else changes.
+  const selectVoice = useCallback((voiceId: string): void => {
     setSelectedVoiceId(voiceId);
     savedVoiceIdRef.current = voiceId;
-  };
+  }, []);
 
   /** Forgets the key after the server rejected it and asks the user to unlock again. */
   const requireReauthentication = (): void => {

@@ -23,6 +23,15 @@ the version being released.
   carries a weak `ETag`, answering `304 Not Modified` while the catalog is unchanged; the
   catalog is compressed once per voice-cache refresh, not per request. Speech streaming is
   unchanged.
+- Keep the voice list out of unrelated renders. The list and each voice row are memoized and
+  voice selection is a stable callback, so typing in the editor or synthesis progress no longer
+  re-renders all voice rows, and moving the selection re-renders only the two rows it touches.
+  With a 318-voice catalog at 4x CPU slowdown, the median keystroke drops from 14.6 ms to
+  9.0 ms, the same as with a one-row list.
+- Draw voice portraits only when they scroll into view, a few at a time in idle time slices,
+  instead of all at once when the avatar chunk loads. Monograms still stand in until a
+  portrait is drawn. The longest task while the catalog loads at 4x CPU slowdown drops from
+  about 637 ms to about 200 ms, and scrolling the list draws portraits without long tasks.
 
 ## [1.0.3] - 2026-11-17
 
