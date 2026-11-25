@@ -140,6 +140,54 @@ describe("VoiceList", () => {
     expect(list.getAttribute("aria-activedescendant")).toBeNull();
   });
 
+  it("stands in placeholder rows, marked busy, while the catalog loads", () => {
+    render(
+      <VoiceList
+        groups={[]}
+        selectedVoiceId=""
+        onSelect={() => {}}
+        aria-label="选择声音 (0)"
+        busy
+        emptyMessage="正在加载声音…"
+      />,
+    );
+    const list = screen.getByRole("listbox");
+    expect(list.getAttribute("aria-busy")).toBe("true");
+    expect(list.getAttribute("aria-disabled")).toBe("true");
+    expect(list.querySelector(".voice-list-empty")).toBeNull();
+    // Sighted users see the rows; assistive technology reads the message.
+    const rows = list.querySelectorAll(".voice-skeleton");
+    expect(rows.length).toBeGreaterThan(0);
+    rows.forEach((row) => expect(row.getAttribute("aria-hidden")).toBe("true"));
+    expect(list.querySelector(".visually-hidden")?.textContent).toBe("正在加载声音…");
+  });
+
+  it("drops the placeholders and the busy mark once voices arrive", () => {
+    const { rerender } = render(
+      <VoiceList
+        groups={[]}
+        selectedVoiceId=""
+        onSelect={() => {}}
+        aria-label="选择声音"
+        busy
+        emptyMessage="正在加载声音…"
+      />,
+    );
+    rerender(
+      <VoiceList
+        groups={GROUPS}
+        selectedVoiceId="zh-CN-XiaoxiaoNeural"
+        onSelect={() => {}}
+        aria-label="选择声音"
+        emptyMessage="没有匹配的声音"
+      />,
+    );
+    const list = screen.getByRole("listbox");
+    expect(list.hasAttribute("aria-busy")).toBe(false);
+    expect(list.querySelector(".voice-skeleton")).toBeNull();
+    expect(within(list).getAllByRole("option")).toHaveLength(3);
+  });
+
   it("draws each voice's portrait once the portraits load", async () => {
     render(<Harness />);
     const option = screen.getByRole("option", { name: /Yunxi/ });

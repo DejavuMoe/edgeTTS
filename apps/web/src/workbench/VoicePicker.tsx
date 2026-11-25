@@ -5,6 +5,7 @@ import { formatVoiceGender } from "../lib/voice-catalog.js";
 import { localeDisplayName, shortVoiceName } from "../lib/voice-names.js";
 import { Checkbox, Select } from "../ui/index.js";
 import type { useVoiceFilters } from "./useVoiceFilters.js";
+import type { CatalogStatus } from "./useWorkbenchConnection.js";
 import { VoiceAvatar } from "./VoiceAvatar.js";
 import { VoiceList } from "./VoiceList.js";
 
@@ -14,7 +15,7 @@ export interface VoicePickerProps {
   readonly selectedVoiceId: string;
   readonly onSelectVoice: (voiceId: string) => void;
   readonly filters: ReturnType<typeof useVoiceFilters>;
-  readonly disabled: boolean;
+  readonly catalogStatus: CatalogStatus;
 }
 
 function StarIcon({ filled }: { readonly filled: boolean }) {
@@ -37,7 +38,7 @@ export function VoicePicker({
   selectedVoiceId,
   onSelectVoice,
   filters,
-  disabled,
+  catalogStatus,
 }: VoicePickerProps) {
   const { locale, t } = useI18n();
   const titleId = useId();
@@ -49,6 +50,15 @@ export function VoicePicker({
   const activeVoice = voices.find((v) => v.id === selectedVoiceId);
   const favorite = filters.isSelectedVoiceFavorite;
   const noCatalog = voices.length === 0;
+  // Until the catalog arrives an empty list says why, rather than that nothing matched.
+  const emptyMessage =
+    catalogStatus === "loading"
+      ? t("正在加载声音…")
+      : catalogStatus === "locked"
+        ? t("输入 API Key 后显示声音")
+        : noCatalog
+          ? t("暂无可用的声音")
+          : filters.emptyMessage;
 
   return (
     <section className="inspector-section voice-section" aria-labelledby={titleId}>
@@ -60,7 +70,7 @@ export function VoicePicker({
           id={favoriteOnlyId}
           checked={filters.favoriteOnly}
           onChange={filters.setFavoriteOnly}
-          disabled={disabled || (filters.totalFavoritesInCatalog === 0 && !filters.favoriteOnly)}
+          disabled={filters.totalFavoritesInCatalog === 0 && !filters.favoriteOnly}
           label={t("只看收藏")}
         />
       </div>
@@ -80,7 +90,6 @@ export function VoicePicker({
             type="button"
             className={`btn-favorite ${favorite ? "is-favorite" : ""}`}
             onClick={filters.toggleSelectedFavorite}
-            disabled={disabled}
             aria-pressed={favorite}
             aria-label={favorite ? t("取消收藏当前声音") : t("收藏当前声音")}
           >
@@ -109,7 +118,7 @@ export function VoicePicker({
                 listRef.current?.focus();
               }
             }}
-            disabled={disabled || noCatalog}
+            disabled={noCatalog}
           />
           <span id={`${searchId}-hint`} className="visually-hidden">
             {t("按名称、ID、语言或性别过滤")}
@@ -124,7 +133,7 @@ export function VoicePicker({
             value={filters.locale}
             onChange={filters.setLocale}
             options={filters.localeSelectOptions}
-            disabled={disabled || noCatalog}
+            disabled={noCatalog}
             aria-label={t("地区 / Locale")}
           />
         </div>
@@ -147,8 +156,8 @@ export function VoicePicker({
           selectedVoiceId={selectedVoiceId}
           onSelect={onSelectVoice}
           aria-label={t("选择声音 ({count})", { count: filters.filteredVoices.length })}
-          disabled={disabled}
-          emptyMessage={filters.emptyMessage}
+          busy={catalogStatus === "loading"}
+          emptyMessage={emptyMessage}
         />
       )}
     </section>

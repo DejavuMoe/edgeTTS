@@ -5,10 +5,13 @@ import type { Quality, useSynthesisParameters } from "./useSynthesisParameters.j
 
 export interface ParameterControlsProps {
   readonly parameters: ReturnType<typeof useSynthesisParameters>;
-  readonly disabled: boolean;
 }
 
-export function ParameterControls({ parameters, disabled }: ParameterControlsProps) {
+/**
+ * Quality, speed, pitch and volume for the next synthesis. They stay usable while one runs:
+ * the take records the settings it was made with.
+ */
+export function ParameterControls({ parameters }: ParameterControlsProps) {
   const { t } = useI18n();
   const titleId = useId();
   const speedSliderId = useId();
@@ -35,7 +38,7 @@ export function ParameterControls({ parameters, disabled }: ParameterControlsPro
           type="button"
           className="btn-text btn-reset-params"
           onClick={parameters.resetAll}
-          disabled={disabled || parameters.isAllDefault}
+          disabled={parameters.isAllDefault}
           aria-label={t("恢复默认参数")}
         >
           {t("恢复默认")}
@@ -51,7 +54,6 @@ export function ParameterControls({ parameters, disabled }: ParameterControlsPro
           value={quality}
           options={qualityOptions}
           onChange={parameters.setQuality}
-          disabled={disabled}
         />
       </div>
 
@@ -67,7 +69,6 @@ export function ParameterControls({ parameters, disabled }: ParameterControlsPro
         onReset={() => parameters.setSpeed(1.0)}
         isDefault={speed === 1.0}
         resetAriaLabel={t("重置语速")}
-        disabled={disabled}
       />
 
       <Slider
@@ -84,7 +85,6 @@ export function ParameterControls({ parameters, disabled }: ParameterControlsPro
         onReset={() => parameters.setPitchSemitones(0)}
         isDefault={pitchSemitones === 0}
         resetAriaLabel={t("重置音调")}
-        disabled={disabled}
       />
 
       <Slider
@@ -99,7 +99,6 @@ export function ParameterControls({ parameters, disabled }: ParameterControlsPro
         onReset={() => parameters.setVolume(1.0)}
         isDefault={volume === 1.0}
         resetAriaLabel={t("重置音量")}
-        disabled={disabled}
       />
     </section>
   );

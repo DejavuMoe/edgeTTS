@@ -20,12 +20,16 @@ export interface VoiceListProps {
   readonly selectedVoiceId: string;
   readonly onSelect: (voiceId: string) => void;
   readonly "aria-label": string;
-  readonly disabled: boolean;
-  /** Shown instead of options when nothing matches the filters. */
+  readonly disabled?: boolean;
+  /** The catalog is still loading: placeholder rows stand in, marked busy. */
+  readonly busy?: boolean;
+  /** Shown instead of options when there are none: nothing matches, or why there are none. */
   readonly emptyMessage: string;
 }
 
 const PAGE_STEP = 8;
+/** Placeholder rows while the catalog loads; the list scrolls past whatever does not fit. */
+const SKELETON_ROWS = 8;
 
 interface VoiceOptionProps {
   readonly voice: VoiceDto;
@@ -68,7 +72,15 @@ const VoiceOption = memo(function VoiceOption({
  * callers keep `groups` and `onSelect` stable between changes.
  */
 const VoiceListBox = forwardRef<HTMLDivElement | null, VoiceListProps>(function VoiceList(
-  { groups, selectedVoiceId, onSelect, "aria-label": ariaLabel, disabled, emptyMessage },
+  {
+    groups,
+    selectedVoiceId,
+    onSelect,
+    "aria-label": ariaLabel,
+    disabled = false,
+    busy = false,
+    emptyMessage,
+  },
   ref,
 ) {
   const { locale } = useI18n();
@@ -152,12 +164,26 @@ const VoiceListBox = forwardRef<HTMLDivElement | null, VoiceListProps>(function 
       role="listbox"
       aria-label={ariaLabel}
       aria-disabled={inactive}
+      aria-busy={busy || undefined}
       aria-activedescendant={selectedIndex >= 0 ? optionId(selectedVoiceId) : undefined}
       data-value={selectedVoiceId}
       tabIndex={inactive ? -1 : 0}
       onKeyDown={handleKeyDown}
     >
-      {isEmpty ? (
+      {isEmpty && busy ? (
+        <>
+          <p className="visually-hidden">{emptyMessage}</p>
+          {Array.from({ length: SKELETON_ROWS }, (_, index) => (
+            <div key={index} className="voice-skeleton" aria-hidden="true">
+              <span className="voice-skeleton-avatar" />
+              <span
+                className="voice-skeleton-name"
+                style={{ width: `${44 + ((index * 17) % 36)}%` }}
+              />
+            </div>
+          ))}
+        </>
+      ) : isEmpty ? (
         <p className="voice-list-empty">{emptyMessage}</p>
       ) : (
         groups.map((group) => {

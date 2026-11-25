@@ -50,6 +50,21 @@ the version being released.
   - **Announcements.** The status line no longer announces the received byte count every
     half second. It announces only the stage, and a finished take is announced as ready to
     play.
+- Keep the workbench usable while a synthesis runs. The text becomes read-only instead of
+  disabled, so it can still be selected, copied and scrolled. The voice list, favorites,
+  filters and delivery settings stay enabled for the next take, and the current take keeps
+  the voice and settings it was made with. Import and Clear stay disabled, because they would
+  change the text being spoken.
+- Say why the voice list is empty. While the catalog loads, placeholder rows stand in and the
+  list is marked busy, instead of reporting that no voices match. A locked catalog asks for
+  the API Key, and an empty catalog says no voices are available.
+
+### Fixed
+
+- Stop the synthesize row from overflowing narrow phones. In English at 320 to 360 px, the
+  count and the actions were wider than the screen. On phones the actions now get a
+  full-width row below the count in every language, and the row stays put when Cancel joins
+  it.
 
 ## [1.0.3] - 2026-11-17
 

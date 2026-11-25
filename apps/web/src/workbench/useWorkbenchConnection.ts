@@ -6,6 +6,12 @@ import { resolveEffectiveVoiceId } from "../lib/preferences.js";
 
 export type ApiStatus = "loading" | "healthy" | "unavailable";
 
+/**
+ * Whether the voice list can show voices yet: `loading` until the first catalog request or
+ * an unlock settles, `locked` while an API key is needed first, else `ready`.
+ */
+export type CatalogStatus = "loading" | "locked" | "ready";
+
 export const MIN_API_KEY_LENGTH = 16;
 
 export function isValidApiKeyFormat(key: string): boolean {
@@ -24,6 +30,7 @@ export function useWorkbenchConnection(preferredVoiceId: string) {
   const [voices, setVoices] = useState<readonly VoiceDto[]>([]);
   const [selectedVoiceId, setSelectedVoiceId] = useState<string>("");
   const [voiceError, setVoiceError] = useState<MessageKey | null>(null);
+  const [isLoadingVoices, setIsLoadingVoices] = useState<boolean>(true);
 
   const [authRequired, setAuthRequired] = useState<boolean>(false);
   const [authKeyInput, setAuthKeyInput] = useState<string>("");
@@ -57,11 +64,13 @@ export function useWorkbenchConnection(preferredVoiceId: string) {
     void fetchVoices(undefined, controller.signal)
       .then((voiceList) => {
         if (!active) return;
+        setIsLoadingVoices(false);
         setAuthRequired(false);
         applyVoices(voiceList);
       })
       .catch((err: unknown) => {
         if (!active) return;
+        setIsLoadingVoices(false);
         if (err instanceof ApiHttpError && err.status === 401) {
           setAuthRequired(true);
           setVoiceError(null);
@@ -120,10 +129,20 @@ export function useWorkbenchConnection(preferredVoiceId: string) {
     setAuthRequired(true);
   };
 
+  const catalogStatus: CatalogStatus =
+    voices.length > 0
+      ? "ready"
+      : isLoadingVoices || isUnlocking
+        ? "loading"
+        : authRequired
+          ? "locked"
+          : "ready";
+
   return {
     apiStatus,
     voices,
     voiceError,
+    catalogStatus,
     selectedVoiceId,
     selectVoice,
     getApiKey: () => apiKeyRef.current ?? undefined,

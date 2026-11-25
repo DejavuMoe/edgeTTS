@@ -115,9 +115,9 @@ function Workbench() {
             selectedVoiceId={selectedVoiceId}
             onSelectVoice={connection.selectVoice}
             filters={filters}
-            disabled={isGenerating}
+            catalogStatus={connection.catalogStatus}
           />
-          <ParameterControls parameters={parameters} disabled={isGenerating} />
+          <ParameterControls parameters={parameters} />
         </aside>
       </main>
     </div>

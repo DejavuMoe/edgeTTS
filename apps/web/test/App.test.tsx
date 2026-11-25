@@ -3257,4 +3257,108 @@ describe("EdgeTTS Web Workbench", () => {
       expect(announcer().textContent).toBe("");
     });
   });
+
+  describe("Voice catalog states and controls during a synthesis", () => {
+    function mockCatalog(voices: () => Promise<Response>): void {
+      fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+        const url = requestUrl(input);
+        if (url === "/api/health") return new Response(JSON.stringify({ status: "ok" }));
+        if (url === "/api/voices") return voices();
+        return new Response(null, { status: 404 });
+      });
+    }
+
+    it("says the voices are loading until the catalog arrives, not that none match", async () => {
+      let deliver!: (response: Response) => void;
+      mockCatalog(() => new Promise<Response>((resolve) => (deliver = resolve)));
+      render(<App />);
+
+      const list = screen.getByRole("listbox", { name: /选择声音/i });
+      expect(list.getAttribute("aria-busy")).toBe("true");
+      expect(list.textContent).toBe("正在加载声音…");
+      expect(list.textContent).not.toContain("没有匹配的声音");
+
+      await act(async () => deliver(new Response(JSON.stringify({ voices: mockVoices }))));
+      await screen.findByRole("option", { name: /Xiaoxiao/ });
+      expect(list.hasAttribute("aria-busy")).toBe(false);
+    });
+
+    it("asks for the API key before voices when the catalog is locked", async () => {
+      mockCatalog(async () => new Response(null, { status: 401 }));
+      render(<App />);
+      await screen.findByRole("region", { name: /API 认证/i });
+
+      const list = screen.getByRole("listbox", { name: /选择声音/i });
+      expect(list.textContent).toBe("输入 API Key 后显示声音");
+      expect(list.hasAttribute("aria-busy")).toBe(false);
+    });
+
+    it("says no voices are available when the catalog is empty", async () => {
+      mockCatalog(async () => new Response(JSON.stringify({ voices: [] })));
+      render(<App />);
+
+      await waitFor(() =>
+        expect(screen.getByRole("listbox", { name: /选择声音/i }).textContent).toBe(
+          "暂无可用的声音",
+        ),
+      );
+    });
+
+    it("keeps the text readable and the voice and settings usable while synthesizing", async () => {
+      const bodies: unknown[] = [];
+      const pending: ((response: Response) => void)[] = [];
+      fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = requestUrl(input);
+        if (url === "/api/health") return new Response(JSON.stringify({ status: "ok" }));
+        if (url === "/api/voices") return new Response(JSON.stringify({ voices: mockVoices }));
+        if (url === "/api/speech") {
+          bodies.push(JSON.parse(init?.body as string));
+          return new Promise<Response>((resolve) => pending.push(resolve));
+        }
+        return new Response(null, { status: 404 });
+      });
+      render(<App />);
+      await screen.findByRole("option", { name: /Xiaoxiao/ });
+      const textarea = screen.getByLabelText(/文本内容/i) as HTMLTextAreaElement;
+      fireEvent.change(textarea, { target: { value: "Settings stay live" } });
+      fireEvent.click(screen.getByRole("button", { name: "合成语音" }));
+      await screen.findByRole("button", { name: "取消合成" });
+
+      // The text being spoken can be read and selected, not changed.
+      expect(textarea.readOnly).toBe(true);
+      expect(textarea.disabled).toBe(false);
+      expect(screen.getByRole("button", { name: "导入 TXT 文件" }).hasAttribute("disabled")).toBe(
+        true,
+      );
+
+      // The next take's voice and settings can be chosen meanwhile.
+      const list = screen.getByRole("listbox", { name: /选择声音/i });
+      expect(list.getAttribute("aria-disabled")).toBe("false");
+      fireEvent.click(screen.getByRole("option", { name: /Yunxi/ }));
+      expect(list.getAttribute("data-value")).toBe("zh-CN-YunxiNeural");
+      const speed = screen.getByLabelText(/^语速/i) as HTMLInputElement;
+      expect(speed.disabled).toBe(false);
+      fireEvent.change(speed, { target: { value: "1.5" } });
+
+      await act(async () => {
+        pending[0]?.(
+          new Response(new Uint8Array([1, 2, 3, 4]), {
+            status: 200,
+            headers: { "Content-Type": "audio/mpeg" },
+          }),
+        );
+      });
+      // The take keeps the voice and speed it was made with.
+      await waitFor(() =>
+        expect(screen.getByLabelText(/音频生成信息/i).textContent).toContain("Xiaoxiao"),
+      );
+      expect(bodies[0]).toMatchObject({ voice: "zh-CN-XiaoxiaoNeural", speed: 1 });
+      await waitFor(() => expect(textarea.readOnly).toBe(false));
+
+      fireEvent.click(screen.getByRole("button", { name: "合成语音" }));
+      await waitFor(() =>
+        expect(bodies[1]).toMatchObject({ voice: "zh-CN-YunxiNeural", speed: 1.5 }),
+      );
+    });
+  });
 });

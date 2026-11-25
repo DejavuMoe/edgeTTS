@@ -73,7 +73,9 @@ export function EditorPanel({
         placeholder={t("在此输入需要合成为语音的文本内容...")}
         value={textDocument.text}
         onChange={(e) => textDocument.edit(e.target.value)}
-        disabled={isGenerating}
+        // Read-only, not disabled: the text being spoken can still be selected, copied and
+        // scrolled, and focus stays put when a synthesis starts from the keyboard.
+        readOnly={isGenerating}
         spellCheck={false}
         aria-describedby={noteId}
         aria-keyshortcuts="Control+Enter Meta+Enter"

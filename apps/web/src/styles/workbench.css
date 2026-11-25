@@ -235,7 +235,7 @@
   color: var(--ink);
 }
 
-.text-editor:disabled {
+.text-editor:read-only {
   color: var(--ink-2);
 }
 
@@ -464,6 +464,33 @@
   color: var(--ink-3);
   font-size: 13px;
   text-align: center;
+}
+
+/* Rows the shape of a voice stand in while the catalog loads. */
+.voice-skeleton {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 30px;
+  padding: 0 12px;
+}
+
+.voice-skeleton-avatar,
+.voice-skeleton-name {
+  flex: none;
+  background: var(--rule);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+.voice-skeleton-avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+}
+
+.voice-skeleton-name {
+  height: 10px;
+  border-radius: 5px;
 }
 
 /*
@@ -906,7 +933,8 @@
 
   .sheet-submit {
     flex: 1 1 100%;
-    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px;
   }
 
   .text-editor {
@@ -941,9 +969,12 @@
     min-height: 0;
   }
 
-  /* The action takes the width the count leaves, a comfortable target for a thumb. */
+  /*
+   * The actions get a row of their own below the count: a full-width target for a thumb that
+   * fits every language down to 320px, and that does not jump when Cancel joins it.
+   */
   .synthesis-actions {
-    flex: 1;
+    flex: 1 1 100%;
   }
 
   .action-buttons .btn {
