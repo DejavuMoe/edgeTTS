@@ -3,7 +3,11 @@ import type { NativeSpeechRequest } from "@edgetts/shared";
 import { synthesizeSpeech } from "../api/client.js";
 import { StreamPlaybackController } from "../audio/stream-controller.js";
 import type { MessageKey } from "../i18n.js";
-import { createCompletedResultMeta, type GenerationSnapshot } from "../lib/result-metadata.js";
+import {
+  createCompletedResultMeta,
+  type CompletedResultMeta,
+  type GenerationSnapshot,
+} from "../lib/result-metadata.js";
 import { AUDIO_BYTES_PER_SECOND, estimateSpeechSeconds } from "../lib/speech-estimate.js";
 import { parseSynthesisPlanHeaders } from "../lib/synthesis-telemetry.js";
 import { INITIAL_SYNTHESIS_STATE, synthesisReducer } from "./synthesis-state.js";
@@ -12,19 +16,27 @@ export interface SynthesisOptions {
   readonly getApiKey: () => string | undefined;
   /** Called when the server rejects the API key during synthesis. */
   readonly onUnauthorized: () => void;
+  /** Called with each take's complete audio when it has all arrived. */
+  readonly onTakeReady?: (audio: Blob, result: CompletedResultMeta) => void;
 }
 
 const HTTP_ERROR_MESSAGES: Readonly<Record<number, MessageKey>> = {
   400: "输入参数有误",
+  401: "API Key 已失效或未提供，请重新验证",
   429: "Too many speech requests",
   503: "服务当前繁忙",
 };
+
+/** What to tell the user when the speech service answers with this HTTP status. */
+export function speechErrorMessage(status: number): MessageKey {
+  return HTTP_ERROR_MESSAGES[status] ?? "语音服务暂时不可用";
+}
 
 /**
  * Runs one synthesis at a time. Every generation gets an id: callbacks from a superseded,
  * cancelled or unmounted generation are ignored.
  */
-export function useSynthesis({ getApiKey, onUnauthorized }: SynthesisOptions) {
+export function useSynthesis({ getApiKey, onUnauthorized, onTakeReady }: SynthesisOptions) {
   const [state, dispatch] = useReducer(synthesisReducer, INITIAL_SYNTHESIS_STATE);
   const generationIdRef = useRef(0);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -87,15 +99,8 @@ export function useSynthesis({ getApiKey, onUnauthorized }: SynthesisOptions) {
       }
 
       if (!response.ok) {
-        if (response.status === 401) {
-          onUnauthorized();
-          dispatch({ type: "rejected", error: "API Key 已失效或未提供，请重新验证" });
-        } else {
-          dispatch({
-            type: "rejected",
-            error: HTTP_ERROR_MESSAGES[response.status] ?? "语音服务暂时不可用",
-          });
-        }
+        if (response.status === 401) onUnauthorized();
+        dispatch({ type: "rejected", error: speechErrorMessage(response.status) });
         return;
       }
 
@@ -126,17 +131,15 @@ export function useSynthesis({ getApiKey, onUnauthorized }: SynthesisOptions) {
           latestBytesReceived = bytesReceived;
           dispatch({ type: "progressed", bytesReceived });
         },
-        onDownloadReady: (downloadUrl: string) => {
+        onDownloadReady: (downloadUrl: string, audio: Blob) => {
           if (!isCurrent()) return;
-          dispatch({
-            type: "downloadReady",
-            downloadUrl,
-            result: createCompletedResultMeta({
-              ...snapshot,
-              segmentCount: plan.segmentCount,
-              audioBytes: latestBytesReceived,
-            }),
+          const result = createCompletedResultMeta({
+            ...snapshot,
+            segmentCount: plan.segmentCount,
+            audioBytes: latestBytesReceived,
           });
+          dispatch({ type: "downloadReady", downloadUrl, result });
+          onTakeReady?.(audio, result);
         },
         onError: () => {
           if (isCurrent()) dispatch({ type: "aborted", error: "语音服务暂时不可用" });

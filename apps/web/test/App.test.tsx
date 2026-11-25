@@ -3123,6 +3123,10 @@ describe("EdgeTTS Web Workbench", () => {
       await user.tab();
       expect(document.activeElement).toBe(screen.getByRole("checkbox", { name: /只看收藏/i }));
 
+      // Hear the voice, then keep it: both act on the voice shown in the card.
+      await user.tab();
+      expect(document.activeElement).toBe(screen.getByRole("button", { name: "试听 Xiaoxiao" }));
+
       await user.tab();
       expect(document.activeElement).toBe(
         screen.getByRole("button", { name: /取消收藏当前声音/i }),
@@ -3501,6 +3505,237 @@ describe("EdgeTTS Web Workbench", () => {
       await waitFor(() =>
         expect(bodies[1]).toMatchObject({ voice: "zh-CN-YunxiNeural", speed: 1.5 }),
       );
+    });
+  });
+
+  describe("Voice previews and earlier takes", () => {
+    const XIAOXIAO_LINE = "你好，很高兴认识你。这就是我的声音。";
+
+    /** Records speech requests; `answer` decides each response (audio by default). */
+    function mockSpeech(answer?: (body: Record<string, unknown>) => Promise<Response>) {
+      const bodies: Record<string, unknown>[] = [];
+      const signals: AbortSignal[] = [];
+      fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = requestUrl(input);
+        if (url === "/api/health") return new Response(JSON.stringify({ status: "ok" }));
+        if (url === "/api/voices") return new Response(JSON.stringify({ voices: mockVoices }));
+        if (url === "/api/speech") {
+          const body = JSON.parse(init?.body as string) as Record<string, unknown>;
+          bodies.push(body);
+          if (init?.signal) signals.push(init.signal);
+          if (answer) return answer(body);
+          return new Response(new Uint8Array([1, 2, 3, 4]), {
+            status: 200,
+            headers: { "Content-Type": "audio/mpeg" },
+          });
+        }
+        return new Response(null, { status: 404 });
+      });
+      return { bodies, signals };
+    }
+
+    /** The audio elements `play` was called on, latest last. */
+    function playedElements(): HTMLMediaElement[] {
+      return vi.mocked(HTMLMediaElement.prototype.play).mock.contexts as HTMLMediaElement[];
+    }
+
+    async function synthesize(text: string): Promise<void> {
+      fireEvent.change(screen.getByLabelText(/文本内容/i), { target: { value: text } });
+      fireEvent.click(screen.getByRole("button", { name: "合成语音" }));
+      await screen.findByRole("link", { name: /下载合成音频/i });
+      await waitFor(() =>
+        expect(screen.getByRole("button", { name: "合成语音" }).hasAttribute("disabled")).toBe(
+          false,
+        ),
+      );
+    }
+
+    beforeEach(() => {
+      window.HTMLMediaElement.prototype.load = vi.fn();
+    });
+
+    it("previews the selected voice with its own line and the current settings", async () => {
+      const { bodies } = mockSpeech();
+      render(<App />);
+      await screen.findByRole("option", { name: /Xiaoxiao/ });
+      fireEvent.change(screen.getByLabelText(/文本内容/i), { target: { value: "private draft" } });
+      fireEvent.change(screen.getByLabelText(/^语速/i), { target: { value: "1.5" } });
+
+      fireEvent.click(screen.getByRole("button", { name: "试听 Xiaoxiao" }));
+      const stop = await screen.findByRole("button", { name: "停止试听" });
+      await waitFor(() => expect(stop.getAttribute("aria-busy")).toBe("false"));
+
+      // The voice's own sample, never the user's text; standard quality, the chosen speed.
+      expect(bodies).toHaveLength(1);
+      expect(bodies[0]).toMatchObject({
+        input: XIAOXIAO_LINE,
+        voice: "zh-CN-XiaoxiaoNeural",
+        quality: "standard",
+        speed: 1.5,
+      });
+      expect(JSON.stringify(bodies[0])).not.toContain("private draft");
+
+      // It plays outside the page: no audio element was added for it.
+      const preview = playedElements().at(-1)!;
+      expect(preview.isConnected).toBe(false);
+      expect(preview.getAttribute("src")).toMatch(/^blob:/);
+      expect(document.querySelectorAll("audio")).toHaveLength(0);
+
+      // When it ends the button rests; a second listen comes from memory.
+      act(() => {
+        preview.dispatchEvent(new Event("ended"));
+      });
+      fireEvent.click(await screen.findByRole("button", { name: "试听 Xiaoxiao" }));
+      await screen.findByRole("button", { name: "停止试听" });
+      expect(bodies).toHaveLength(1);
+
+      // Other settings are another preview.
+      fireEvent.click(screen.getByRole("button", { name: "停止试听" }));
+      fireEvent.change(screen.getByLabelText(/^语速/i), { target: { value: "1" } });
+      fireEvent.click(screen.getByRole("button", { name: "试听 Xiaoxiao" }));
+      await waitFor(() => expect(bodies).toHaveLength(2));
+      expect(bodies[1]).toMatchObject({ input: XIAOXIAO_LINE, speed: 1 });
+      await screen.findByRole("button", { name: "停止试听" });
+
+      // Each voice speaks its own language.
+      fireEvent.click(screen.getByRole("option", { name: /Nanami/ }));
+      fireEvent.click(await screen.findByRole("button", { name: "试听 Nanami" }));
+      await waitFor(() => expect(bodies).toHaveLength(3));
+      expect(bodies[2]).toMatchObject({
+        input: "こんにちは、はじめまして。これが私の声です。",
+        voice: "ja-JP-NanamiNeural",
+      });
+    });
+
+    it("stops a preview by the same button, or by choosing another voice", async () => {
+      const { signals } = mockSpeech(() => new Promise<Response>(() => {}));
+      render(<App />);
+      await screen.findByRole("option", { name: /Xiaoxiao/ });
+
+      fireEvent.click(screen.getByRole("button", { name: "试听 Xiaoxiao" }));
+      const loading = await screen.findByRole("button", { name: "停止试听" });
+      expect(loading.getAttribute("aria-busy")).toBe("true");
+      await waitFor(() => expect(signals).toHaveLength(1));
+      fireEvent.click(loading);
+      expect(signals[0]?.aborted).toBe(true);
+      expect(screen.getByRole("button", { name: "试听 Xiaoxiao" })).toBeDefined();
+
+      fireEvent.click(screen.getByRole("button", { name: "试听 Xiaoxiao" }));
+      await screen.findByRole("button", { name: "停止试听" });
+      await waitFor(() => expect(signals).toHaveLength(2));
+      fireEvent.click(screen.getByRole("option", { name: /Yunxi/ }));
+      expect(signals[1]?.aborted).toBe(true);
+      expect(await screen.findByRole("button", { name: "试听 Yunxi" })).toBeDefined();
+      expect(screen.queryByRole("button", { name: "停止试听" })).toBeNull();
+    });
+
+    it("says why a preview failed, and asks for the key again when it was refused", async () => {
+      let status = 503;
+      mockSpeech(async () => new Response(null, { status }));
+      render(<App />);
+      await screen.findByRole("option", { name: /Xiaoxiao/ });
+
+      fireEvent.click(screen.getByRole("button", { name: "试听 Xiaoxiao" }));
+      expect((await screen.findByRole("alert")).textContent).toBe("服务当前繁忙");
+      expect(screen.getByRole("button", { name: "试听 Xiaoxiao" })).toBeDefined();
+      // The message belongs to the voice it was about.
+      fireEvent.click(screen.getByRole("option", { name: /Yunxi/ }));
+      await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
+
+      status = 401;
+      fireEvent.click(screen.getByRole("button", { name: "试听 Yunxi" }));
+      expect((await screen.findByRole("alert")).textContent).toBe(
+        "API Key 已失效或未提供，请重新验证",
+      );
+      await screen.findByRole("region", { name: /API 认证/i });
+      expect(screen.getByRole("button", { name: "试听 Yunxi" }).hasAttribute("disabled")).toBe(
+        true,
+      );
+    });
+
+    it("plays one sound at a time: a preview pauses the take, the take stops a preview", async () => {
+      mockSpeech();
+      render(<App />);
+      await screen.findByRole("option", { name: /Xiaoxiao/ });
+      await synthesize("先合成一段");
+      const take = document.querySelector("audio")!;
+      Object.defineProperty(take, "paused", { configurable: true, get: () => false });
+      const pauseTake = vi.fn();
+      take.pause = pauseTake;
+
+      fireEvent.click(screen.getByRole("button", { name: "试听 Xiaoxiao" }));
+      await screen.findByRole("button", { name: "停止试听" });
+      await waitFor(() => expect(pauseTake).toHaveBeenCalledTimes(1));
+
+      fireEvent.play(take);
+      expect(await screen.findByRole("button", { name: "试听 Xiaoxiao" })).toBeDefined();
+    });
+
+    it("keeps earlier takes beside the current one, to play and download", async () => {
+      mockSpeech();
+      render(<App />);
+      await screen.findByRole("option", { name: /Xiaoxiao/ });
+
+      await synthesize("第一段");
+      const region = screen.getByRole("region", { name: "合成结果播放" });
+      expect(within(region).queryByRole("list", { name: "之前的结果" })).toBeNull();
+      const firstFilename = screen
+        .getByRole("link", { name: /下载合成音频/i })
+        .getAttribute("download");
+
+      fireEvent.change(screen.getByLabelText(/^语速/i), { target: { value: "1.5" } });
+      await synthesize("第二段");
+
+      const earlier = within(region).getByRole("list", { name: "之前的结果" });
+      expect(within(earlier).getAllByRole("listitem")).toHaveLength(1);
+      const play = within(earlier).getByRole("button", {
+        name: /^播放 Xiaoxiao 1\.00× · 0:00 · \d/,
+      });
+      const download = within(earlier).getByRole("link", { name: /^下载 Xiaoxiao 1\.00×/ });
+      expect(download.getAttribute("download")).toBe(firstFilename);
+      const href = download.getAttribute("href")!;
+      expect(href).toMatch(/^blob:/);
+      expect(revokedUrls).not.toContain(href);
+      // The current take keeps the one player and the one link called the download.
+      expect(screen.getByLabelText(/音频生成信息/i).textContent).toContain("1.50×");
+      expect(screen.getAllByRole("link", { name: /下载合成音频/i })).toHaveLength(1);
+      expect(document.querySelectorAll("audio")).toHaveLength(1);
+
+      fireEvent.click(play);
+      const stop = await within(earlier).findByRole("button", {
+        name: /^停止播放 Xiaoxiao 1\.00×/,
+      });
+      const side = playedElements().at(-1)!;
+      expect(side.isConnected).toBe(false);
+      expect(side.getAttribute("src")).toBe(href);
+      fireEvent.click(stop);
+      expect(within(earlier).getByRole("button", { name: /^播放 Xiaoxiao 1\.00×/ })).toBeDefined();
+    });
+
+    it("keeps the last five takes and lets go of the audio of older ones", async () => {
+      mockSpeech();
+      const { unmount } = render(<App />);
+      await screen.findByRole("option", { name: /Xiaoxiao/ });
+
+      let oldest: string | undefined;
+      for (let index = 1; index <= 6; index++) {
+        await synthesize(`第 ${index} 段`);
+        const list = screen.queryByRole("list", { name: "之前的结果" });
+        const links = list ? within(list).getAllByRole("link") : [];
+        if (index < 6) expect(links).toHaveLength(index - 1);
+        if (index === 5) oldest = links.at(-1)?.getAttribute("href") ?? undefined;
+      }
+
+      // Five takes in all: the current one and the four before it.
+      const links = within(screen.getByRole("list", { name: "之前的结果" })).getAllByRole("link");
+      expect(links).toHaveLength(4);
+      expect(oldest).toMatch(/^blob:/);
+      expect(revokedUrls).toContain(oldest);
+      const kept = links.map((link) => link.getAttribute("href")!);
+      expect(kept).not.toContain(oldest);
+
+      unmount();
+      for (const url of kept) expect(revokedUrls).toContain(url);
     });
   });
 });

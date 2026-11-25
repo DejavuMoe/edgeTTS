@@ -54,7 +54,7 @@ describe("StreamPlaybackController Session Isolation & URL Lifecycle", () => {
     await controller.startStream(mockResponse, ac.signal, callbacks);
 
     expect(callbacks.onStreamReady).toHaveBeenCalledWith("blob:mock-url-1");
-    expect(callbacks.onDownloadReady).toHaveBeenCalledWith("blob:mock-url-1");
+    expect(callbacks.onDownloadReady).toHaveBeenCalledWith("blob:mock-url-1", mockBlob);
     expect(revokedUrls).toHaveLength(0);
 
     // Now cleanup/cancel
@@ -115,7 +115,11 @@ describe("StreamPlaybackController Session Isolation & URL Lifecycle", () => {
     await controller.startStream(mockResponse, ac.signal, callbacks);
 
     expect(callbacks.onStreamReady).toHaveBeenCalledWith("blob:mock-url-1");
-    expect(callbacks.onDownloadReady).toHaveBeenCalledWith("blob:mock-url-2");
+    expect(callbacks.onDownloadReady).toHaveBeenCalledWith("blob:mock-url-2", expect.any(Blob));
+    // The take's audio is every byte that arrived, as MP3.
+    const take = callbacks.onDownloadReady.mock.calls[0]![1] as Blob;
+    expect(take.type).toBe("audio/mpeg");
+    expect([...new Uint8Array(await take.arrayBuffer())]).toEqual([1, 2, 3]);
     expect(revokedUrls).toHaveLength(0);
 
     // Cleanup controller
@@ -176,7 +180,7 @@ describe("StreamPlaybackController Session Isolation & URL Lifecycle", () => {
 
     // Session B should be active and have delivered its result (first URL created was blob:mock-url-1)
     expect(callbacksB.onStreamReady).toHaveBeenCalledWith("blob:mock-url-1");
-    expect(callbacksB.onDownloadReady).toHaveBeenCalledWith("blob:mock-url-1");
+    expect(callbacksB.onDownloadReady).toHaveBeenCalledWith("blob:mock-url-1", expect.any(Blob));
     expect(callbacksB.onFinish).toHaveBeenCalled();
 
     // Now session A resolves late!
@@ -309,7 +313,7 @@ describe("StreamPlaybackController Session Isolation & URL Lifecycle", () => {
 
     // Blob URL created is blob:mock-url-2
     expect(callbacks.onStreamReady).toHaveBeenCalledWith("blob:mock-url-2");
-    expect(callbacks.onDownloadReady).toHaveBeenCalledWith("blob:mock-url-2");
+    expect(callbacks.onDownloadReady).toHaveBeenCalledWith("blob:mock-url-2", expect.any(Blob));
     expect(callbacks.onFinish).toHaveBeenCalledTimes(1);
     expect(callbacks.onError).not.toHaveBeenCalled();
 
@@ -538,7 +542,7 @@ describe("StreamPlaybackController Session Isolation & URL Lifecycle", () => {
     await runBPromise;
 
     expect(callbacksB.onStreamReady).toHaveBeenCalledWith("blob:mock-url-2");
-    expect(callbacksB.onDownloadReady).toHaveBeenCalledWith("blob:mock-url-3");
+    expect(callbacksB.onDownloadReady).toHaveBeenCalledWith("blob:mock-url-3", expect.any(Blob));
     expect(callbacksB.onFinish).toHaveBeenCalledTimes(1);
 
     // Now session A's stream rejects late
@@ -614,7 +618,10 @@ describe("StreamPlaybackController Session Isolation & URL Lifecycle", () => {
           ["blob:mock-url-1"],
           ["blob:mock-url-2"],
         ]);
-        expect(callbacks.onDownloadReady).toHaveBeenCalledExactlyOnceWith("blob:mock-url-2");
+        expect(callbacks.onDownloadReady).toHaveBeenCalledExactlyOnceWith(
+          "blob:mock-url-2",
+          expect.any(Blob),
+        );
         expect(callbacks.onProgress).toHaveBeenLastCalledWith(6);
         expect(callbacks.onFinish).toHaveBeenCalledTimes(1);
         const blob = vi.mocked(URL.createObjectURL).mock.calls[1]![0] as Blob;

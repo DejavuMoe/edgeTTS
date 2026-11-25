@@ -12,7 +12,8 @@ export const PROGRESS_THROTTLE_BYTES = 8 * 1024;
 
 export interface StreamPlaybackCallbacks {
   readonly onStreamReady: (mediaUrl: string) => void;
-  readonly onDownloadReady: (downloadUrl: string) => void;
+  /** The complete take: a URL to download it, and its audio. */
+  readonly onDownloadReady: (downloadUrl: string, audio: Blob) => void;
   readonly onError: (error: Error) => void;
   readonly onFinish: () => void;
   readonly onProgress?: (bytesReceived: number) => void;
@@ -229,7 +230,7 @@ export class StreamPlaybackController {
 
       if (this.isCurrentSession(session) && !signal.aborted) {
         callbacks.onStreamReady(blobUrl);
-        callbacks.onDownloadReady(blobUrl);
+        callbacks.onDownloadReady(blobUrl, blob);
         this.finishSession(session, signal, callbacks);
       } else {
         this.cleanupSession(session);
@@ -427,7 +428,7 @@ export class StreamPlaybackController {
       }
 
       if (this.isCurrentSession(session) && !signal.aborted) {
-        callbacks.onDownloadReady(downloadUrl);
+        callbacks.onDownloadReady(downloadUrl, finalBlob);
         this.finishSession(session, signal, callbacks);
       } else {
         this.cleanupSession(session);

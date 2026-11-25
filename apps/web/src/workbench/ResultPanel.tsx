@@ -10,6 +10,9 @@ import {
 import { shortVoiceName } from "../lib/voice-names.js";
 import { AudioPlayer } from "../ui/index.js";
 import type { RefObject } from "react";
+import { RecentTakes } from "./RecentTakes.js";
+import type { RecentTake } from "./useRecentTakes.js";
+import type { SidePlayer } from "./useSidePlayer.js";
 import type { useSynthesis } from "./useSynthesis.js";
 
 /** Bars of the "voice forming" animation shown until the first audio arrives. */
@@ -19,6 +22,10 @@ export interface ResultPanelProps {
   readonly synthesis: ReturnType<typeof useSynthesis>;
   /** The take's play button, where focus goes when a synthesis finishes. */
   readonly playButtonRef?: RefObject<HTMLButtonElement | null>;
+  /** The last few completed takes, newest first; the current one among them. */
+  readonly takes?: readonly RecentTake[];
+  /** Plays the earlier takes beside the current one. */
+  readonly sidePlayer?: SidePlayer;
 }
 
 /**
@@ -26,7 +33,12 @@ export interface ResultPanelProps {
  * while it runs, then the take as a playable track with its voice, settings and download.
  * Before the first synthesis there is nothing to show, so the panel takes no space.
  */
-export function ResultPanel({ synthesis, playButtonRef }: ResultPanelProps) {
+export function ResultPanel({
+  synthesis,
+  playButtonRef,
+  takes = [],
+  sidePlayer,
+}: ResultPanelProps) {
   const { locale, t } = useI18n();
   const { isGenerating, telemetry, error, audioSrc, downloadUrl, completedResult } = synthesis;
   const peaks = useWaveform(
@@ -40,7 +52,9 @@ export function ResultPanel({ synthesis, playButtonRef }: ResultPanelProps) {
   // synthesis there, because the line goes away. This region is always present, so a finished
   // take is announced: cancellation and failure already are, by their alerts.
   const announcement = !isGenerating && completedResult && !error ? t("合成完成，可以播放") : "";
-  const hasContent = isGenerating || error !== null || audioSrc !== null;
+  // The current take is the player's; the list holds the ones before it.
+  const earlierTakes = sidePlayer ? takes.filter((take) => take.result !== completedResult) : [];
+  const hasContent = isGenerating || error !== null || audioSrc !== null || earlierTakes.length > 0;
 
   return (
     <>
@@ -51,7 +65,9 @@ export function ResultPanel({ synthesis, playButtonRef }: ResultPanelProps) {
         <section
           className="result"
           aria-label={t("合成结果播放")}
-          data-state={isGenerating ? "generating" : audioSrc ? "ready" : "error"}
+          data-state={
+            isGenerating ? "generating" : audioSrc ? "ready" : error ? "error" : "earlier"
+          }
         >
           <h2 className="visually-hidden">{t("合成结果")}</h2>
 
@@ -112,6 +128,8 @@ export function ResultPanel({ synthesis, playButtonRef }: ResultPanelProps) {
               )}
             </AudioPlayer>
           )}
+
+          {sidePlayer && <RecentTakes takes={earlierTakes} player={sidePlayer} />}
         </section>
       )}
     </>

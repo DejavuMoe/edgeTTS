@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { I18nProvider, useI18n } from "./i18n.js";
 import { loadWorkbenchPreferences, type WorkbenchPreferencesV1 } from "./lib/preferences.js";
 import { AuthCard } from "./workbench/AuthCard.js";
@@ -9,11 +9,14 @@ import { ParameterControls } from "./workbench/ParameterControls.js";
 import { ResultPanel } from "./workbench/ResultPanel.js";
 import { SynthesisActions } from "./workbench/SynthesisActions.js";
 import { useGenerateShortcut } from "./workbench/useGenerateShortcut.js";
+import { useRecentTakes } from "./workbench/useRecentTakes.js";
+import { useSidePlayer } from "./workbench/useSidePlayer.js";
 import { useSynthesis } from "./workbench/useSynthesis.js";
 import { useSynthesisFocus } from "./workbench/useSynthesisFocus.js";
 import { useSynthesisParameters } from "./workbench/useSynthesisParameters.js";
 import { useTextDocument } from "./workbench/useTextDocument.js";
 import { useVoiceFilters } from "./workbench/useVoiceFilters.js";
+import { useVoicePreview } from "./workbench/useVoicePreview.js";
 import { useWorkbenchConnection } from "./workbench/useWorkbenchConnection.js";
 import { VoicePicker } from "./workbench/VoicePicker.js";
 import { WorkbenchHeader } from "./workbench/WorkbenchHeader.js";
@@ -44,10 +47,36 @@ function Workbench() {
   const filters = useVoiceFilters(voices, selectedVoiceId, locale, t);
   const parameters = useSynthesisParameters(initialPreferences, selectedVoiceId);
   const textDocument = useTextDocument();
+  const sidePlayer = useSidePlayer();
+  const recentTakes = useRecentTakes();
   const synthesis = useSynthesis({
     getApiKey: connection.getApiKey,
     onUnauthorized: connection.requireReauthentication,
+    onTakeReady: recentTakes.add,
   });
+  const selectedVoice = voices.find((v) => v.id === selectedVoiceId);
+  const preview = useVoicePreview({
+    voice: selectedVoice,
+    settings: {
+      speed: parameters.speed,
+      pitchSemitones: parameters.pitchSemitones,
+      volume: parameters.volume,
+    },
+    player: sidePlayer,
+    getApiKey: connection.getApiKey,
+    onUnauthorized: connection.requireReauthentication,
+  });
+
+  // An earlier take that leaves the list stops playing with it.
+  const { playingId: sidePlayingId, stop: stopSidePlayer } = sidePlayer;
+  useEffect(() => {
+    if (
+      sidePlayingId?.startsWith("take:") &&
+      !recentTakes.takes.some((take) => take.id === sidePlayingId)
+    ) {
+      stopSidePlayer(sidePlayingId);
+    }
+  }, [recentTakes.takes, sidePlayingId, stopSidePlayer]);
   const { isGenerating } = synthesis;
   useSynthesisFocus(isGenerating, synthesis.audioSrc !== null, {
     cancel: cancelButtonRef,
@@ -68,8 +97,7 @@ function Workbench() {
       return;
     }
     const { quality, speed, pitchSemitones, volume } = parameters;
-    const voiceDisplayName =
-      voices.find((v) => v.id === selectedVoiceId)?.displayName ?? selectedVoiceId;
+    const voiceDisplayName = selectedVoice?.displayName ?? selectedVoiceId;
     void synthesis.generate(
       { input: textDocument.text, voice: selectedVoiceId, quality, speed, pitchSemitones, volume },
       { voiceId: selectedVoiceId, voiceDisplayName, quality, speed, pitchSemitones, volume },
@@ -110,10 +138,7 @@ function Workbench() {
           onRequestClear={handleRequestClear}
           actions={
             <>
-              <CurrentVoiceButton
-                voice={voices.find((v) => v.id === selectedVoiceId)}
-                onClick={showVoicePicker}
-              />
+              <CurrentVoiceButton voice={selectedVoice} onClick={showVoicePicker} />
               <SynthesisActions
                 synthesis={synthesis}
                 canGenerate={canGenerate}
@@ -124,7 +149,12 @@ function Workbench() {
             </>
           }
         />
-        <ResultPanel synthesis={synthesis} playButtonRef={playButtonRef} />
+        <ResultPanel
+          synthesis={synthesis}
+          playButtonRef={playButtonRef}
+          takes={recentTakes.takes}
+          sidePlayer={sidePlayer}
+        />
 
         <aside className="inspector" aria-label={t("语音参数配置")}>
           <VoicePicker
@@ -135,6 +165,12 @@ function Workbench() {
             onSelectVoice={connection.selectVoice}
             filters={filters}
             catalogStatus={connection.catalogStatus}
+            preview={{
+              status: preview.status,
+              error: preview.error,
+              onToggle: preview.toggle,
+              disabled: auth.required,
+            }}
           />
           <ParameterControls parameters={parameters} />
         </aside>
